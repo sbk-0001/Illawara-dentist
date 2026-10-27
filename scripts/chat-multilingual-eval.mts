@@ -10,6 +10,7 @@ import { streamText } from "ai";
 import { EVAL_CASES } from "../src/chat/eval/cases.ts";
 import { replyMatchesLanguage } from "../src/chat/language/reply-script.ts";
 import { chooseContactFooter, contactRouteFooter, ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, sharesClinicOrService, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
+import type { StatusTag } from "../src/chat/server/status-tag.ts";
 import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
@@ -58,8 +59,12 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     question: turn.text,
     chunks: sourced.length ? chunks : [],
   });
+  const replyStatus: { tag: StatusTag | null } = { tag: null };
   const stream = createRetryingTextStream({
     language: turn.reply.code,
+    onStatus: (status) => {
+      replyStatus.tag = status.tag;
+    },
     run: (attempt, signal) =>
       streamText({
         ...chatGenerationSettings(attempt),
@@ -93,6 +98,7 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     index,
     focus: turn.focus,
     facts: chunks.slice(0, 4).map((chunk) => `${chunk.title}\n${chunk.heading}\n${chunk.text}`).join("\n"),
+    statusTag: replyStatus.tag,
   });
   const withContacts =
     kind === "no-answer"

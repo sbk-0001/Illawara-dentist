@@ -110,7 +110,7 @@ describe("prompt rules", () => {
     expect(instructions).not.toMatch(/[۰-۹٠-٩]/);
   });
 
-  it("asks for the no-answer marker only when no pages were found", () => {
+  it("requires a status tag and uses [[N]] only when no pages were found", () => {
     const missed = buildInstructions({
       index,
       language: { code: "en", label: "English", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
@@ -118,10 +118,31 @@ describe("prompt rules", () => {
       severe: false,
       chunks: [],
     });
-    expect(missed).toContain("[[NO_ANSWER]]");
+    expect(missed).toContain("STATUS TAG");
+    expect(missed).toContain("[[A]]");
+    expect(missed).toContain("[[G]]");
+    expect(missed).toMatch(/Start with \[\[N\]\]/);
+    expect(missed).not.toContain("[[NO_ANSWER]]");
     const found = prepareTurn([{ role: "user", content: "Do you offer dental implants?" }], "en", index);
     expect(found.sources.length).toBeGreaterThan(0);
-    expect(found.instructions).toMatch(/Do not write \[\[NO_ANSWER\]\]/);
+    expect(found.instructions).toMatch(/start with \[\[A\]\]/);
+    expect(found.instructions).toMatch(/Do not start with \[\[N\]\]/);
+    expect(found.instructions).not.toContain("[[NO_ANSWER]]");
+  });
+
+  it("localises Phone and Booking labels in a French directory", () => {
+    const instructions = buildInstructions({
+      index,
+      language: { code: "fr", label: "Français", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "Quel est le téléphone de Dapto ?",
+    });
+    expect(instructions).toContain(`Téléphone : ${index.contacts.dapto.phone}`);
+    expect(instructions).toContain(`Réservation : ${index.contacts.dapto.bookingUrl}`);
+    expect(instructions).not.toContain(`Phone: ${index.contacts.dapto.phone}`);
+    expect(instructions).not.toContain(`Booking: ${index.contacts.dapto.bookingUrl}`);
   });
 
   it("does not require a verbatim hours line when the question is not about hours", () => {

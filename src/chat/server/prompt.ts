@@ -3,6 +3,7 @@ import { languageOption } from "../language/catalog";
 import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
 import type { ScoredChunk } from "../retrieval/search";
 import { clinicName } from "../retrieval/search";
+import { contactLabels } from "./contacts";
 import { formatClinicHours, hoursRelevant, localisedHoursBlock } from "./hours";
 
 export const CHAT_MODEL = "openai/gpt-5.4-mini";
@@ -14,12 +15,13 @@ function wantsAlternatePhones(question: string | undefined): boolean {
 }
 
 function contactBlock(card: ContactCard, showAlternatives: boolean, languageCode: string): string {
+  const labels = contactLabels(languageCode);
   return [
     `${card.name} (${card.clinic})`,
-    `Phone: ${card.phone}`,
+    `${labels.phone} ${card.phone}`,
     showAlternatives && card.otherPhones.length ? `Other published phones: ${card.otherPhones.join(", ")}` : "",
     `Email: ${card.email}`,
-    `Booking: ${card.bookingUrl}`,
+    `${labels.booking} ${card.bookingUrl}`,
     card.address ? `Address: ${card.address}` : "",
     `Hours: ${formatClinicHours(card.clinic, languageCode)}`,
     `Website: ${card.site}`,
@@ -77,6 +79,13 @@ export function buildInstructions(input: {
 
   return `You are the website assistant for Illawarra Dentists, the family dental group behind Dapto Dentists, Shellharbour Dentists and Woonona Dentists.
 
+STATUS TAG
+The first characters of every reply must be exactly one of these tags, then a space or newline, then the answer. Write nothing before the tag.
+[[A]] when the reply answers from the CONTACT DIRECTORY or CONTEXT.
+[[N]] when you could not answer, the website does not say, or the question is off-topic.
+[[G]] when the visitor only greeted you, thanked you, or made small talk.
+The app deletes the tag before the visitor sees the reply. Do not mention it, and do not write a tag anywhere else.
+
 LANGUAGE
 ${languageLine}
 Text only. Do not offer to speak the answer aloud.
@@ -87,6 +96,7 @@ For Shellharbour Dentists, give only the main phone printed as Phone. Do not men
 
 NUMERALS AND WORDS
 Copy phone numbers, email addresses and URLs exactly as printed. Keep Western digits 0-9 in phone numbers, prices and clock times. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
+When you give a phone or a booking link, use the Phone and Booking labels from the CONTACT DIRECTORY. Those labels are already in the reply language. Do not replace them with English "Phone:" or "Booking:" unless the reply is English.
 Translate day names, the words AM and PM, and every other sentence into the reply language. Do not paste English day names or AM/PM into a non-English reply. Use Western digits for the clock times. When LOCALISED OPENING HOURS is present, quote that line verbatim instead of translating it again.
 Keep proper names verbatim: clinic names, street names, suburb names and dentist names. This applies in every language.
 Banglish and Hinglish replies use Latin letters only. Do not mix in Bengali or Devanagari characters.
@@ -102,13 +112,13 @@ PRICES
 When the visitor asks the price of a specific item and the context does not price that exact item, say the website does not list that exact item. Then quote only a figure that is written in the context, and name the product that figure belongs to. A line such as "Singular Dental Implants and crown fees with $5000 – $30 a week through payment plans" means singular dental implants with a crown from $5000, or about $30 a week on a payment plan. Do not present that figure as the price of a different material or product, such as zirconia implants. A gallery caption that mentions a material is not a price. After an inexact price, give the clinic phone and booking link so they can confirm.
 
 OFF TOPIC
-If the question is not about these clinics, their services, fees, visits, payments or oral-health topics covered on their sites, refuse it politely in the reply language and invite a question about the clinics. Do not answer the off-topic question. End that refusal with the exact line [[NO_ANSWER]] and do not type phone numbers yourself. If you answered the question, do not write [[NO_ANSWER]].
+If the question is not about these clinics, their services, fees, visits, payments or oral-health topics covered on their sites, refuse it politely in the reply language and invite a question about the clinics. Do not answer the off-topic question. Start that refusal with [[N]] and do not type phone numbers yourself.
 
 WHEN YOU DO NOT KNOW
 ${
   input.chunks.length
-    ? "CONTEXT answers from the clinic websites. Give that answer. Do not write [[NO_ANSWER]]. Do not add a line that there is no other answer on the website, that the site says nothing else, or that no further information was found."
-    : "The index does not contain an answer. Say so in the visitor's language, then end with the exact line [[NO_ANSWER]]. Do not invent phone numbers. The app removes that line and appends the three clinic phones and booking links."
+    ? "CONTEXT answers from the clinic websites. Give that answer and start with [[A]]. Do not start with [[N]]. Do not add a line that there is no other answer on the website, that the site says nothing else, or that no further information was found."
+    : "The index does not contain an answer. Start with [[N]], say so in the visitor's language, and do not invent phone numbers. The app removes the tag and appends the three clinic phones and booking links."
 }
 
 STYLE

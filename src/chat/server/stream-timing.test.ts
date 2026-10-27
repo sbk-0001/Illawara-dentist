@@ -109,6 +109,7 @@ describe("first-token timeout", () => {
       outcome: "done",
     });
     expect(parsed.ttftMs).toEqual(expect.any(Number));
+    expect(parsed.tag_missing).toBe(true);
     expect(JSON.stringify(parsed)).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
   });
 });

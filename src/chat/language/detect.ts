@@ -38,7 +38,8 @@ const GERMAN = ["öffnungszeiten", "offnungszeiten", "zahnarzt", "zahnärztin", 
 const GERMAN_FUNCTION = ["für", "fur", "die", "der", "das"];
 const PORTUGUESE = ["horário", "horario", "horários", "horarios", "sábado", "sabado", "clínica", "clinica", "consulta", "dente", "quanto", "onde", "aberto", "vocês", "voces", "fazem", "tem", "têm", "tratamento", "tratamentos", "canal", "dentista", "implantes", "crianças", "criancas", "posso", "reservar", "telefone", "aberta"];
 const PORTUGUESE_FUNCTION = ["para", "os", "as"];
-const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy", "nha", "khoa", "phi", "nieng", "niềng", "trang", "trắng", "thoai", "thoại", "lich", "lịch", "dat", "đặt", "chua", "chữa", "implant", "bacsi", "nhakhoa"];
+const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy", "nha", "khoa", "phi", "nieng", "niềng", "trang", "trắng", "thoai", "thoại", "lich", "lịch", "dat", "đặt", "chua", "chữa", "implant", "bacsi", "nhakhoa", "xin", "chào", "chao", "bạn", "cảm", "ơn", "cám"];
+const VIETNAMESE_GREETING = /^(?:xin\s+ch[aà]o|ch[aà]o(?:\s+b[aạ]n)?|c[aảá]m\s+[oơ]n)[.!?\s]*$/iu;
 const VIETNAMESE_FUNCTION = ["bac", "si"];
 const INDONESIAN = ["apakah", "dokter", "bisa", "saya", "buka", "berapa", "gigi", "anak", "klinik", "perawatan", "cabut", "sakit"];
 const INDONESIAN_FUNCTION = ["ada", "di", "yang", "untuk", "ini", "jam"];
@@ -143,6 +144,7 @@ function devanagariFamily(tokens: string[]): Detection {
 
 function latinFamily(text: string, tokens: string[]): Detection {
   const joined = tokens.join(" ");
+  if (VIETNAMESE_GREETING.test(text.trim())) return fromCode("vi", "high");
   if (tokens.length === 1 && GREETINGS.has(tokens[0] || "")) return englishReply(false, "high");
   let banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
   if (tokens.length <= 18 && /\bki\s*\?\s*$/i.test(text.trim())) banglish += 4;

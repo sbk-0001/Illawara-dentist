@@ -1,4 +1,5 @@
 import { CHAT_MODEL } from "./prompt";
+import { drainStatusTag, type StatusTag } from "./status-tag";
 
 /** Abort a gateway stream that has not produced text, then try once more. */
 export const FIRST_TOKEN_TIMEOUT_MS = 8_000;
@@ -35,6 +36,8 @@ export type ChatTimingEvent = {
   totalMs: number;
   firstAttemptMs?: number;
   error?: string;
+  /** True when the reply did not open with [[A]], [[N]] or [[G]]. */
+  tag_missing: boolean;
 };
 
 function timeoutError(): Error {
@@ -56,6 +59,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   run: (attempt: number, signal: AbortSignal) => AsyncIterable<T>;
   log?: (event: ChatTimingEvent) => void;
   timeoutMs?: number;
+  onStatus?: (status: { tag: StatusTag | null; missing: boolean }) => void;
 }): ReadableStream<T> {
   const log = input.log ?? ((event: ChatTimingEvent) => console.log(JSON.stringify(event)));
   const timeoutMs = input.timeoutMs ?? FIRST_TOKEN_TIMEOUT_MS;
@@ -65,6 +69,33 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   let model = chatGenerationSettings(0).model;
   let ttftMs: number | null = null;
   let firstAttemptMs: number | undefined;
+  let tagHold = "";
+  let tagDecided = false;
+  let tagMissing = true;
+  let dropBreak = false;
+
+  const noteTag = (tag: StatusTag | null, missing: boolean) => {
+    tagDecided = true;
+    tagMissing = missing;
+    input.onStatus?.({ tag, missing });
+  };
+
+  const takeText = (text: string, final: boolean): string => {
+    if (tagDecided) {
+      if (!dropBreak) return text;
+      dropBreak = false;
+      return text.replace(/^[ \t]*\r?\n?/, "");
+    }
+    const drained = drainStatusTag(tagHold + text, final);
+    if (!drained.decided) {
+      tagHold = drained.hold;
+      return "";
+    }
+    tagHold = "";
+    dropBreak = drained.bare;
+    noteTag(drained.tag, drained.missing);
+    return drained.visible;
+  };
 
   const finish = (outcome: ChatTimingEvent["outcome"], error?: string) => {
     if (settled) return;
@@ -78,6 +109,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       outcome,
       ttftMs,
       totalMs: Date.now() - started,
+      tag_missing: tagMissing,
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
     if (error) line.error = error;
@@ -121,11 +153,17 @@ export function createRetryingTextStream<T extends TextPart>(input: {
                 ttftMs = Date.now() - started;
                 for (const earlier of buffered) controller.enqueue(earlier);
                 buffered.length = 0;
-                controller.enqueue(part);
+                const visible = takeText(part.text, false);
+                if (visible) controller.enqueue({ ...part, text: visible });
                 continue;
               }
               if (!sawText) {
                 buffered.push(part);
+                continue;
+              }
+              if (part.type === "text-delta" && part.text) {
+                const visible = takeText(part.text, false);
+                if (visible) controller.enqueue({ ...part, text: visible });
                 continue;
               }
               controller.enqueue(part);
@@ -134,6 +172,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             if (!sawText) {
               for (const earlier of buffered) controller.enqueue(earlier);
             }
+            const tail = takeText("", true);
+            if (tail) controller.enqueue({ type: "text-delta", text: tail } as T);
             finish("done");
             controller.close();
             return;

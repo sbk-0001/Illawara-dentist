@@ -18,6 +18,7 @@ import { attachHoursWording, hoursRelevant } from "./hours";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions } from "./prompt";
 import { attachScriptFix } from "./script-fix";
+import type { StatusTag } from "./status-tag";
 import { chatGenerationSettings, createRetryingTextStream, type ChatTimingEvent } from "./stream-timing";
 
 export const maxDuration = 60;
@@ -134,9 +135,13 @@ export async function POST(request: Request): Promise<Response> {
   });
   const modelMessages = await convertToModelMessages(messages);
 
+  const replyStatus: { tag: StatusTag | null } = { tag: null };
   const textStream = createRetryingTextStream({
     language: lexical.reply.code,
     log: scheduleRequestTimingLog(),
+    onStatus: (status) => {
+      replyStatus.tag = status.tag;
+    },
     run: (attempt, signal) =>
       streamText({
         ...chatGenerationSettings(attempt),
@@ -178,6 +183,7 @@ export async function POST(request: Request): Promise<Response> {
     index,
     focus: lexical.focus,
     facts: chunks.slice(0, 4).map((chunk) => `${chunk.title}\n${chunk.heading}\n${chunk.text}`).join("\n"),
+    replyStatus,
   });
 
   return withCors(request, createUIMessageStreamResponse({ stream }));

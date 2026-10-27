@@ -45,6 +45,9 @@ describe("detectLanguage", () => {
     expect(detectLanguage("Faites-vous des traitements de canal à Woonona?")).toMatchObject({ code: "fr", fallback: false });
     expect(detectLanguage("Machen Sie Wurzelbehandlungen in Woonona?")).toMatchObject({ code: "de", fallback: false });
     expect(detectLanguage("Phong kham nha khoa o Woonona bao nhieu?")).toMatchObject({ code: "vi", fallback: false });
+    expect(detectLanguage("Xin chào")).toMatchObject({ code: "vi", fallback: false });
+    expect(detectLanguage("chào bạn")).toMatchObject({ code: "vi", fallback: false });
+    expect(detectLanguage("cảm ơn")).toMatchObject({ code: "vi", fallback: false });
     expect(detectLanguage("Apakah ada dokter gigi untuk anak di klinik?")).toMatchObject({ code: "id", fallback: false });
     expect(detectLanguage("Adakah doktor gigi untuk anak di klinik?")).toMatchObject({ code: "ms", fallback: false });
     expect(detectLanguage("Jam buka klinik hari ini berapa?")).toMatchObject({ code: "id", fallback: false });

@@ -1,4 +1,7 @@
 import { clinicContextText, mentionedClinics, mentionsServiceArea, type ClinicFocus } from "../intent";
+import type { StatusTag } from "./status-tag";
+
+export type { StatusTag };
 import { hasLetters } from "../language/detect";
 import { expandQuery, mentionsIndexedTopic } from "../retrieval/search";
 import type { ClinicId, ContactCard, KnowledgeChunk, KnowledgeIndex, ReplyLanguage } from "../types";
@@ -61,6 +64,45 @@ const CONTACT_ROUTE: Record<string, string> = {
   de: "Rufen Sie an oder buchen Sie:",
   pt: "Ligue ou reserve:",
 };
+
+const CONTACT_LABELS: Record<string, { phone: string; booking: string }> = {
+  en: { phone: "Phone:", booking: "Booking:" },
+  bn: { phone: "ফোন:", booking: "বুকিং:" },
+  "bn-Latn": { phone: "Fon:", booking: "Booking:" },
+  ar: { phone: "الهاتف:", booking: "الحجز:" },
+  hi: { phone: "फ़ोन:", booking: "बुकिंग:" },
+  "hi-Latn": { phone: "Phone:", booking: "Booking:" },
+  zh: { phone: "电话：", booking: "预约：" },
+  es: { phone: "Teléfono:", booking: "Reserva:" },
+  vi: { phone: "Điện thoại:", booking: "Đặt lịch:" },
+  ne: { phone: "फोन:", booking: "बुकिङ:" },
+  ko: { phone: "전화:", booking: "예약:" },
+  el: { phone: "Τηλέφωνο:", booking: "Κράτηση:" },
+  it: { phone: "Telefono:", booking: "Prenotazione:" },
+  ur: { phone: "فون:", booking: "بکنگ:" },
+  fa: { phone: "تلفن:", booking: "نوبت:" },
+  he: { phone: "טלפון:", booking: "קביעת תור:" },
+  fr: { phone: "Téléphone :", booking: "Réservation :" },
+  de: { phone: "Telefon:", booking: "Buchung:" },
+  pt: { phone: "Telefone:", booking: "Reserva:" },
+  ja: { phone: "電話:", booking: "予約:" },
+  id: { phone: "Telepon:", booking: "Pemesanan:" },
+  ms: { phone: "Telefon:", booking: "Tempahan:" },
+  pa: { phone: "ਫ਼ੋਨ:", booking: "ਬੁਕਿੰਗ:" },
+  ta: { phone: "தொலைபேசி:", booking: "முன்பதிவு:" },
+  te: { phone: "ఫోన్:", booking: "బుకింగ్:" },
+  ru: { phone: "Телефон:", booking: "Запись:" },
+  th: { phone: "โทรศัพท์:", booking: "จอง:" },
+};
+
+export function contactLabels(code: string): { phone: string; booking: string } {
+  return CONTACT_LABELS[code] ?? CONTACT_LABELS.en;
+}
+
+function clinicContactLine(code: string, card: { name: string; phone: string; bookingUrl: string }): string {
+  const labels = contactLabels(code);
+  return `${card.name} — ${labels.phone} ${card.phone} — ${labels.booking} ${card.bookingUrl}`;
+}
 
 /** Short replies that mean "the site does not say", even when the model skips [[NO_ANSWER]]. */
 const NO_INFO = [
@@ -145,6 +187,11 @@ const NO_INFO = [
   "没有提及",
   "沒有提到",
   "未找到",
+  "无法确认",
+  "不能确认",
+  "不清楚",
+  "无法回答",
+  "不能回答",
   "not mentioned",
   "no mention",
   "isn't mentioned",
@@ -214,20 +261,14 @@ function orderedClinics(focus: ClinicFocus): ClinicId[] {
 /** Phones and booking links for every clinic. Shellharbour's other published number is left out. */
 export function contactFooter(index: KnowledgeIndex, language: ReplyLanguage, focus: ClinicFocus): string {
   const lead = LEAD[language.code] ?? "";
-  const lines = orderedClinics(focus).map((id) => {
-    const card = index.contacts[id];
-    return `${card.name} — ${card.phone} — ${card.bookingUrl}`;
-  });
+  const lines = orderedClinics(focus).map((id) => clinicContactLine(language.code, index.contacts[id]));
   return [lead, ...lines].filter(Boolean).join("\n");
 }
 
 /** Neutral contact lines. Not the “website has no answer” wording. */
 export function contactRouteFooter(index: KnowledgeIndex, language: ReplyLanguage, focus: ClinicFocus): string {
   const lead = CONTACT_ROUTE[language.code] ?? "Book or call:";
-  const lines = orderedClinics(focus).map((id) => {
-    const card = index.contacts[id];
-    return `${card.name} — ${card.phone} — ${card.bookingUrl}`;
-  });
+  const lines = orderedClinics(focus).map((id) => clinicContactLine(language.code, index.contacts[id]));
   return [lead, ...lines].join("\n");
 }
 
@@ -291,6 +332,8 @@ export type FooterDecision = {
   focus?: ClinicFocus;
   /** Text of the top retrieved pages, used to see whether a short reply states a fact from them. */
   facts?: string;
+  /** Opening status tag. Null or omitted means it was missing, so the heuristics below apply. */
+  statusTag?: StatusTag | null;
 };
 
 export type FooterKind = "none" | "no-answer" | "route";
@@ -447,22 +490,29 @@ export function sharesClinicOrService(question: string, chunks: Pick<KnowledgeCh
  * asked for a contact route and the reply never gave one. A grounded answer that
  * does not repeat a phone stays as written.
  */
+function replyHasRoute(reply: string, input: FooterDecision): boolean {
+  if (!reply) return false;
+  const focus = input.focus ?? { kind: "any" as const };
+  if (input.index && replyCoversRelevantContact(reply, input.index, focus)) return true;
+  return replyLooksLikeContact(reply);
+}
+
 export function chooseContactFooter(input: FooterDecision): FooterKind {
   const question = input.question.trim();
   const reply = input.replyText?.trim() ?? "";
-  if (!question && !input.modelSaidNoAnswer && !reply) return "none";
+  if (!question && !input.modelSaidNoAnswer && !reply && !input.statusTag) return "none";
   if (question && !hasLetters(question)) return "no-answer";
+  if (input.statusTag === "N") return replyHasRoute(reply, input) ? "none" : "no-answer";
+  if (input.statusTag === "A" || input.statusTag === "G") {
+    if (replyHasRoute(reply, input)) return "none";
+    if (questionAsksForContact(question)) return "route";
+    return "none";
+  }
   if (input.modelSaidNoAnswer) return "no-answer";
   if (GREETING.test(question)) return "none";
   if (reply && replySignalsNoInformation(reply)) return "no-answer";
 
-  const focus = input.focus ?? { kind: "any" as const };
-  const hasContact = reply
-    ? input.index
-      ? replyCoversRelevantContact(reply, input.index, focus) || replyLooksLikeContact(reply)
-      : replyLooksLikeContact(reply)
-    : false;
-  if (hasContact) return "none";
+  if (replyHasRoute(reply, input)) return "none";
 
   if (reply && matchedNoInfoPhrase(reply) && wordCount(reply) <= 48) return "no-answer";
 
@@ -539,6 +589,8 @@ export function attachContactFooter<T extends FooterChunk>(
     facts?: string;
     /** Neutral “Book or call” block. Used only when the visitor asked for a contact route. */
     routeFooter?: string;
+    /** Filled when the leading status tag is parsed. Read when the reply finishes. */
+    replyStatus?: { tag: StatusTag | null };
   },
 ): ReadableStream<T> {
   let textId: string | undefined;
@@ -565,6 +617,7 @@ export function attachContactFooter<T extends FooterChunk>(
       index: input.index,
       focus: input.focus,
       facts: input.facts,
+      statusTag: input.replyStatus ? input.replyStatus.tag : undefined,
     });
     const block = kind === "no-answer" ? input.footer : kind === "route" ? input.routeFooter ?? "" : "";
     if (!block || input.covered(shown)) return;

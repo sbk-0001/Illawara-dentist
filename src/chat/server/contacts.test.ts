@@ -5,6 +5,7 @@ import {
   attachContactFooter,
   chooseContactFooter,
   contactFooter,
+  contactLabels,
   contactRouteFooter,
   ensureContactFooter,
   isClearlyOffTopic,
@@ -537,5 +538,173 @@ describe("contact footer", () => {
     expect(cleanText).toBe("Yes, Dapto offers whitening.");
     expect(cleanText).not.toContain("Book or call:");
     expect(cleanText).not.toContain("does not list an answer");
+  });
+
+  it("follows the status tag and falls back to the heuristic only when the tag is missing", async () => {
+    const hours = "Ouvert de 8h à 18h.";
+    const facts = "Monday to Friday 8:00 AM to 6:00 PM";
+    const hoursQuestion = "Quels sont les horaires du lundi ?";
+    expect(
+      chooseContactFooter({ question: hoursQuestion, sourceCount: 3, topScore: 0.9, replyText: hours, facts, statusTag: "A" }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({ question: hoursQuestion, sourceCount: 3, topScore: 0.9, replyText: hours, facts }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "有种植牙吗？",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "抱歉，我无法确认这项服务。",
+        facts: "implants",
+        statusTag: "A",
+      }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({
+        question: "有种植牙吗？",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "抱歉，我无法确认这项服务。",
+        facts: "implants",
+        statusTag: null,
+      }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "Does Dapto offer whitening?",
+        sourceCount: 3,
+        topScore: 0.91,
+        replyText: "Yes, Dapto offers whitening.",
+        index,
+        focus: { kind: "one", clinic: "dapto" },
+        facts: "Dapto Dentists whitening teeth",
+        statusTag: "N",
+      }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "울로나 전화번호",
+        sourceCount: 2,
+        topScore: 0.9,
+        replyText: "电话是 02 4284 4486。",
+        index,
+        focus: { kind: "one", clinic: "woonona" },
+        statusTag: "N",
+      }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({ question: "Xin chào", sourceCount: 0, topScore: 0, replyText: "Xin chào.", statusTag: "G" }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({
+        question: "What is the Woonona phone number?",
+        sourceCount: 3,
+        topScore: 0.9,
+        replyText: "Oui.",
+        facts,
+        statusTag: "A",
+      }),
+    ).toBe("route");
+    expect(
+      chooseContactFooter({ question: "12345 ???", sourceCount: 4, topScore: 1.2, replyText: "Hello", statusTag: "A" }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "Does Dapto offer whitening?",
+        sourceCount: 3,
+        topScore: 0.9,
+        replyText: "Yes, they do.",
+        facts: "Dapto Dentists whitening teeth",
+        statusTag: null,
+      }),
+    ).toBe("no-answer");
+
+    const french = detectLanguage("Faites-vous des traitements de canal à Woonona?");
+    const replyStatus = { tag: "A" as const };
+    const answered = await readChunks(
+      attachContactFooter(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: "text-start", id: "t1" });
+            controller.enqueue({ type: "text-delta", id: "t1", delta: hours });
+            controller.enqueue({ type: "text-end", id: "t1" });
+            controller.close();
+          },
+        }),
+        {
+          footer: contactFooter(index, french, { kind: "any" }),
+          routeFooter: contactRouteFooter(index, french, { kind: "any" }),
+          sourcesFound: true,
+          sourceCount: 3,
+          topScore: 0.9,
+          question: hoursQuestion,
+          covered: (text) => replyHasContactRoute(text, index),
+          facts,
+          replyStatus,
+        },
+      ),
+    );
+    const answeredText = answered.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(answeredText).toBe(hours);
+    expect(answeredText).not.toContain("Le site ne donne pas");
+    expect(answeredText).not.toContain("does not list an answer");
+
+    const missed = await readChunks(
+      attachContactFooter(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: "text-start", id: "t1" });
+            controller.enqueue({ type: "text-delta", id: "t1", delta: "Yes, Dapto offers whitening." });
+            controller.enqueue({ type: "text-end", id: "t1" });
+            controller.close();
+          },
+        }),
+        {
+          footer: contactFooter(index, french, { kind: "any" }),
+          routeFooter: contactRouteFooter(index, french, { kind: "any" }),
+          sourcesFound: true,
+          sourceCount: 3,
+          topScore: 0.91,
+          question: "Does Dapto offer whitening?",
+          covered: (text) => replyHasContactRoute(text, index),
+          index,
+          focus: { kind: "one", clinic: "dapto" },
+          facts: "Dapto Dentists whitening teeth",
+          replyStatus: { tag: "N" },
+        },
+      ),
+    );
+    const missedText = missed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(missedText).toContain("Yes, Dapto offers whitening.");
+    expect(missedText).toContain("Le site ne donne pas");
+    expect(missedText).toContain("Téléphone :");
+    expect(missedText).toContain("Réservation :");
+    expect(missedText).not.toContain("Phone:");
+    expect(missedText).not.toContain("Appelez ou réservez :");
+  });
+
+  it("localises Phone and Booking on the contact lines", () => {
+    expect(contactLabels("fr")).toEqual({ phone: "Téléphone :", booking: "Réservation :" });
+    expect(contactLabels("zh")).toEqual({ phone: "电话：", booking: "预约：" });
+    expect(contactLabels("en")).toEqual({ phone: "Phone:", booking: "Booking:" });
+    const french = detectLanguage("Faites-vous des traitements de canal à Woonona?");
+    const block = contactFooter(index, french, { kind: "any" });
+    expect(block).toContain("Téléphone :");
+    expect(block).toContain("Réservation :");
+    expect(block).toContain("02 4288 0737");
+    expect(block).not.toContain("Phone:");
+    expect(block).not.toContain("Booking:");
+    const route = contactRouteFooter(index, french, { kind: "any" });
+    expect(route.startsWith("Appelez ou réservez :")).toBe(true);
+    expect(route).toContain("Téléphone :");
+    expect(route).not.toContain("Phone:");
+    const english = contactFooter(index, detectLanguage("What is the phone number?"), { kind: "any" });
+    expect(english).toContain("Phone:");
+    expect(english).toContain("Booking:");
+    const chinese = contactFooter(index, detectLanguage("抱歉，我无法确认"), { kind: "any" });
+    expect(chinese).toContain("电话：");
+    expect(chinese).toContain("预约：");
+    expect(chinese).not.toContain("Phone:");
   });
 });
