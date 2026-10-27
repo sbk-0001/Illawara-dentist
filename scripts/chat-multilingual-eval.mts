@@ -47,8 +47,8 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const letterless = !hasLetters(turn.text);
   const chunks = letterless ? [] : await hybridRetrieve(index, turn.query, turn.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const shares = sharesClinicOrService(turn.query, chunks);
-  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore) && shares;
+  const shares = sharesClinicOrService(turn.topicText, chunks);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
   const sourced = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -85,11 +85,13 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const visible = stripNoAnswerSentinel(finished);
   const withContacts = shouldAppendContactFooter({
     question: turn.text,
-    sourceCount: sourced.length,
+    sourceCount: chunks.length,
     topScore,
     modelSaidNoAnswer: saidNo,
     replyText: visible,
     sharesTopic: shares,
+    index,
+    focus: turn.focus,
   })
     ? ensureContactFooter(visible, index, turn.reply, turn.focus)
     : visible;

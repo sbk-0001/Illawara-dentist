@@ -3,7 +3,7 @@ import type { ClinicId } from "./types";
 const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   {
     clinic: "dapto",
-    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|ντάπτο|ダプト/i,
+    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト/i,
   },
   {
     clinic: "shellharbour",
@@ -11,7 +11,7 @@ const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   },
   {
     clinic: "woonona",
-    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|伍诺纳|沃诺纳|烏諾納|우노나|워노나/i,
+    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|伍诺纳|沃诺纳|烏諾納|우노나|워노나|울로나/i,
   },
 ];
 

@@ -5,19 +5,20 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai";
+import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { hasLetters, resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
-import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService } from "./contacts";
+import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService, topicShareText } from "./contacts";
 import { guardRequest, withCors } from "./guard";
 import { attachHoursWording, hoursRelevant } from "./hours";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions } from "./prompt";
 import { attachScriptFix } from "./script-fix";
-import { chatGenerationSettings, createRetryingTextStream } from "./stream-timing";
+import { chatGenerationSettings, createRetryingTextStream, type ChatTimingEvent } from "./stream-timing";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -76,8 +77,21 @@ export function prepareTurn(messages: { role?: string; parts?: unknown; content?
     severe,
     chunks,
     sources,
+    topicText: topicShareText(turns, focus),
     instructions: buildInstructions({ index, language: reply, focus, severe, question: text, chunks: sources.length ? chunks : [] }),
   };
+}
+
+/** One JSON line, printed after the response finishes so Vercel runtime logs keep it. */
+function scheduleRequestTimingLog(): (event: ChatTimingEvent) => void {
+  let resolveLine: (line: string) => void = () => undefined;
+  const pending = new Promise<string>((resolve) => {
+    resolveLine = resolve;
+  });
+  after(async () => {
+    console.log(await pending);
+  });
+  return (event) => resolveLine(JSON.stringify(event));
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -107,8 +121,8 @@ export async function POST(request: Request): Promise<Response> {
   const letterless = !hasLetters(lexical.text);
   const chunks = letterless ? [] : await hybridRetrieve(index, lexical.query, lexical.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const shares = sharesClinicOrService(lexical.query, chunks);
-  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore) && shares;
+  const shares = sharesClinicOrService(lexical.topicText, chunks);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
   const sources = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -122,6 +136,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const textStream = createRetryingTextStream({
     language: lexical.reply.code,
+    log: scheduleRequestTimingLog(),
     run: (attempt, signal) =>
       streamText({
         ...chatGenerationSettings(attempt),
@@ -154,9 +169,13 @@ export async function POST(request: Request): Promise<Response> {
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),
     sourcesFound: answered,
+    sourceCount: chunks.length,
+    topScore,
     question: lexical.text,
     covered: (text) => replyHasContactRoute(text, index),
     sharesTopic: shares,
+    index,
+    focus: lexical.focus,
   });
 
   return withCors(request, createUIMessageStreamResponse({ stream }));

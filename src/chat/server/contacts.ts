@@ -1,7 +1,7 @@
 import { clinicContextText, mentionedClinics, mentionsServiceArea, type ClinicFocus } from "../intent";
 import { hasLetters } from "../language/detect";
 import { expandQuery, mentionsIndexedTopic } from "../retrieval/search";
-import type { ClinicId, KnowledgeChunk, KnowledgeIndex, ReplyLanguage } from "../types";
+import type { ClinicId, ContactCard, KnowledgeChunk, KnowledgeIndex, ReplyLanguage } from "../types";
 
 /** The model emits this only when it did not answer. It is removed before display. */
 export const NO_ANSWER_SENTINEL = "[[NO_ANSWER]]";
@@ -177,6 +177,9 @@ export type FooterDecision = {
   replyText?: string;
   /** False when the question shares no clinic or service terms with the top chunks. */
   sharesTopic?: boolean;
+  /** When set, a reply that already names this clinic's phone, address or booking link is an answer. */
+  index?: KnowledgeIndex;
+  focus?: ClinicFocus;
 };
 
 /** A short reply that says the information is missing, in the languages the widget answers. */
@@ -190,10 +193,75 @@ export function replySignalsNoInformation(text: string): boolean {
   return words <= 24 || hit.length >= flat.length * 0.35;
 }
 
+const ADDRESS_GENERIC = new Set([
+  "street",
+  "suite",
+  "drive",
+  "highway",
+  "road",
+  "avenue",
+  "place",
+  "court",
+  "lane",
+  "nsw",
+  "australia",
+  "unit",
+  "level",
+  "floor",
+  "shop",
+]);
+
+function relevantClinics(focus: ClinicFocus): ClinicId[] {
+  if (focus.kind === "one") return [focus.clinic];
+  if (focus.kind === "many") return focus.clinics;
+  return CLINIC_ORDER;
+}
+
+function distinctiveAddressTokens(address: string): string[] {
+  const tokens = address.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+  return tokens.filter((token) => !ADDRESS_GENERIC.has(token) && !/^\d+$/.test(token));
+}
+
+function coversClinicContact(reply: string, card: ContactCard): boolean {
+  const flat = digits(reply);
+  const phones = [card.phone, ...card.otherPhones];
+  if (phones.some((phone) => {
+    const value = digits(phone);
+    return value.length >= 10 && flat.includes(value);
+  })) {
+    return true;
+  }
+  const lower = reply.toLowerCase();
+  const booking = card.bookingUrl.toLowerCase();
+  if (booking && lower.includes(booking)) return true;
+  const uuid = booking.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
+  if (uuid && lower.includes(uuid[0])) return true;
+  const hits = new Set(distinctiveAddressTokens(card.address).filter((token) => lower.includes(token)));
+  return hits.size >= 2;
+}
+
 /**
- * True when the question names a clinic that appears in the top chunks, a known service
+ * True when the reply already gives the relevant clinic's phone, street address or booking link.
+ * A single clinic is enough. The all-clinic contact block is a different check.
+ */
+export function replyCoversRelevantContact(reply: string, index: KnowledgeIndex, focus: ClinicFocus): boolean {
+  return relevantClinics(focus).some((id) => coversClinicContact(reply, index.contacts[id]));
+}
+
+/**
+ * Remembered clinic plus the last few user turns.
+ * A follow-up that only says "their phone number" still shares the clinic named earlier.
+ */
+export function topicShareText(turns: string[], focus: ClinicFocus): string {
+  const recent = turns.map((turn) => turn.trim()).filter(Boolean).slice(-4);
+  const remembered = focus.kind === "one" ? focus.clinic : focus.kind === "many" ? focus.clinics.join(" ") : "";
+  return [remembered, ...recent].filter(Boolean).join("\n");
+}
+
+/**
+ * True when the text names a clinic that appears in the top chunks, a known service
  * whose English terms appear there, or a content word that appears there.
- * A high embedding score with none of those is not an answer.
+ * Pass topicShareText, not only the latest message.
  */
 export function sharesClinicOrService(question: string, chunks: Pick<KnowledgeChunk, "clinic" | "title" | "heading" | "text">[]): boolean {
   if (!chunks.length) return false;
@@ -206,9 +274,10 @@ export function sharesClinicOrService(question: string, chunks: Pick<KnowledgeCh
 }
 
 /**
- * Append when retrieval found nothing usable, the model marked the reply unanswered,
- * the reply itself says there is no information, or the question shares nothing with the hits.
- * A real answer that overlaps the pages does not get the footer.
+ * Append when the question has no letters, the model marked the reply unanswered,
+ * the reply says there is no information, or retrieval found nothing usable.
+ * A missing term overlap counts only when the top score is also low.
+ * A reply that already contains the relevant clinic phone, address or booking link is left alone.
  */
 export function shouldAppendContactFooter(input: FooterDecision): boolean {
   if (!input.question.trim() && !input.modelSaidNoAnswer && !input.replyText?.trim()) return false;
@@ -216,8 +285,17 @@ export function shouldAppendContactFooter(input: FooterDecision): boolean {
   if (input.modelSaidNoAnswer) return true;
   if (input.replyText && replySignalsNoInformation(input.replyText)) return true;
   if (GREETING.test(input.question.trim())) return false;
-  if (input.sharesTopic === false) return true;
+  if (
+    input.replyText &&
+    input.index &&
+    replyCoversRelevantContact(input.replyText, input.index, input.focus ?? { kind: "any" })
+  ) {
+    return false;
+  }
   const top = input.topScore ?? (input.sourceCount > 0 ? 1 : 0);
+  // sharesTopic false appends only when the top score is also low. A strong hit is
+  // already an answer, including when the overlap check missed the clinic spelling.
+  if (input.sharesTopic === false && retrievalHasAnswer(input.sourceCount, top)) return false;
   return !retrievalHasAnswer(input.sourceCount, top);
 }
 
@@ -258,17 +336,21 @@ export function takeVisibleReply(buffer: string, final: boolean): { visible: str
 
 /**
  * Strip the no-answer sentinel from the stream. Append the contact block only when
- * retrieval found nothing usable, or the sentinel was present. A reply that already
- * lists every clinic phone and a booking link is left unchanged.
+ * the reply is a real miss. A reply that already lists the relevant clinic phone,
+ * address or booking link is left unchanged.
  */
 export function attachContactFooter<T extends FooterChunk>(
   stream: ReadableStream<T>,
   input: {
     footer: string;
     sourcesFound: boolean;
+    sourceCount?: number;
+    topScore?: number;
     question: string;
     covered: (text: string) => boolean;
     sharesTopic?: boolean;
+    index?: KnowledgeIndex;
+    focus?: ClinicFocus;
   },
 ): ReadableStream<T> {
   let textId: string | undefined;
@@ -287,11 +369,13 @@ export function attachContactFooter<T extends FooterChunk>(
     if (drained.visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: drained.visible } as T);
     const append = shouldAppendContactFooter({
       question: input.question,
-      sourceCount: input.sourcesFound ? 1 : 0,
-      topScore: input.sourcesFound ? 1 : 0,
+      sourceCount: input.sourceCount ?? (input.sourcesFound ? 1 : 0),
+      topScore: input.topScore ?? (input.sourcesFound ? 1 : 0),
       modelSaidNoAnswer: sawSentinel,
       replyText: shown,
       sharesTopic: input.sharesTopic,
+      index: input.index,
+      focus: input.focus,
     });
     if (!append || !input.footer || input.covered(shown)) return;
     const id = textId ?? "contact-footer";

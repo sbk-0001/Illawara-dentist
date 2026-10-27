@@ -6,132 +6,161 @@ export const FIRST_TOKEN_TIMEOUT_MS = 8_000;
 /** Used on the retry, and as an AI Gateway model fallback if the primary request errors. */
 export const CHAT_FALLBACK_MODEL = "google/gemini-2.5-flash";
 
+/** gpt-5 and o-series models reject a temperature parameter on the AI Gateway. */
+export function modelSupportsTemperature(model: string): boolean {
+  return !/(?:^|\/)(?:gpt-5|o1|o3|o4)(?:[.-]|$)/i.test(model);
+}
+
 export function chatGenerationSettings(attempt: number) {
-  const fallback = attempt > 0;
+  const model = attempt > 0 ? CHAT_FALLBACK_MODEL : CHAT_MODEL;
   return {
-    model: fallback ? CHAT_FALLBACK_MODEL : CHAT_MODEL,
-    temperature: 0.2,
+    model,
+    ...(modelSupportsTemperature(model) ? { temperature: 0.2 } : {}),
     maxRetries: 0,
     timeout: { firstChunkMs: FIRST_TOKEN_TIMEOUT_MS },
-    providerOptions: fallback ? undefined : { gateway: { models: [CHAT_FALLBACK_MODEL] } },
+    providerOptions: attempt > 0 ? undefined : { gateway: { models: [CHAT_FALLBACK_MODEL] } },
   };
 }
 
 type TextPart = { type: string; text?: string };
 
+export type ChatTimingEvent = {
+  event: "chat-timing";
+  language: string;
+  model: string;
+  attempt: number;
+  retried: boolean;
+  outcome: "done" | "error" | "cancelled";
+  ttftMs: number | null;
+  totalMs: number;
+  firstAttemptMs?: number;
+  error?: string;
+};
+
 function timeoutError(): Error {
   return Object.assign(new Error("first-token timeout"), { name: "TimeoutError" });
 }
 
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "Error";
+}
+
 /**
  * Read a model stream. If no text-delta arrives within the first-token timeout,
- * abort that attempt and run once more (the fallback model). Timing is logged
- * on the server. The log line is language, model, attempt and milliseconds only.
+ * abort that attempt and run once more (the fallback model).
+ * One structured line is logged when the stream settles. The chat route prints
+ * that line from Next.js after() so it shows up in Vercel runtime logs.
  */
 export function createRetryingTextStream<T extends TextPart>(input: {
   language: string;
   run: (attempt: number, signal: AbortSignal) => AsyncIterable<T>;
-  log?: (event: Record<string, unknown>) => void;
+  log?: (event: ChatTimingEvent) => void;
   timeoutMs?: number;
 }): ReadableStream<T> {
-  const log = input.log ?? ((event) => console.log(JSON.stringify(event)));
+  const log = input.log ?? ((event: ChatTimingEvent) => console.log(JSON.stringify(event)));
   const timeoutMs = input.timeoutMs ?? FIRST_TOKEN_TIMEOUT_MS;
+  const started = Date.now();
+  let settled = false;
+  let attempt = 0;
+  let model = chatGenerationSettings(0).model;
+  let ttftMs: number | null = null;
+  let firstAttemptMs: number | undefined;
+
+  const finish = (outcome: ChatTimingEvent["outcome"], error?: string) => {
+    if (settled) return;
+    settled = true;
+    const line: ChatTimingEvent = {
+      event: "chat-timing",
+      language: input.language,
+      model,
+      attempt,
+      retried: firstAttemptMs !== undefined,
+      outcome,
+      ttftMs,
+      totalMs: Date.now() - started,
+    };
+    if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
+    if (error) line.error = error;
+    log(line);
+  };
+
   return new ReadableStream<T>({
     async start(controller) {
-      const started = Date.now();
       let lastError: unknown;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const settings = chatGenerationSettings(attempt);
-        const attemptStarted = Date.now();
-        const attemptAbort = new AbortController();
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            const error = timeoutError();
-            attemptAbort.abort(error);
-            reject(error);
-          }, timeoutMs);
-        });
-        const iterator = input.run(attempt, attemptAbort.signal)[Symbol.asyncIterator]();
-        const buffered: T[] = [];
-        let sawText = false;
-        const stop = async () => {
-          if (timer) clearTimeout(timer);
-          await iterator.return?.().catch(() => undefined);
-        };
-        try {
-          for (;;) {
-            const pending = iterator.next();
-            pending.catch(() => undefined);
-            const step = sawText ? await pending : await Promise.race([pending, timeoutPromise]);
-            if (step.done) break;
-            const part = step.value;
-            if (!sawText && part.type === "text-delta" && part.text) {
-              sawText = true;
-              if (timer) clearTimeout(timer);
-              log({
-                event: "chat-timing",
-                language: input.language,
-                model: settings.model,
-                attempt,
-                outcome: "first-token",
-                ttftMs: Date.now() - attemptStarted,
-                sinceRequestMs: Date.now() - started,
-              });
-              for (const earlier of buffered) controller.enqueue(earlier);
-              buffered.length = 0;
+      try {
+        for (attempt = 0; attempt < 2; attempt += 1) {
+          const settings = chatGenerationSettings(attempt);
+          model = settings.model;
+          const attemptStarted = Date.now();
+          const attemptAbort = new AbortController();
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              const error = timeoutError();
+              attemptAbort.abort(error);
+              reject(error);
+            }, timeoutMs);
+          });
+          const iterator = input.run(attempt, attemptAbort.signal)[Symbol.asyncIterator]();
+          const buffered: T[] = [];
+          let sawText = false;
+          const stop = async () => {
+            if (timer) clearTimeout(timer);
+            await iterator.return?.().catch(() => undefined);
+          };
+          try {
+            for (;;) {
+              const pending = iterator.next();
+              pending.catch(() => undefined);
+              const step = sawText ? await pending : await Promise.race([pending, timeoutPromise]);
+              if (step.done) break;
+              const part = step.value;
+              if (!sawText && part.type === "text-delta" && part.text) {
+                sawText = true;
+                if (timer) clearTimeout(timer);
+                ttftMs = Date.now() - started;
+                for (const earlier of buffered) controller.enqueue(earlier);
+                buffered.length = 0;
+                controller.enqueue(part);
+                continue;
+              }
+              if (!sawText) {
+                buffered.push(part);
+                continue;
+              }
               controller.enqueue(part);
-              continue;
             }
+            await stop();
             if (!sawText) {
-              buffered.push(part);
-              continue;
+              for (const earlier of buffered) controller.enqueue(earlier);
             }
-            controller.enqueue(part);
-          }
-          await stop();
-          if (!sawText) {
-            for (const earlier of buffered) controller.enqueue(earlier);
-          }
-          log({
-            event: "chat-timing",
-            language: input.language,
-            model: settings.model,
-            attempt,
-            outcome: "done",
-            totalMs: Date.now() - started,
-          });
-          controller.close();
-          return;
-        } catch (error) {
-          await stop();
-          lastError = error;
-          const elapsedMs = Date.now() - attemptStarted;
-          if (sawText || attempt === 1) {
-            log({
-              event: "chat-timing",
-              language: input.language,
-              model: settings.model,
-              attempt,
-              outcome: "error",
-              elapsedMs,
-              error: error instanceof Error ? error.name : "Error",
-            });
-            controller.error(error);
+            finish("done");
+            controller.close();
             return;
+          } catch (error) {
+            await stop();
+            lastError = error;
+            if (sawText || attempt === 1) {
+              finish("error", errorName(error));
+              controller.error(error);
+              return;
+            }
+            firstAttemptMs = Date.now() - attemptStarted;
           }
-          log({
-            event: "chat-timing",
-            language: input.language,
-            model: settings.model,
-            attempt,
-            outcome: "retry",
-            elapsedMs,
-            error: error instanceof Error ? error.name : "Error",
-          });
+        }
+        finish("error", errorName(lastError));
+        controller.error(lastError ?? new Error("chat stream failed"));
+      } catch (error) {
+        finish("error", errorName(error));
+        try {
+          controller.error(error);
+        } catch {
+          // The controller may already be closed.
         }
       }
-      controller.error(lastError ?? new Error("chat stream failed"));
+    },
+    cancel() {
+      finish("cancelled");
     },
   });
 }

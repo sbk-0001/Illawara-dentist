@@ -7,7 +7,9 @@ import {
   ensureContactFooter,
   isClearlyOffTopic,
   replyHasContactRoute,
+  sharesClinicOrService,
   shouldAppendContactFooter,
+  topicShareText,
 } from "./contacts";
 import { prepareTurn } from "./chat-route";
 import { getKnowledgeIndex } from "./index-store";
@@ -88,6 +90,10 @@ describe("contact footer", () => {
     expect(isClearlyOffTopic("وما هو رقم الهاتف؟", ["What is the Shellharbour address?"])).toBe(false);
     expect(mentionedClinics("ڈاپٹو کا لوکیشن")).toEqual(["dapto"]);
     expect(mentionedClinics("우노나 전화번호")).toEqual(["woonona"]);
+    expect(mentionedClinics("울로나 전화번호")).toEqual(["woonona"]);
+    expect(mentionedClinics("닥토 치과")).toEqual(["dapto"]);
+    expect(mentionedClinics("다프토 치과")).toEqual(["dapto"]);
+    expect(mentionedClinics("셸하버 치과")).toEqual(["shellharbour"]);
     expect(mentionedClinics("伍诺纳诊所")).toEqual(["woonona"]);
     expect(mentionedClinics("شيلهاربر")).toEqual(["shellharbour"]);
     if (follow.sources.length) {
@@ -206,12 +212,20 @@ describe("contact footer", () => {
     expect(text).toContain("02 4216 9911");
   });
 
-  it("appends the footer when the question shares no clinic or service terms with the hits", () => {
+  it("uses a missing term overlap only when the top score is also low", () => {
     expect(
       shouldAppendContactFooter({
         question: "Who won the world cup in 2022?",
         sourceCount: 4,
         topScore: 0.9,
+        sharesTopic: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "Who won the world cup in 2022?",
+        sourceCount: 4,
+        topScore: 0.05,
         sharesTopic: false,
       }),
     ).toBe(true);
@@ -224,5 +238,125 @@ describe("contact footer", () => {
         replyText: "The phone is 02 4284 4486.",
       }),
     ).toBe(false);
+  });
+
+  it("does not append when the reply already has the relevant clinic phone, address or booking link", () => {
+    const woonona = { kind: "one" as const, clinic: "woonona" as const };
+    const phone = "울로나 전화번호는 02 4284 4486 입니다.";
+    expect(
+      shouldAppendContactFooter({
+        question: "울로나 치과 전화번호",
+        sourceCount: 3,
+        topScore: 0.86,
+        sharesTopic: false,
+        replyText: phone,
+        index,
+        focus: woonona,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "और उनका फ़ोन नंबर?",
+        sourceCount: 2,
+        topScore: 0.04,
+        sharesTopic: false,
+        replyText: "वूनोना का फ़ोन नंबर 02 4284 4486 है।",
+        index,
+        focus: woonona,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "울로나 주소",
+        sourceCount: 1,
+        topScore: 0.04,
+        sharesTopic: false,
+        replyText: "379 Princes Highway, Woonona",
+        index,
+        focus: woonona,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "울로나 예약",
+        sourceCount: 1,
+        topScore: 0.04,
+        sharesTopic: false,
+        replyText: index.contacts.woonona.bookingUrl,
+        index,
+        focus: woonona,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "울로나 전화번호",
+        sourceCount: 2,
+        topScore: 0.9,
+        sharesTopic: false,
+        modelSaidNoAnswer: true,
+        replyText: "02 4284 4486",
+        index,
+        focus: woonona,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "울로나 전화번호",
+        sourceCount: 2,
+        topScore: 0.9,
+        sharesTopic: false,
+        replyText: "정보가 없습니다. 02 4284 4486",
+        index,
+        focus: woonona,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "12345 ???",
+        sourceCount: 1,
+        topScore: 0.9,
+        replyText: "02 4284 4486",
+        index,
+        focus: woonona,
+      }),
+    ).toBe(true);
+  });
+
+  it("shares clinic terms across the remembered clinic and recent user turns", () => {
+    const chunks = [{ clinic: "woonona" as const, title: "Contact", heading: "Phone", text: "Call the Woonona clinic on 02 4284 4486." }];
+    const turns = ["울로나 치과 어디예요?", "और उनका फ़ोन नंबर?"];
+    expect(sharesClinicOrService("और उनका फ़ोन नंबर?", chunks)).toBe(false);
+    expect(sharesClinicOrService(topicShareText(turns, { kind: "any" }), chunks)).toBe(true);
+    expect(sharesClinicOrService(topicShareText(turns, { kind: "one", clinic: "woonona" }), chunks)).toBe(true);
+    expect(topicShareText(turns, { kind: "one", clinic: "woonona" })).toContain("woonona");
+    expect(topicShareText(turns, { kind: "one", clinic: "woonona" })).toContain("울로나");
+  });
+
+  it("does not append the footer after a correct phone when retrieval looked off topic", async () => {
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "울로나 전화번호는 02 4284 4486 입니다." });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const chunks = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, detectLanguage("울로나 전화번호"), { kind: "one", clinic: "woonona" }),
+        sourcesFound: false,
+        sourceCount: 3,
+        topScore: 0.84,
+        question: "울로나 치과 전화번호",
+        covered: (text) => replyHasContactRoute(text, index),
+        sharesTopic: false,
+        index,
+        focus: { kind: "one", clinic: "woonona" },
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("02 4284 4486");
+    expect(text).not.toContain("답이 없습니다");
+    expect(text).not.toContain("02 4288 0737");
   });
 });

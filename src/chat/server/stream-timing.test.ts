@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
-import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream } from "./stream-timing";
+import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
 
 async function readText(stream: ReadableStream<{ type: string; text?: string }>): Promise<string> {
   const reader = stream.getReader();
@@ -20,8 +20,13 @@ describe("first-token timeout", () => {
     expect(FIRST_TOKEN_TIMEOUT_MS).toBe(8000);
     expect(first.maxRetries).toBe(0);
     expect(first.providerOptions).toEqual({ gateway: { models: [CHAT_FALLBACK_MODEL] } });
-    expect(chatGenerationSettings(1).model).toBe(CHAT_FALLBACK_MODEL);
-    expect(chatGenerationSettings(1).providerOptions).toBeUndefined();
+    expect(modelSupportsTemperature(CHAT_MODEL)).toBe(false);
+    expect(first).not.toHaveProperty("temperature");
+    const retry = chatGenerationSettings(1);
+    expect(retry.model).toBe(CHAT_FALLBACK_MODEL);
+    expect(retry.providerOptions).toBeUndefined();
+    expect(modelSupportsTemperature(CHAT_FALLBACK_MODEL)).toBe(true);
+    expect(retry.temperature).toBe(0.2);
   });
 
   it("does not retry when the first attempt yields text", async () => {
@@ -42,12 +47,12 @@ describe("first-token timeout", () => {
   });
 
   it("retries once when the first attempt produces no text in time", async () => {
-    const events: string[] = [];
+    const events: ChatTimingEvent[] = [];
     let calls = 0;
     const stream = createRetryingTextStream({
       language: "bn",
       timeoutMs: 30,
-      log: (event) => events.push(String(event.outcome)),
+      log: (event) => events.push(event),
       run: (attempt, signal) => ({
         async *[Symbol.asyncIterator]() {
           calls += 1;
@@ -62,7 +67,48 @@ describe("first-token timeout", () => {
     });
     expect(await readText(stream)).toBe("সোমবার");
     expect(calls).toBe(2);
-    expect(events).toContain("retry");
-    expect(events).toContain("first-token");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: "chat-timing",
+      language: "bn",
+      model: CHAT_FALLBACK_MODEL,
+      attempt: 1,
+      retried: true,
+      outcome: "done",
+    });
+    expect(events[0]?.ttftMs).toEqual(expect.any(Number));
+    expect(events[0]?.firstAttemptMs).toBeGreaterThan(0);
+    expect(events[0]?.error).toBeUndefined();
+  });
+
+  it("prints one structured line and nothing from the prompt", async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line) => {
+      lines.push(String(line));
+    });
+    try {
+      const stream = createRetryingTextStream({
+        language: "ko",
+        timeoutMs: 200,
+        run: async function* () {
+          yield { type: "text-delta", text: "02 4284 4486" };
+        },
+      });
+      expect(await readText(stream)).toBe("02 4284 4486");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0] ?? "{}") as ChatTimingEvent;
+    expect(parsed).toMatchObject({
+      event: "chat-timing",
+      language: "ko",
+      model: CHAT_MODEL,
+      attempt: 0,
+      retried: false,
+      outcome: "done",
+    });
+    expect(parsed.ttftMs).toEqual(expect.any(Number));
+    expect(JSON.stringify(parsed)).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
   });
 });
