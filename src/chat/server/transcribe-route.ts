@@ -1,4 +1,4 @@
-import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, repairLanguageForTranscript, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, repairLanguageForTranscript, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
 import { repairNativeTranscript } from "./transcript-repair";
 
@@ -6,12 +6,12 @@ export const runtime = "nodejs";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
-type DeepgramWord = { language?: string };
 type DeepgramListen = {
   results?: {
     channels?: {
-      alternatives?: (DeepgramAlternative & { words?: DeepgramWord[] })[];
-      detected_language?: string;
+      alternatives?: DeepgramAlternative[];
+      detected_language?: unknown;
+      languages?: unknown[];
     }[];
   };
 };
@@ -79,13 +79,14 @@ export async function POST(request: Request): Promise<Response> {
     return withCors(request, Response.json({ error: "Transcription failed." }, { status: 502 }));
   }
   const payload = (await upstream.json()) as DeepgramListen;
-  const alternative = payload.results?.channels?.[0]?.alternatives?.[0];
-  let transcript = correctTranscript(alternative?.transcript?.trim() || "");
-  const heard =
-    majoritySpokenLanguage(votesFromAlternative(alternative)) ||
-    alternative?.languages?.[0] ||
-    payload.results?.channels?.[0]?.detected_language ||
-    "";
+  const channel = payload.results?.channels?.[0];
+  const alternative = alternativeFromLiveResult({
+    alternative: channel?.alternatives?.[0],
+    detectedLanguage: channel?.detected_language,
+    channelLanguages: channel?.languages,
+  });
+  let transcript = correctTranscript(alternative.transcript?.trim() || "");
+  const heard = majoritySpokenLanguage(votesFromAlternative(alternative)) || "";
   let detected = repairLanguageForTranscript(heard, transcript, hint) || spokenLanguageForTranscript(heard, transcript, hint) || heard;
   let repaired = false;
   if (transcript && transcriptNeedsRepair(detected, transcript, hint) && process.env.AI_GATEWAY_API_KEY) {

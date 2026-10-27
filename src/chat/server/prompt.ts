@@ -3,10 +3,17 @@ import { languageOption } from "../language/catalog";
 import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
 import type { ScoredChunk } from "../retrieval/search";
 import { clinicName } from "../retrieval/search";
+import { isAddressQuestion } from "./address";
 import { directoryLabels } from "./contacts";
 import { formatClinicHours, hoursRelevant, localisedHoursBlock } from "./hours";
+import { stripFeeCaveat } from "./system-text";
 
 export const CHAT_MODEL = "openai/gpt-5.4-mini";
+
+/** Appended on the one regeneration when the finished reply used the wrong script. */
+export function scriptRetryInstruction(language: ReplyLanguage): string {
+  return `The previous answer used the wrong writing system. Rewrite the entire answer in ${language.label}, using ${language.script}. Do not write English sentences. Do not copy English disclaimers from the source pages. Clinic names, phone numbers and URLs may stay as written. Start with the status tag, then at least one full sentence.`;
+}
 export const CHAT_MODEL_REASON =
   "openai/gpt-5.4-mini is tagged fast on the AI Gateway and is built for high-volume chat, which keeps time-to-first-token down for a public widget while still following multilingual script instructions.";
 
@@ -56,7 +63,7 @@ export function buildInstructions(input: {
     ? input.chunks
         .map(
           (chunk, index) =>
-            `[${index + 1}] ${clinicName(chunk.clinic)} — ${chunk.title}${chunk.heading && chunk.heading !== chunk.title ? ` — ${chunk.heading}` : ""}\n${chunk.url}\n${chunk.text}`,
+            `[${index + 1}] ${clinicName(chunk.clinic)} — ${chunk.title}${chunk.heading && chunk.heading !== chunk.title ? ` — ${chunk.heading}` : ""}\n${chunk.url}\n${stripFeeCaveat(chunk.text)}`,
         )
         .join("\n\n")
     : "NO RELEVANT PAGES. The index does not contain an answer. Say so and give the contact route.";
@@ -80,6 +87,12 @@ export function buildInstructions(input: {
     ? "The visitor's language could not be detected. Reply in English and say, in that reply, that you could not tell which language they wrote in."
     : `${instruction} The reply language code is ${input.language.code}. Match this language and script even if earlier messages were in another language. A language the visitor picked overrides the language they typed in.`;
 
+  const addressLine = isAddressQuestion(input.question ?? "")
+    ? input.focus.kind === "one"
+      ? `The visitor asked for an address. Give the street address of ${clinicName(input.focus.clinic)}. Do not answer with only a phone number.`
+      : "The visitor asked for an address and did not name a clinic. List the street address of Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not answer with only a phone number. Do not ask which clinic they mean."
+    : "";
+
   const severeLine = input.severe
     ? "SEVERE SYMPTOMS: The first sentence must tell the visitor to call 000 now. Then give the relevant clinic phone from the directory. Do not give first aid steps, medicines or a diagnosis."
     : "For toothache, swelling, trauma or a broken tooth, do not diagnose or recommend treatment. Point them to the relevant clinic phone and the emergency information in the context, plus that clinic's booking link.";
@@ -101,12 +114,13 @@ For Shellharbour Dentists, give only the main phone in the directory. Do not men
 NUMERALS AND WORDS
 Copy phone numbers, email addresses and URLs exactly. Keep Western digits 0-9. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
 Copy the contact labels in the directory. They are already in the reply language.
-Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, quote that line verbatim.
+Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, quote that line verbatim, then add one sentence in the reply language. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
 Keep proper names verbatim: clinic names, street names, suburb names and dentist names.
 Banglish and Hinglish replies use Latin letters only. Do not mix in Bengali or Devanagari characters.
 
 CLINIC
 ${clinicLine}
+${addressLine}
 
 SAFETY
 ${severeLine}

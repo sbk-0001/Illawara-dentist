@@ -138,6 +138,7 @@ describe("contact label rewrite", () => {
       attachContactLabels(source([line]), { code: "en", index, replyStatus: { missing: false }, focus: { kind: "ask" } }),
     );
     const text = unnamed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text.startsWith("Here are the opening hours.")).toBe(true);
     expect(text).toContain("Dapto Dentists: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM");
     expect(text).toContain("Shellharbour Dentists:");
     expect(text).toContain("Woonona Dentists:");
@@ -152,7 +153,8 @@ describe("contact label rewrite", () => {
       }),
     );
     const dapto = named.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(dapto.startsWith("Dapto Dentists:")).toBe(true);
+    expect(dapto.startsWith("Dapto Dentists is open these hours.")).toBe(true);
+    expect(dapto).toContain("Dapto Dentists:");
     expect(dapto).toContain("Saturday 8:00 AM–4:00 PM.");
     expect(dapto).not.toContain("Shellharbour");
 
@@ -166,5 +168,35 @@ describe("contact label rewrite", () => {
     );
     const prose = sentence.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(prose).toBe("Dapto is open Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.");
+
+    const chinese = await readChunks(
+      attachContactLabels(source(["Dapto Dentists：周一至周五 上午8:00–下午6:00, 周六 上午8:00–下午4:00。"]), {
+        code: "zh",
+        index,
+        replyStatus: { missing: false },
+        focus: { kind: "one", clinic: "dapto" },
+      }),
+    );
+    const zh = chinese.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(zh.startsWith("Dapto Dentists的营业时间如下。")).toBe(true);
+    expect(zh).toContain("上午8:00–下午6:00");
+    expect(zh).toContain("下午4:00");
+  });
+
+  it("answers an address question with the focused clinic street, not a phone alone", async () => {
+    const replaced = await readChunks(
+      attachContactLabels(source(["02 4288 0737"]), {
+        code: "bn",
+        index,
+        replyStatus: { missing: false },
+        focus: { kind: "one", clinic: "dapto" },
+        question: "ঠিকানা কোথায়?",
+      }),
+    );
+    const street = replaced.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(street).toContain("35 Baan Baan Street");
+    expect(street).toContain("ঠিকানা:");
+    expect(street).not.toContain("02 4288 0737");
+    expect(street).not.toContain("Captain Cook");
   });
 });

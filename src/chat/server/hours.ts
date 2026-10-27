@@ -286,7 +286,75 @@ export function formatClinicHours(clinic: ClinicId, code: string): string {
 const BARE_HOURS_MAX = 400;
 
 function normalizeHoursLine(text: string): string {
-  return text.trim().replace(/[.。]+$/u, "").replace(/\s+/g, " ").trim();
+  return text
+    .trim()
+    .replace(/[.。]+$/u, "")
+    .replace(/：/g, ":")
+    .replace(/([^\d\s]):\s*/g, "$1: ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const HOURS_LEAD: Record<string, (name: string) => string> = {
+  en: (name) => (name ? `${name} is open these hours.` : "Here are the opening hours."),
+  bn: (name) => (name ? `${name}-এর খোলার সময় নিচে দেওয়া হলো।` : "খোলার সময় নিচে দেওয়া হলো।"),
+  "bn-Latn": (name) => (name ? `${name} er kholar somoy niche dewa holo.` : "Kholar somoy niche dewa holo."),
+  hi: (name) => (name ? `${name} का खुलने का समय यह है।` : "खुलने का समय यह है।"),
+  "hi-Latn": (name) => (name ? `${name} ka khulne ka samay yeh hai.` : "Khulne ka samay yeh hai."),
+  zh: (name) => (name ? `${name}的营业时间如下。` : "营业时间如下。"),
+  ja: (name) => (name ? `${name}の診療時間は次のとおりです。` : "診療時間は次のとおりです。"),
+  ko: (name) => (name ? `${name}의 진료 시간은 다음과 같습니다.` : "진료 시간은 다음과 같습니다."),
+  es: (name) => (name ? `${name} abre en este horario.` : "El horario de apertura es el siguiente."),
+  vi: (name) => (name ? `Giờ mở cửa của ${name} như sau.` : "Giờ mở cửa như sau."),
+  ar: (name) => (name ? `ساعات عمل ${name} كالتالي.` : "ساعات العمل كالتالي."),
+  ur: (name) => (name ? `${name} کے اوقات یہ ہیں۔` : "اوقات یہ ہیں۔"),
+  fa: (name) => (name ? `ساعت کاری ${name} این است.` : "ساعت کاری این است."),
+  he: (name) => (name ? `שעות הפתיחה של ${name} הן אלה.` : "שעות הפתיחה הן אלה."),
+  el: (name) => (name ? `Το ${name} είναι ανοιχτό αυτές τις ώρες.` : "Το ωράριο λειτουργίας είναι το εξής."),
+  fr: (name) => (name ? `${name} est ouvert à ces horaires.` : "Voici les horaires d'ouverture."),
+  de: (name) => (name ? `${name} hat diese Öffnungszeiten.` : "Das sind die Öffnungszeiten."),
+  pt: (name) => (name ? `${name} funciona nestes horários.` : "Estes são os horários de funcionamento."),
+  it: (name) => (name ? `${name} è aperto in questi orari.` : "Questi sono gli orari di apertura."),
+  id: (name) => (name ? `Jam buka ${name} adalah sebagai berikut.` : "Jam buka adalah sebagai berikut."),
+  ms: (name) => (name ? `Waktu operasi ${name} adalah seperti berikut.` : "Waktu operasi adalah seperti berikut."),
+  ru: (name) => (name ? `Часы работы ${name} такие.` : "Часы работы такие."),
+  th: (name) => (name ? `เวลาเปิดของ ${name} มีดังนี้` : "เวลาเปิดมีดังนี้"),
+  ne: (name) => (name ? `${name} को खुल्ने समय यस्तो छ।` : "खुल्ने समय यस्तो छ।"),
+  pa: (name) => (name ? `${name} ਦੇ ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।` : "ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।"),
+  ta: (name) => (name ? `${name} திறந்திருக்கும் நேரம் இது.` : "திறந்திருக்கும் நேரம் இது."),
+  te: (name) => (name ? `${name} తెరిచే సమయం ఇది.` : "తెరిచే సమయం ఇది."),
+};
+
+function hoursLeadIn(code: string, name: string): string {
+  const write = HOURS_LEAD[code] ?? HOURS_LEAD.en;
+  return write(name);
+}
+
+function hoursShapes(code: string): { clinic: ClinicId; text: string }[] {
+  return (["dapto", "shellharbour", "woonona"] as const).flatMap((id) => {
+    const hours = normalizeHoursLine(formatClinicHours(id, code));
+    const name = clinicName(id);
+    return [
+      { clinic: id, text: hours },
+      { clinic: id, text: normalizeHoursLine(`${name}: ${hours}`) },
+    ];
+  });
+}
+
+/** Every line is only a known hours line, with or without the clinic name. */
+export function hoursOnlyClinics(text: string, code: string): ClinicId[] | null {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > BARE_HOURS_MAX) return null;
+  const lines = trimmed.split(/\n/).map((line) => normalizeHoursLine(line)).filter(Boolean);
+  if (!lines.length || lines.length > 4) return null;
+  const shapes = hoursShapes(code);
+  const found: ClinicId[] = [];
+  for (const line of lines) {
+    const hit = shapes.find((shape) => shape.text === line);
+    if (!hit) return null;
+    found.push(hit.clinic);
+  }
+  return found;
 }
 
 /** The reply is exactly one clinic's hours line and does not already name a clinic. */
@@ -297,24 +365,16 @@ export function bareHoursClinic(text: string, code: string): ClinicId | null {
   return hits.length === 1 ? hits[0] : null;
 }
 
-/** True while the text so far is still only a known hours line, so the name can be added at the end. */
+/** True while the text so far is still only a known hours line, so a lead-in can be added at the end. */
 export function mayBeBareHours(text: string, code: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || trimmed.length > BARE_HOURS_MAX) return false;
-  if (mentionedClinics(trimmed).length > 0) return false;
   const probe = normalizeHoursLine(trimmed);
   if (!probe) return false;
-  return (["dapto", "shellharbour", "woonona"] as const).some((id) => {
-    const line = normalizeHoursLine(formatClinicHours(id, code));
-    return line === probe || line.startsWith(probe);
-  });
+  return hoursShapes(code).some((shape) => shape.text === probe || shape.text.startsWith(probe));
 }
 
-/**
- * A hours-only reply has to name the clinic.
- * When the question never named one, name every clinic instead of leaving one schedule anonymous.
- */
-export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
+function expandBareHours(text: string, code: string, focus: ClinicFocus): string {
   if (!bareHoursClinic(text, code)) return text;
   const ids = clinicIdsForHours(focus);
   if (ids.length > 1 || focus.kind === "ask" || focus.kind === "any") {
@@ -324,6 +384,21 @@ export function guardBareHoursReply(text: string, code: string, focus: ClinicFoc
   const name = clinicName(matched ?? ids[0]);
   const body = text.trim();
   return body.startsWith(name) ? text : `${name}: ${body}`;
+}
+
+/**
+ * A hours-only reply has to name the clinic and open with a sentence.
+ * When the question never named one, name every clinic instead of leaving one schedule anonymous.
+ * A line that already names the clinic, in any reply language, still gets a localized lead-in.
+ */
+export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
+  const expanded = expandBareHours(text, code, focus);
+  const clinics = hoursOnlyClinics(expanded, code);
+  if (!clinics) return expanded === text ? text : expanded;
+  const name = clinics.length === 1 ? clinicName(clinics[0]) : "";
+  const lead = hoursLeadIn(code, name);
+  if (expanded.trim().startsWith(lead)) return expanded;
+  return `${lead}\n${expanded.trim()}`;
 }
 
 export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {

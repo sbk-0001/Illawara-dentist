@@ -57,6 +57,31 @@ export function mentionedClinics(text: string): ClinicId[] {
   return found;
 }
 
+/** The clinic named latest in this text. Clinic-list order is not mention order. */
+export function lastClinicInText(text: string): ClinicId | null {
+  let best = -1;
+  let clinic: ClinicId | null = null;
+  for (const term of CLINIC_TERMS) {
+    const re = new RegExp(term.re.source, term.re.flags.includes("g") ? term.re.flags : `${term.re.flags}g`);
+    for (let match = re.exec(text); match; match = re.exec(text)) {
+      if (match.index >= best) {
+        best = match.index;
+        clinic = term.clinic;
+      }
+    }
+  }
+  return clinic;
+}
+
+/** The clinic mentioned most recently, starting from the latest text. */
+export function lastMentionedClinic(texts: readonly string[]): ClinicId | null {
+  for (let i = texts.length - 1; i >= 0; i -= 1) {
+    const clinic = lastClinicInText(texts[i] || "");
+    if (clinic) return clinic;
+  }
+  return null;
+}
+
 export function mentionsServiceArea(text: string): boolean {
   return GROUP_TERMS.test(text) || mentionedClinics(text).length > 0;
 }

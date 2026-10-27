@@ -169,16 +169,41 @@ export function deepgramListenUrl(kind: "stream" | "prerecorded", preferredLangu
 
 export type DeepgramAlternative = {
   transcript?: string;
-  languages?: string[];
-  words?: { language?: string }[];
+  language?: unknown;
+  languages?: unknown[];
+  words?: { language?: unknown }[];
 };
+
+function languageCode(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "language" in value) {
+    const code = (value as { language?: unknown }).language;
+    return typeof code === "string" ? code : null;
+  }
+  return null;
+}
 
 /** Word languages when Deepgram sent them, otherwise the alternative's top language. */
 export function votesFromAlternative(alternative: DeepgramAlternative | undefined): string[] {
-  const words = (alternative?.words ?? []).map((word) => word.language).filter((code): code is string => Boolean(code));
+  const words = (alternative?.words ?? []).map((word) => languageCode(word?.language)).filter((code): code is string => Boolean(code));
   if (words.length) return words;
-  const top = alternative?.languages?.[0];
+  const single = languageCode(alternative?.language);
+  if (single) return [single];
+  const top = languageCode(alternative?.languages?.[0]);
   return top ? [top] : [];
+}
+
+/** Pull a language off a live result, including fields Nova-3 puts beside the transcript. */
+export function alternativeFromLiveResult(input: {
+  alternative?: DeepgramAlternative;
+  detectedLanguage?: unknown;
+  channelLanguages?: unknown[];
+}): DeepgramAlternative {
+  const alternative = input.alternative ?? {};
+  const languages = [...(alternative.languages ?? [])];
+  if (input.detectedLanguage) languages.push(input.detectedLanguage);
+  for (const code of input.channelLanguages ?? []) languages.push(code);
+  return { ...alternative, languages };
 }
 
 /** Majority language for one utterance. A tie is not a majority. */
@@ -328,11 +353,30 @@ export function languageAfterRepair(requested: string | null | undefined, repair
  * Language of this Deepgram result. The script on the current text wins over a tag
  * left over from the previous turn, so Hindi speech does not keep a Bengali note.
  */
+const NOTE_SCRIPT: { code: string; re: RegExp }[] = [
+  { code: "bn", re: /[\u0980-\u09FF]/ },
+  { code: "hi", re: /[\u0900-\u097F]/ },
+  { code: "ar", re: /[\u0600-\u06FF]/ },
+  { code: "ko", re: /[\uAC00-\uD7AF]/ },
+  { code: "ja", re: /[\u3040-\u30FF]/ },
+  { code: "zh", re: /[\u4E00-\u9FFF]/ },
+  { code: "el", re: /[\u0370-\u03FF]/ },
+  { code: "ru", re: /[\u0400-\u04FF]/ },
+  { code: "th", re: /[\u0E00-\u0E7F]/ },
+  { code: "he", re: /[\u0590-\u05FF]/ },
+];
+
+/** One native character is enough for the mic note. It does not decide the reply language. */
+function noteScript(text: string): string {
+  return NOTE_SCRIPT.find((item) => item.re.test(text))?.code ?? "";
+}
+
 export function interimMicLanguage(alternative: DeepgramAlternative | undefined, transcript: string): string {
   const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
   const script = languageFromNativeScript(transcript);
   if (script && script !== heard) return script;
-  return heard || script || "";
+  if (heard) return heard;
+  return script || noteScript(transcript);
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;

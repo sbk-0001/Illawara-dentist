@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -77,6 +77,11 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "hi" }, { language: "hi" }] }, "डाप्टो क्लिनिक")).toBe("hi");
     expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?")).toBe("es");
     expect(interimMicLanguage({ languages: ["es"] }, "")).toBe("es");
+    expect(votesFromAlternative({ language: { language: "es" } })).toEqual(["es"]);
+    expect(votesFromAlternative({ words: [{ language: { language: "bn" } }] })).toEqual(["bn"]);
+    expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "")).toBe("bn");
+    expect(interimMicLanguage(undefined, "ক")).toBe("bn");
+    expect(interimMicLanguage(undefined, "")).toBe("");
     expect(spokenLanguageAtSubmit({ interim: "es", text: "¿A qué hora abre Dapto?" })).toBe("es");
     expect(spokenLanguageAtSubmit({ text: "ডাপ্টো ক্লিনিকের ঠিকানা কি?" })).toBe("bn");
     expect(spokenLanguageAtSubmit({ votes: ["hi"], text: "डाप्टো ক্লিনিকের ঠিকানা absentment", hint: "bn" })).toBe("bn");

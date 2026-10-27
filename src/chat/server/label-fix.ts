@@ -1,5 +1,6 @@
 import type { ClinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
+import { ensureAddressReply, isAddressQuestion } from "./address";
 import { directoryLabels } from "./contacts";
 import { guardBareHoursReply, mayBeBareHours } from "./hours";
 
@@ -169,6 +170,7 @@ export function attachContactLabels<T extends LabelChunk>(
     index: KnowledgeIndex;
     replyStatus: { missing: boolean };
     focus?: ClinicFocus;
+    question?: string;
   },
 ): ReadableStream<T> {
   let textId: string | undefined;
@@ -202,8 +204,11 @@ export function attachContactLabels<T extends LabelChunk>(
     held = "";
     if (!raw) return "";
     const body = rewriteContactLabels(raw, input.code);
-    const hours = guardBareHoursReply(body, input.code, input.focus);
-    if (hours !== body) return hours;
+    const hours = guardBareHoursReply(body, input.code, input.focus ?? { kind: "ask" });
+    const addressed = input.question
+      ? ensureAddressReply(hours, input.question, input.code, input.index, input.focus ?? { kind: "ask" })
+      : hours;
+    if (addressed !== body) return addressed;
     const bare = isShortLabelReply(body, input.code) || isShortLabelReply(raw, input.code) || (input.replyStatus.missing && isOnlyContactLine(raw));
     if (bare) {
       const preface = bareContactPreface(input.code, raw, input.index);
@@ -231,8 +236,14 @@ export function attachContactLabels<T extends LabelChunk>(
         if (!passed) {
           held += chunk.delta;
           const hoursPending = mayBeBareHours(held, input.code);
-          const pending = mayBeShortLabelReply(held, input.code) || (input.replyStatus.missing && mayBeOnlyContact(held)) || hoursPending;
-          if (pending && held.length < (hoursPending ? 400 : 80)) return;
+          const addressPending = Boolean(
+            input.question &&
+              isAddressQuestion(input.question) &&
+              held.length < 500 &&
+              ensureAddressReply(held, input.question, input.code, input.index, input.focus ?? { kind: "ask" }) !== held,
+          );
+          const pending = mayBeShortLabelReply(held, input.code) || (input.replyStatus.missing && mayBeOnlyContact(held)) || hoursPending || addressPending;
+          if (pending && held.length < (hoursPending || addressPending ? 500 : 80)) return;
           passed = true;
           const visible = releaseHeld();
           if (visible) controller.enqueue({ ...chunk, delta: visible });

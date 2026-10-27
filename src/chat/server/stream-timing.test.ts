@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
-import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
+import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
+import { FEE_CAVEAT_EN } from "./system-text";
 
 async function readText(stream: ReadableStream<{ type: string; text?: string }>): Promise<string> {
   const reader = stream.getReader();
@@ -18,6 +19,7 @@ describe("first-token timeout", () => {
     expect(first.model).toBe(CHAT_MODEL);
     expect(first.timeout.firstChunkMs).toBe(FIRST_TOKEN_TIMEOUT_MS);
     expect(FIRST_TOKEN_TIMEOUT_MS).toBe(8000);
+    expect(OVERALL_DEADLINE_MS).toBe(20000);
     expect(first.maxRetries).toBe(0);
     expect(first.providerOptions).toEqual({ gateway: { models: [CHAT_FALLBACK_MODEL] } });
     expect(modelSupportsTemperature(CHAT_MODEL)).toBe(false);
@@ -158,5 +160,108 @@ describe("first-token timeout", () => {
     expect(parsed.tag_missing_rate).toBeGreaterThan(0);
     expect(parsed.tag_missing_rate).toBeLessThanOrEqual(1);
     expect(JSON.stringify(parsed)).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
+  });
+
+  it("does not treat a status tag as the first token", async () => {
+    let calls = 0;
+    const stream = createRetryingTextStream({
+      language: "en",
+      timeoutMs: 40,
+      log: () => undefined,
+      run: (attempt, signal) => ({
+        async *[Symbol.asyncIterator]() {
+          calls += 1;
+          if (attempt === 0) {
+            yield { type: "text-delta", text: "[[A]]" };
+            await new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+            });
+          }
+          yield { type: "text-delta", text: "Dapto is open Monday to Friday." };
+        },
+      }),
+    });
+    expect(await readText(stream)).toContain("Dapto is open Monday to Friday.");
+    expect(calls).toBe(2);
+  });
+
+  it("regenerates once when a Bengali reply is English, and localizes a fee sentence inside Bengali", async () => {
+    const english = `Teeth whitening is available. ${FEE_CAVEAT_EN}`;
+    const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";
+    const modes: boolean[] = [];
+    let calls = 0;
+    const regenerated = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: (_attempt, _signal, mode) => {
+        calls += 1;
+        modes.push(mode?.scriptRetry === true);
+        const text = calls === 1 ? english : bengali;
+        return (async function* () {
+          yield { type: "text-delta", text };
+        })();
+      },
+    });
+    const rewritten = await readText(regenerated);
+    expect(calls).toBe(2);
+    expect(modes).toEqual([false, true]);
+    expect(rewritten).toContain("দাঁত");
+    expect(rewritten).not.toContain(FEE_CAVEAT_EN);
+    expect(rewritten).not.toContain("Teeth whitening");
+
+    const mixed = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        yield { type: "text-delta", text: "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। " };
+        yield { type: "text-delta", text: FEE_CAVEAT_EN };
+      },
+    });
+    const localized = await readText(mixed);
+    expect(localized).toContain("ফি");
+    expect(localized).not.toContain(FEE_CAVEAT_EN);
+
+    const stillEnglish = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        yield { type: "text-delta", text: english };
+      },
+    });
+    const fallback = await readText(stillEnglish);
+    expect(fallback).toContain("আবার চেষ্টা করুন");
+    expect(fallback).not.toContain(FEE_CAVEAT_EN);
+  });
+
+  it("ends a stalled retry at the overall deadline and logs the stage", async () => {
+    const events: ChatTimingEvent[] = [];
+    const stream = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 5_000,
+      deadlineMs: 80,
+      log: (event) => events.push(event),
+      run: (attempt) => ({
+        [Symbol.asyncIterator](): AsyncIterator<{ type: string; text?: string }> {
+          return {
+            next(): Promise<IteratorResult<{ type: string; text?: string }>> {
+              if (attempt === 0) return Promise.reject(Object.assign(new Error("first-token timeout"), { name: "TimeoutError" }));
+              return new Promise(() => undefined);
+            },
+            return(): Promise<IteratorResult<{ type: string; text?: string }>> {
+              return Promise.resolve({ done: true, value: undefined });
+            },
+          };
+        },
+      }),
+    });
+    const text = await readText(stream);
+    expect(text).toContain("আবার চেষ্টা করুন");
+    expect(text).toContain("ক্লিনিকে ফোন করুন");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ outcome: "deadline", stalled: "retry", language: "bn" });
+    expect(events[0]?.totalMs).toBeLessThan(2_000);
   });
 });

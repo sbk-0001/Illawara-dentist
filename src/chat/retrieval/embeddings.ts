@@ -145,12 +145,14 @@ export async function withRetrievalDeadline<T>(
   work: (signal: AbortSignal) => Promise<T>,
   fallback: T,
   timeoutMs = RETRIEVAL_TIMEOUT_MS,
+  onTimeout?: () => void,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
     timer = setTimeout(() => {
       controller.abort();
+      onTimeout?.();
       resolve(fallback);
     }, timeoutMs);
   });
@@ -181,7 +183,25 @@ async function semanticRetrieve(
 }
 
 export async function hybridRetrieve(index: KnowledgeIndex, query: string, lexical: ScoredChunk[]): Promise<ScoredChunk[]> {
-  return withRetrievalDeadline((signal) => semanticRetrieve(index, query, lexical, signal), lexical);
+  return (await hybridRetrieveDetailed(index, query, lexical)).chunks;
+}
+
+/** Lexical hits, plus whether the embedding path missed its deadline. */
+export async function hybridRetrieveDetailed(
+  index: KnowledgeIndex,
+  query: string,
+  lexical: ScoredChunk[],
+): Promise<{ chunks: ScoredChunk[]; timedOut: boolean }> {
+  let timedOut = false;
+  const chunks = await withRetrievalDeadline(
+    (signal) => semanticRetrieve(index, query, lexical, signal),
+    lexical,
+    RETRIEVAL_TIMEOUT_MS,
+    () => {
+      timedOut = true;
+    },
+  );
+  return { chunks, timedOut };
 }
 
 export async function rerankWithEmbeddings(query: string, chunks: ScoredChunk[], signal?: AbortSignal): Promise<ScoredChunk[]> {

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { detectLanguage } from "../language/detect";
 import { getKnowledgeIndex } from "./index-store";
-import { buildInstructions } from "./prompt";
+import { buildInstructions, scriptRetryInstruction } from "./prompt";
 import { prepareTurn } from "./chat-route";
+import { FEE_CAVEAT_EN } from "./system-text";
 
 const index = getKnowledgeIndex();
 
@@ -206,6 +207,56 @@ describe("prompt rules", () => {
     });
     expect(instructions).not.toMatch(/quote the matching line verbatim/i);
     expect(instructions).toContain("Monday–Friday 8:00 AM–6:00 PM");
+  });
+
+  it("uses the latest clinic for an address question that names none, and lists all three otherwise", () => {
+    const recent = prepareTurn(
+      [
+        { role: "user", content: "Do you do whitening?" },
+        { role: "assistant", content: "Yes, Dapto Dentists offers teeth whitening." },
+        { role: "user", content: "ঠিকানা কোথায়?" },
+      ],
+      "bn",
+      index,
+    );
+    expect(recent.focus).toEqual({ kind: "one", clinic: "dapto" });
+    expect(recent.instructions).toContain("35 Baan Baan Street");
+    expect(recent.instructions).toMatch(/Do not answer with only a phone number/);
+    expect(recent.instructions).not.toMatch(/Ask which of Dapto, Shellharbour or Woonona/i);
+
+    const none = prepareTurn([{ role: "user", content: "ঠিকানা কোথায়?" }], "bn", index);
+    expect(none.focus).toEqual({ kind: "many", clinics: ["dapto", "shellharbour", "woonona"] });
+    expect(none.instructions).toContain("35 Baan Baan Street");
+    expect(none.instructions).toContain("Captain Cook Drive");
+    expect(none.instructions).toContain("379 Princes Highway");
+    expect(none.instructions).toMatch(/Do not ask which clinic/i);
+  });
+
+  it("strips the English fee sentence from retrieved pages and asks for a reply-language version", () => {
+    const language = { code: "bn", label: "বাংলা", script: "Bengali", dir: "ltr" as const, fallback: false, source: "detected" as const };
+    const instructions = buildInstructions({
+      index,
+      language,
+      focus: { kind: "one", clinic: "dapto" },
+      severe: false,
+      chunks: [
+        {
+          id: "whiten",
+          clinic: "dapto",
+          url: "https://daptodentists.com.au/teeth-whitening/",
+          title: "Teeth whitening",
+          heading: "Fees",
+          text: `Whitening is available. ${FEE_CAVEAT_EN}`,
+          score: 1,
+        },
+      ],
+      question: "হোয়াইটেনিং আছে?",
+    });
+    expect(instructions).not.toContain(FEE_CAVEAT_EN);
+    expect(instructions).toContain("Whitening is available.");
+    expect(instructions).toMatch(/write that sentence in the reply language/i);
+    expect(scriptRetryInstruction(language)).toMatch(/Bengali/);
+    expect(scriptRetryInstruction(language)).toMatch(/Do not write English sentences/);
   });
 
   it("says the language could not be detected for gibberish", () => {

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording, type MicAudioQueue } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -324,18 +324,23 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const payload = JSON.parse(String(event.data)) as {
             type?: string;
             is_final?: boolean;
-            channel?: { alternatives?: DeepgramAlternative[] };
+            channel?: { alternatives?: DeepgramAlternative[]; detected_language?: string; languages?: unknown[] };
           };
-          const alternative = payload.channel?.alternatives?.[0];
+          const alternative = alternativeFromLiveResult({
+            alternative: payload.channel?.alternatives?.[0],
+            detectedLanguage: payload.channel?.detected_language,
+            channelLanguages: payload.channel?.languages,
+          });
           const transcript = alternative?.transcript?.trim() || "";
           if (staleDraft()) return;
           const heardNow = interimMicLanguage(alternative, transcript);
           const deepgram = majoritySpokenLanguage(votesFromAlternative(alternative));
           if (deepgram) session.current.interimLanguage = deepgram;
-          if (!transcript) {
-            if (heardNow) setMicNote(micListeningNote(heardNow));
-            return;
+          else if (heardNow) session.current.interimLanguage = heardNow;
+          if (heardNow || session.current.interimLanguage) {
+            setMicNote(micListeningNote(heardNow || session.current.interimLanguage));
           }
+          if (!transcript) return;
           const hint = preferredSpeechLanguage();
           if (payload.is_final) {
             session.current.langVotes.push(...votesFromAlternative(alternative));
@@ -353,14 +358,13 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             voiceRequest.current = { transcript: shown, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
             setInput(shown);
           }
-          const noteLang = heardNow || session.current.interimLanguage || "";
-          setMicNote(noteLang ? micListeningNote(noteLang) : "Listening…");
+          if (!heardNow && !session.current.interimLanguage) setMicNote("Listening…");
         } catch {
           // Ignore non-JSON socket frames.
         }
       });
       setMic("listening");
-      if (!voiceRequest.current) setMicNote("Listening…");
+      setMicNote((current) => (current && current !== "Starting microphone…" ? current : "Listening…"));
     } catch {
       if (!session.current.liveDrop) session.current.liveDrop = formatLiveDrop({ fallback: "open-failed" });
       setMic("listening");

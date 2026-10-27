@@ -8,10 +8,11 @@ import {
 import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
+import { addressFocus } from "./address";
 import { hasLetters, detectLanguage, resolveReplyLanguage } from "../language/detect";
 import { normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
-import { hybridRetrieve } from "../retrieval/embeddings";
+import { hybridRetrieveDetailed } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
 import { attachContactFooter, contactFooter, contactRouteFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService, topicShareText } from "./contacts";
@@ -19,10 +20,11 @@ import { guardRequest, withCors } from "./guard";
 import { attachHoursWording, hoursRelevant } from "./hours";
 import { attachContactLabels } from "./label-fix";
 import { getKnowledgeIndex } from "./index-store";
-import { buildInstructions } from "./prompt";
+import { buildInstructions, scriptRetryInstruction } from "./prompt";
 import { attachScriptFix } from "./script-fix";
 import type { StatusTag } from "./status-tag";
-import { FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, type ChatTimingEvent } from "./stream-timing";
+import { tryAgainMessage } from "./system-text";
+import { FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, type ChatTimingEvent } from "./stream-timing";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -111,7 +113,10 @@ export function prepareTurn(
       reply = forced;
     }
   }
-  const focus = clinicFocus(clinicContextText(turns));
+  const priorTexts = messages
+    .slice(0, Math.max(0, messages.map((message) => message.role).lastIndexOf("user")))
+    .map((message) => messageText(message));
+  const focus = addressFocus(text, priorTexts, clinicFocus(clinicContextText(turns)));
   const severe = isSevereEmergency(text);
   const letterless = !hasLetters(text);
   const chunks = !letterless && query ? searchIndex(index, query, 8).slice(0, 6) : [];
@@ -176,7 +181,10 @@ export async function POST(request: Request): Promise<Response> {
   }
   const letterless = !hasLetters(lexical.text);
   const retrievalStarted = Date.now();
-  const chunks = letterless ? [] : await hybridRetrieve(index, lexical.query, lexical.chunks);
+  const retrieved = letterless
+    ? { chunks: [], timedOut: false }
+    : await hybridRetrieveDetailed(index, lexical.query, lexical.chunks);
+  const chunks = retrieved.chunks;
   const retrievalMs = Date.now() - retrievalStarted;
   const topScore = chunks[0]?.score ?? 0;
   const shares = sharesClinicOrService(lexical.topicText, chunks);
@@ -197,6 +205,12 @@ export async function POST(request: Request): Promise<Response> {
     language: lexical.reply.code,
     startedAt,
     retrievalMs,
+    retrievalTimedOut: retrieved.timedOut,
+    deadlineMs: OVERALL_DEADLINE_MS,
+    fallbackText: tryAgainMessage(
+      lexical.reply.code,
+      Object.values(index.contacts).map((card) => ({ name: card.name, phone: card.phone })),
+    ),
     spokenLanguage: lexical.spokenLanguage,
     inputMode: lexical.inputMode,
     transcriptScript: lexical.transcriptScript,
@@ -207,10 +221,13 @@ export async function POST(request: Request): Promise<Response> {
       replyStatus.tag = status.tag;
       replyStatus.missing = status.missing;
     },
-    run: (attempt, signal) =>
+    run: (attempt, signal, mode) =>
       streamText({
-        ...chatGenerationSettings(attempt, firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt })),
-        instructions,
+        ...chatGenerationSettings(
+          attempt,
+          mode?.scriptRetry ? FIRST_TOKEN_TIMEOUT_MS : firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt }),
+        ),
+        instructions: mode?.scriptRetry ? `${instructions}\n\n${scriptRetryInstruction(lexical.reply)}` : instructions,
         messages: modelMessages,
         abortSignal: signal,
       }).stream,
@@ -238,7 +255,7 @@ export async function POST(request: Request): Promise<Response> {
       hoursRelevant(lexical.text, chunks),
       lexical.text,
     ),
-    { code: lexical.reply.code, index, replyStatus, focus: lexical.focus },
+    { code: lexical.reply.code, index, replyStatus, focus: lexical.focus, question: lexical.text },
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),

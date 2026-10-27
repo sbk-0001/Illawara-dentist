@@ -1,8 +1,15 @@
+import { replyScriptGate } from "../language/reply-script";
 import { CHAT_MODEL } from "./prompt";
 import { drainStatusTag, type StatusTag } from "./status-tag";
+import { createSystemTextFilter, tryAgainMessage } from "./system-text";
 
-/** Abort a gateway stream that has not produced text, then try once more. */
+/** Abort a gateway stream that has not produced visible text, then try once more. */
 export const FIRST_TOKEN_TIMEOUT_MS = 8_000;
+
+/** Hard stop from request start, including retrieval and a retry. */
+export const OVERALL_DEADLINE_MS = 20_000;
+
+export type StalledStage = "retrieval" | "first-token" | "retry" | "script" | "body";
 
 /** Used on the retry, and as an AI Gateway model fallback if the primary request errors. */
 export const CHAT_FALLBACK_MODEL = "google/gemini-2.5-flash";
@@ -45,7 +52,7 @@ export type ChatTimingEvent = {
   model: string;
   attempt: number;
   retried: boolean;
-  outcome: "done" | "error" | "cancelled";
+  outcome: "done" | "error" | "cancelled" | "deadline";
   ttftMs: number | null;
   totalMs: number;
   /** Time spent in hybrid retrieval before the model stream, in milliseconds. */
@@ -65,6 +72,10 @@ export type ChatTimingEvent = {
   langOverride: boolean;
   /** Why the live Deepgram socket closed, when the browser reported it. */
   liveDrop?: string;
+  /** Stage that timed out or produced the wrong script. Absent when nothing stalled. */
+  stalled?: StalledStage;
+  /** The 2s retrieval cap returned lexical hits. */
+  retrievalTimedOut?: boolean;
 };
 
 const tagStats = { seen: 0, missing: 0 };
@@ -85,22 +96,34 @@ function timeoutError(): Error {
   return Object.assign(new Error("first-token timeout"), { name: "TimeoutError" });
 }
 
+function deadlineError(): Error {
+  return Object.assign(new Error("overall deadline"), { name: "DeadlineError" });
+}
+
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : "Error";
 }
 
 /**
- * Read a model stream. If no text-delta arrives within the first-token timeout,
- * abort that attempt and run once more (the fallback model).
+ * Read a model stream. If no visible text arrives within the first-token timeout,
+ * abort that attempt and run once more (the fallback model). A status tag alone
+ * does not count as visible text. If the visible reply uses the wrong script,
+ * regenerate once with a stronger instruction. An overall deadline from request
+ * start ends the stream with a localized try-again line.
  * Pass `startedAt` from request start so retrieval counts toward the 8s budget.
  * One structured line is logged when the stream settles. The chat route prints
  * that line from Next.js after() so it shows up in Vercel runtime logs.
  */
 export function createRetryingTextStream<T extends TextPart>(input: {
   language: string;
-  run: (attempt: number, signal: AbortSignal) => AsyncIterable<T>;
+  run: (attempt: number, signal: AbortSignal, mode?: { scriptRetry?: boolean }) => AsyncIterable<T>;
   log?: (event: ChatTimingEvent) => void;
   timeoutMs?: number;
+  /** From request start. Defaults to 20s. */
+  deadlineMs?: number;
+  /** Shown when the deadline wins before a usable reply. */
+  fallbackText?: string;
+  retrievalTimedOut?: boolean;
   /** Request start. When set, attempt 0's budget is what remains of `timeoutMs`. */
   startedAt?: number;
   /** Logged as-is. Measured by the caller around retrieval. */
@@ -125,6 +148,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   let tagDecided = false;
   let tagMissing = true;
   let dropBreak = false;
+  let stalled: StalledStage | undefined;
+  let released = false;
 
   const noteTag = (tag: StatusTag | null, missing: boolean) => {
     tagDecided = true;
@@ -169,88 +194,207 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       transcriptScript: input.transcriptScript ?? "",
       langOverride: input.langOverride === true,
       ...(input.liveDrop ? { liveDrop: input.liveDrop } : {}),
+      ...(stalled ? { stalled } : {}),
+      ...(input.retrievalTimedOut ? { retrievalTimedOut: true } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
     if (error) line.error = error;
     log(line);
   };
 
+  const deadlineMs = input.deadlineMs ?? OVERALL_DEADLINE_MS;
+  const fallbackText = input.fallbackText || tryAgainMessage(input.language, []);
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let activeAbort: AbortController | undefined;
+  const pastDeadline = () => Date.now() - origin >= deadlineMs;
+  const deadlinePromise = new Promise<never>((_, reject) => {
+    const remaining = Math.max(0, deadlineMs - (Date.now() - origin));
+    deadlineTimer = setTimeout(() => {
+      const error = deadlineError();
+      activeAbort?.abort(error);
+      reject(error);
+    }, remaining);
+  });
+  deadlinePromise.catch(() => undefined);
+
+  function resetTag() {
+    tagHold = "";
+    tagDecided = false;
+    dropBreak = false;
+  }
+
   return new ReadableStream<T>({
     async start(controller) {
       let lastError: unknown;
-      try {
-        for (attempt = 0; attempt < 2; attempt += 1) {
-          const budget = firstTokenBudget({ attempt, timeoutMs, startedAt: input.startedAt });
-          const settings = chatGenerationSettings(attempt, budget);
-          model = settings.model;
-          const attemptStarted = Date.now();
-          const attemptAbort = new AbortController();
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => {
-              const error = timeoutError();
-              attemptAbort.abort(error);
-              reject(error);
-            }, budget);
-          });
-          const iterator = input.run(attempt, attemptAbort.signal)[Symbol.asyncIterator]();
-          const buffered: T[] = [];
-          let sawText = false;
-          const stop = async () => {
+      const clearDeadline = () => {
+        if (deadlineTimer) clearTimeout(deadlineTimer);
+      };
+      const emitFallback = (stage: StalledStage) => {
+        stalled = stage;
+        clearDeadline();
+        const text = released ? `\n${fallbackText}` : fallbackText;
+        controller.enqueue({ type: "text-delta", text } as T);
+        finish("deadline", "deadline");
+        controller.close();
+      };
+      const stopIterator = async (iterator: AsyncIterator<T>, timer?: ReturnType<typeof setTimeout>) => {
+        if (timer) clearTimeout(timer);
+        await Promise.race([
+          Promise.resolve(iterator.return?.()).catch(() => undefined),
+          new Promise((resolve) => setTimeout(resolve, 50)),
+        ]);
+      };
+
+      const consume = async (scriptRetry: boolean): Promise<"ok" | "timeout" | "script" | "deadline" | "error"> => {
+        const budget = scriptRetry ? timeoutMs : firstTokenBudget({ attempt, timeoutMs, startedAt: input.startedAt });
+        const settings = chatGenerationSettings(attempt, budget);
+        model = settings.model;
+        const attemptAbort = new AbortController();
+        activeAbort = attemptAbort;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            const error = timeoutError();
+            attemptAbort.abort(error);
+            reject(error);
+          }, budget);
+        });
+        timeoutPromise.catch(() => undefined);
+        const iterator = input.run(attempt, attemptAbort.signal, scriptRetry ? { scriptRetry: true } : undefined)[Symbol.asyncIterator]();
+        const buffered: T[] = [];
+        let held = "";
+        const filter = createSystemTextFilter(input.language);
+        let showed = false;
+        const show = (text: string) => {
+          const visible = filter.push(text);
+          if (!showed) {
+            showed = true;
+            released = true;
             if (timer) clearTimeout(timer);
-            await iterator.return?.().catch(() => undefined);
-          };
-          try {
-            for (;;) {
-              const pending = iterator.next();
-              pending.catch(() => undefined);
-              const step = sawText ? await pending : await Promise.race([pending, timeoutPromise]);
-              if (step.done) break;
-              const part = step.value;
-              if (!sawText && part.type === "text-delta" && part.text) {
-                sawText = true;
-                if (timer) clearTimeout(timer);
-                ttftMs = Date.now() - origin;
+            if (ttftMs === null) ttftMs = Date.now() - origin;
+            for (const earlier of buffered) controller.enqueue(earlier);
+            buffered.length = 0;
+          }
+          if (visible) controller.enqueue({ type: "text-delta", text: visible } as T);
+        };
+        try {
+          for (;;) {
+            const pending = iterator.next();
+            pending.catch(() => undefined);
+            const step = showed
+              ? await Promise.race([pending, deadlinePromise])
+              : await Promise.race([pending, timeoutPromise, deadlinePromise]);
+            if (step.done) {
+              held += takeText("", true);
+              const gate = replyScriptGate(held, input.language);
+              if (gate === "conflict") {
+                await stopIterator(iterator, timer);
+                return "script";
+              }
+              if (held) {
+                show(held);
+                held = "";
+              }
+              const rest = filter.flush();
+              if (rest) controller.enqueue({ type: "text-delta", text: rest } as T);
+              if (!showed) {
                 for (const earlier of buffered) controller.enqueue(earlier);
-                buffered.length = 0;
-                const visible = takeText(part.text, false);
-                if (visible) controller.enqueue({ ...part, text: visible });
-                continue;
               }
-              if (!sawText) {
-                buffered.push(part);
-                continue;
-              }
-              if (part.type === "text-delta" && part.text) {
-                const visible = takeText(part.text, false);
-                if (visible) controller.enqueue({ ...part, text: visible });
-                continue;
-              }
-              controller.enqueue(part);
+              await stopIterator(iterator, timer);
+              return "ok";
             }
-            await stop();
-            if (!sawText) {
-              for (const earlier of buffered) controller.enqueue(earlier);
+            const part = step.value;
+            if (part.type === "text-delta" && part.text) {
+              const visible = takeText(part.text, false);
+              if (!visible) continue;
+              if (showed) {
+                show(visible);
+                continue;
+              }
+              held += visible;
+              const gate = replyScriptGate(held, input.language);
+              if (gate === "conflict") {
+                await stopIterator(iterator, timer);
+                return "script";
+              }
+              if (gate === "release") {
+                show(held);
+                held = "";
+              }
+              continue;
             }
-            const tail = takeText("", true);
-            if (tail) controller.enqueue({ type: "text-delta", text: tail } as T);
+            if (!showed) buffered.push(part);
+            else controller.enqueue(part);
+          }
+        } catch (error) {
+          await stopIterator(iterator, timer);
+          if (errorName(error) === "DeadlineError" || pastDeadline()) return "deadline";
+          if (errorName(error) === "TimeoutError" || errorName(error) === "AbortError") return showed ? "error" : "timeout";
+          lastError = error;
+          return "error";
+        }
+      };
+
+      const deadlineStage = (): StalledStage => {
+        if (released) return "body";
+        if (attempt > 0) return "retry";
+        if (input.retrievalTimedOut || retrievalMs >= deadlineMs) return "retrieval";
+        return "first-token";
+      };
+
+      try {
+        let scriptRetried = false;
+        for (attempt = 0; attempt < 2; attempt += 1) {
+          if (pastDeadline()) {
+            emitFallback(deadlineStage());
+            return;
+          }
+          const attemptStarted = Date.now();
+          resetTag();
+          const result = await consume(false);
+          if (result === "deadline") {
+            emitFallback(deadlineStage());
+            return;
+          }
+          if (result === "script" && !scriptRetried) {
+            scriptRetried = true;
+            stalled = "script";
+            resetTag();
+            const again = await consume(true);
+            if (again === "ok") {
+              clearDeadline();
+              finish("done");
+              controller.close();
+              return;
+            }
+            emitFallback(again === "deadline" && released ? "body" : "script");
+            return;
+          }
+          if (result === "ok") {
+            clearDeadline();
             finish("done");
             controller.close();
             return;
-          } catch (error) {
-            await stop();
-            lastError = error;
-            if (sawText || attempt === 1) {
-              finish("error", errorName(error));
-              controller.error(error);
+          }
+          if (result === "timeout") {
+            stalled = attempt === 0 ? "first-token" : "retry";
+            firstAttemptMs = Date.now() - attemptStarted;
+            if (attempt === 1) {
+              emitFallback("retry");
               return;
             }
-            firstAttemptMs = Date.now() - attemptStarted;
+            continue;
           }
+          clearDeadline();
+          finish("error", errorName(lastError));
+          controller.error(lastError ?? new Error("chat stream failed"));
+          return;
         }
+        clearDeadline();
         finish("error", errorName(lastError));
         controller.error(lastError ?? new Error("chat stream failed"));
       } catch (error) {
+        clearDeadline();
         finish("error", errorName(error));
         try {
           controller.error(error);
@@ -260,6 +404,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       }
     },
     cancel() {
+      if (deadlineTimer) clearTimeout(deadlineTimer);
       finish("cancelled");
     },
   });
