@@ -12,7 +12,7 @@ import { hasLetters, resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
-import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService, topicShareText } from "./contacts";
+import { attachContactFooter, contactFooter, contactRouteFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService, topicShareText } from "./contacts";
 import { guardRequest, withCors } from "./guard";
 import { attachHoursWording, hoursRelevant } from "./hours";
 import { getKnowledgeIndex } from "./index-store";
@@ -168,6 +168,7 @@ export async function POST(request: Request): Promise<Response> {
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),
+    routeFooter: contactRouteFooter(index, lexical.reply, lexical.focus),
     sourcesFound: answered,
     sourceCount: chunks.length,
     topScore,
@@ -176,6 +177,7 @@ export async function POST(request: Request): Promise<Response> {
     sharesTopic: shares,
     index,
     focus: lexical.focus,
+    facts: chunks.slice(0, 4).map((chunk) => `${chunk.title}\n${chunk.heading}\n${chunk.text}`).join("\n"),
   });
 
   return withCors(request, createUIMessageStreamResponse({ stream }));

@@ -3,7 +3,9 @@ import { detectLanguage, hasLetters } from "../language/detect";
 import { mentionedClinics } from "../intent";
 import {
   attachContactFooter,
+  chooseContactFooter,
   contactFooter,
+  contactRouteFooter,
   ensureContactFooter,
   isClearlyOffTopic,
   replyHasContactRoute,
@@ -358,5 +360,182 @@ describe("contact footer", () => {
     expect(text).toContain("02 4284 4486");
     expect(text).not.toContain("답이 없습니다");
     expect(text).not.toContain("02 4288 0737");
+  });
+
+  it("appends the no-answer footer when the reply has no contact route and says the site does not mention it", async () => {
+    const facts = "Dapto Dentists whitening teeth";
+    expect(
+      chooseContactFooter({
+        question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?",
+        sourceCount: 3,
+        topScore: 0.84,
+        replyText: "ওয়েবসাইটে রোবট দাঁতের উল্লেখ নেই।",
+        index,
+        focus: { kind: "any" },
+        facts,
+      }),
+    ).toBe("no-answer");
+    expect(
+      shouldAppendContactFooter({
+        question: "क्या व्हाइटनिंग है?",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "वेबसाइट पर इसका उल्लेख नहीं है।",
+        facts: "whitening",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "هل توجد هذه الخدمة؟",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "هذه الخدمة غير مذكور في الموقع.",
+        facts: "whitening service",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "有美白吗？",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "网站没有提到这项服务。",
+        facts: "whitening",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "Does Dapto offer whitening?",
+        sourceCount: 3,
+        topScore: 0.9,
+        replyText: "Yes, they do.",
+        index,
+        focus: { kind: "one", clinic: "dapto" },
+        facts,
+      }),
+    ).toBe(true);
+
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "ওয়েবসাইটে রোবট দাঁতের উল্লেখ নেই।" });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const language = detectLanguage("এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?");
+    const chunks = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, language, { kind: "any" }),
+        routeFooter: contactRouteFooter(index, language, { kind: "any" }),
+        sourcesFound: true,
+        sourceCount: 3,
+        topScore: 0.84,
+        question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?",
+        covered: (text) => replyHasContactRoute(text, index),
+        index,
+        focus: { kind: "any" },
+        facts,
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("উল্লেখ নেই");
+    expect(text).toContain("উত্তর নেই");
+    expect(text).toContain("02 4288 0737");
+    expect(text).toContain("zavy360.com");
+  });
+
+  it("leaves a grounded answer alone and uses a neutral line only for a contact question", async () => {
+    const facts = "Dapto Dentists whitening teeth";
+    const focus = { kind: "one" as const, clinic: "dapto" as const };
+    expect(
+      chooseContactFooter({
+        question: "Does Dapto offer teeth whitening?",
+        sourceCount: 3,
+        topScore: 0.91,
+        replyText: "Yes, Dapto offers whitening.",
+        index,
+        focus,
+        facts,
+      }),
+    ).toBe("none");
+    expect(shouldAppendContactFooter({ question: "thanks", sourceCount: 0, topScore: 0, replyText: "উল্লেখ নেই" })).toBe(false);
+    expect(
+      shouldAppendContactFooter({
+        question: "What is the Woonona phone?",
+        sourceCount: 2,
+        topScore: 0.88,
+        replyText: "The phone is 02 4284 4486.",
+        index,
+        focus: { kind: "one", clinic: "woonona" },
+        facts,
+      }),
+    ).toBe(false);
+    expect(
+      chooseContactFooter({
+        question: "What is the Woonona phone number?",
+        sourceCount: 3,
+        topScore: 0.9,
+        replyText: "Yes, Dapto offers whitening.",
+        index,
+        focus,
+        facts,
+      }),
+    ).toBe("route");
+
+    const language = detectLanguage("What is the Woonona phone number?");
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "Yes, Dapto offers whitening." });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const routed = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, language, focus),
+        routeFooter: contactRouteFooter(index, language, focus),
+        sourcesFound: true,
+        sourceCount: 3,
+        topScore: 0.9,
+        question: "What is the Woonona phone number?",
+        covered: (text) => replyHasContactRoute(text, index),
+        index,
+        focus,
+        facts,
+      }),
+    );
+    const routedText = routed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(routedText).toContain("Yes, Dapto offers whitening.");
+    expect(routedText).toContain("Book or call:");
+    expect(routedText).toContain("02 4284 4486");
+    expect(routedText).not.toContain("does not list an answer");
+
+    const answered = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "Yes, Dapto offers whitening." });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const clean = await readChunks(
+      attachContactFooter(answered, {
+        footer: contactFooter(index, detectLanguage("Does Dapto offer teeth whitening?"), focus),
+        routeFooter: contactRouteFooter(index, detectLanguage("Does Dapto offer teeth whitening?"), focus),
+        sourcesFound: true,
+        sourceCount: 3,
+        topScore: 0.91,
+        question: "Does Dapto offer teeth whitening?",
+        covered: (text) => replyHasContactRoute(text, index),
+        index,
+        focus,
+        facts,
+      }),
+    );
+    const cleanText = clean.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(cleanText).toBe("Yes, Dapto offers whitening.");
+    expect(cleanText).not.toContain("Book or call:");
+    expect(cleanText).not.toContain("does not list an answer");
   });
 });

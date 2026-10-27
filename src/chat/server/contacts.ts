@@ -37,7 +37,30 @@ const LEAD: Record<string, string> = {
 };
 
 const GREETING =
-  /^(?:hi|hey|hello|thanks|thank you|ok|okay|hola|ciao|salut|bonjour|hallo|namaste|salam|gracias|merci|obrigado|danke|xin chao|xin chào)[.!?\s]*$/i;
+  /^(?:hi|hey|hello|thanks|thank you|ok|okay|hola|ciao|salut|bonjour|hallo|namaste|salam|gracias|merci|obrigado|danke|xin chao|xin chào|ধন্যবাদ|শুভেচ্ছা|नमस्ते|धन्यवाद|شكرا|شكراً|谢谢|謝謝|감사합니다|grazie)[.!?\s]*$/i;
+
+/** Short line when the visitor asked how to book or call and the reply never gave a route. */
+const CONTACT_ROUTE: Record<string, string> = {
+  en: "Book or call:",
+  bn: "ফোন করুন বা বুক করুন:",
+  "bn-Latn": "Phone korun ba book korun:",
+  ar: "اتصل أو احجز:",
+  hi: "फ़ोन करें या बुक करें:",
+  "hi-Latn": "Phone karein ya book karein:",
+  zh: "请致电或预约：",
+  es: "Llame o reserve:",
+  vi: "Gọi hoặc đặt lịch:",
+  ne: "फोन गर्नुहोस् वा बुक गर्नुहोस्:",
+  ko: "전화하거나 예약하세요:",
+  el: "Καλέστε ή κλείστε ραντεβού:",
+  it: "Chiami o prenoti:",
+  ur: "فون کریں یا بکنگ کریں:",
+  fa: "تماس بگیرید یا نوبت بگیرید:",
+  he: "התקשרו או קבעו תור:",
+  fr: "Appelez ou réservez :",
+  de: "Rufen Sie an oder buchen Sie:",
+  pt: "Ligue ou reserve:",
+};
 
 /** Short replies that mean "the site does not say", even when the model skips [[NO_ANSWER]]. */
 const NO_INFO = [
@@ -96,6 +119,82 @@ const NO_INFO = [
   "tidak tahu",
   "walang impormasyon",
   "hindi ko alam",
+  "উল্লেখ নেই",
+  "উল্লেখ করা নেই",
+  "উল্লেখ করা হয়নি",
+  "পাওয়া যায়নি",
+  "পাওয়া যায়নি",
+  "খুঁজে পাওয়া যায়নি",
+  "জানা নেই",
+  "ullekho nei",
+  "pawa jayni",
+  "jana nei",
+  "उल्लेख नहीं",
+  "उल्लेख नही",
+  "जानकारी उपलब्ध नहीं",
+  "ज़िक्र नहीं",
+  "ullekh nahi",
+  "jankari nahi",
+  "لم يُذكر",
+  "لم يذكر",
+  "غير مذكور",
+  "غير مذكورة",
+  "لا يُذكر",
+  "没有提到",
+  "未提及",
+  "没有提及",
+  "沒有提到",
+  "未找到",
+  "not mentioned",
+  "no mention",
+  "isn't mentioned",
+  "is not mentioned",
+  "not on the website",
+  "couldn't find",
+  "could not find",
+  "no se menciona",
+  "no está mencionado",
+  "no figura",
+  "không được đề cập",
+  "không thấy đề cập",
+  "उल्लेख छैन",
+  "जानकारी छैन",
+  "언급되어 있지",
+  "언급이 없",
+  "δεν αναφέρεται",
+  "non è menzionat",
+  "non risulta",
+  "ذکر نہیں",
+  "معلومات نہیں",
+  "ذکر نشده",
+  "اشاره نشده",
+  "לא מוזכר",
+  "אין אזכור",
+  "לא מצוין",
+  "pas mentionné",
+  "n'est pas mentionné",
+  "ne figure pas",
+  "nicht erwähnt",
+  "nicht aufgeführt",
+  "não é mencionad",
+  "não consta",
+  "tidak disebutkan",
+  "tidak tercantum",
+  "tidak dinyatakan",
+  "tidak disebut",
+  "記載されていません",
+  "言及されていません",
+  "載っていません",
+  "не упоминается",
+  "не указано",
+  "ਜ਼ਿਕਰ ਨਹੀਂ",
+  "ਜਾਣਕਾਰੀ ਨਹੀਂ",
+  "குறிப்பிடப்படவில்லை",
+  "தகவல் இல்லை",
+  "ప్రస్తావన లేదు",
+  "సమాచారం లేదు",
+  "ไม่ได้ระบุ",
+  "ไม่มีข้อมูล",
 ];
 
 const TOPIC_STOP = new Set(["that", "this", "with", "from", "your", "have", "what", "when", "where", "does", "about", "please", "much", "they", "them", "then", "than", "into", "over", "also", "just", "like", "want", "need", "tell", "know", "there", "which", "would", "could", "should"]);
@@ -120,6 +219,16 @@ export function contactFooter(index: KnowledgeIndex, language: ReplyLanguage, fo
     return `${card.name} — ${card.phone} — ${card.bookingUrl}`;
   });
   return [lead, ...lines].filter(Boolean).join("\n");
+}
+
+/** Neutral contact lines. Not the “website has no answer” wording. */
+export function contactRouteFooter(index: KnowledgeIndex, language: ReplyLanguage, focus: ClinicFocus): string {
+  const lead = CONTACT_ROUTE[language.code] ?? "Book or call:";
+  const lines = orderedClinics(focus).map((id) => {
+    const card = index.contacts[id];
+    return `${card.name} — ${card.phone} — ${card.bookingUrl}`;
+  });
+  return [lead, ...lines].join("\n");
 }
 
 export function replyHasContactRoute(reply: string, index: KnowledgeIndex): boolean {
@@ -180,17 +289,77 @@ export type FooterDecision = {
   /** When set, a reply that already names this clinic's phone, address or booking link is an answer. */
   index?: KnowledgeIndex;
   focus?: ClinicFocus;
+  /** Text of the top retrieved pages, used to see whether a short reply states a fact from them. */
+  facts?: string;
 };
+
+export type FooterKind = "none" | "no-answer" | "route";
+
+function flatReply(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function wordCount(text: string): number {
+  return flatReply(text).split(/\s+/).filter(Boolean).length;
+}
+
+function matchedNoInfoPhrase(text: string): string | undefined {
+  const flat = flatReply(text);
+  if (!flat) return undefined;
+  const lower = flat.toLowerCase();
+  return NO_INFO.find((phrase) => lower.includes(phrase.toLowerCase()));
+}
 
 /** A short reply that says the information is missing, in the languages the widget answers. */
 export function replySignalsNoInformation(text: string): boolean {
-  const flat = text.replace(/\s+/g, " ").trim();
-  if (!flat) return false;
-  const lower = flat.toLowerCase();
-  const hit = NO_INFO.find((phrase) => lower.includes(phrase.toLowerCase()));
+  const flat = flatReply(text);
+  const hit = matchedNoInfoPhrase(flat);
   if (!hit) return false;
-  const words = flat.split(/\s+/).length;
-  return words <= 24 || hit.length >= flat.length * 0.35;
+  return wordCount(flat) <= 28 || hit.length >= flat.length * 0.35;
+}
+
+const CONTACT_QUESTION =
+  /phone|e-?mail|\bnumber\b|\bcall\b|address|booking|\bbook\b|appointment|\bcontact\b|zavy|ফোন|নম্বর|বুকিং|ঠিকানা|फ़ोन|फोन|नंबर|पता|बुकिंग|هاتف|رقم|حجز|عنوان|电话|預約|预约|地址|전화|예약|주소|điện thoại|đặt lịch|địa chỉ|τηλέφων|ραντεβού|διεύθυνσ|telefono|prenot|indirizzo|teléfono|reserv|dirección|فون|نمبر|بکنگ|پتہ|تلفن|آدرس|نوبت|טלפון|כתובת|לקבוע|téléphon|rendez-vous|adresse|anrufen|buchen|telefone|endereço/i;
+
+function questionAsksForContact(question: string): boolean {
+  return CONTACT_QUESTION.test(question);
+}
+
+function replyLooksLikeContact(reply: string): boolean {
+  if (/zavy360\.com/i.test(reply)) return true;
+  if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(reply)) return true;
+  const runs = reply.match(/\d[\d\s()-]{8,}\d/g) ?? [];
+  return runs.some((run) => digits(run).length >= 10);
+}
+
+function letterCount(text: string): number {
+  return text.match(/\p{L}/gu)?.length ?? 0;
+}
+
+function mostlyLatin(text: string): boolean {
+  const letters = text.match(/\p{L}/gu) ?? [];
+  if (!letters.length) return false;
+  const latin = letters.filter((ch) => /\p{Script=Latin}/u.test(ch)).length;
+  return latin / letters.length >= 0.6;
+}
+
+function sharesFactToken(reply: string, facts: string): boolean {
+  const factTokens = new Set(
+    (facts.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter((token) => !TOPIC_STOP.has(token)),
+  );
+  const replyTokens = reply.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+  if (replyTokens.some((token) => factTokens.has(token))) return true;
+  const replyDigits = digits(reply);
+  const factDigits = facts.match(/\d{3,}/g) ?? [];
+  return factDigits.some((value) => value.length >= 3 && replyDigits.includes(value));
+}
+
+/** A reply that states something from the pages, a clock time, or a real sentence in another script. */
+function looksLikeConcreteAnswer(reply: string, facts?: string): boolean {
+  if (/\d{1,2}[:.]\d{2}/.test(reply) || /[$€£]\s?\d/.test(reply)) return true;
+  if (facts?.trim() && sharesFactToken(reply, facts)) return true;
+  if (!mostlyLatin(reply) && letterCount(reply) >= 12 && !matchedNoInfoPhrase(reply)) return true;
+  return false;
 }
 
 const ADDRESS_GENERIC = new Set([
@@ -274,29 +443,45 @@ export function sharesClinicOrService(question: string, chunks: Pick<KnowledgeCh
 }
 
 /**
- * Append when the question has no letters, the model marked the reply unanswered,
- * the reply says there is no information, or retrieval found nothing usable.
- * A missing term overlap counts only when the top score is also low.
- * A reply that already contains the relevant clinic phone, address or booking link is left alone.
+ * No-answer footer for a real miss. Neutral “Book or call” only when the visitor
+ * asked for a contact route and the reply never gave one. A grounded answer that
+ * does not repeat a phone stays as written.
  */
-export function shouldAppendContactFooter(input: FooterDecision): boolean {
-  if (!input.question.trim() && !input.modelSaidNoAnswer && !input.replyText?.trim()) return false;
-  if (input.question.trim() && !hasLetters(input.question)) return true;
-  if (input.modelSaidNoAnswer) return true;
-  if (input.replyText && replySignalsNoInformation(input.replyText)) return true;
-  if (GREETING.test(input.question.trim())) return false;
-  if (
-    input.replyText &&
-    input.index &&
-    replyCoversRelevantContact(input.replyText, input.index, input.focus ?? { kind: "any" })
-  ) {
-    return false;
-  }
+export function chooseContactFooter(input: FooterDecision): FooterKind {
+  const question = input.question.trim();
+  const reply = input.replyText?.trim() ?? "";
+  if (!question && !input.modelSaidNoAnswer && !reply) return "none";
+  if (question && !hasLetters(question)) return "no-answer";
+  if (input.modelSaidNoAnswer) return "no-answer";
+  if (GREETING.test(question)) return "none";
+  if (reply && replySignalsNoInformation(reply)) return "no-answer";
+
+  const focus = input.focus ?? { kind: "any" as const };
+  const hasContact = reply
+    ? input.index
+      ? replyCoversRelevantContact(reply, input.index, focus) || replyLooksLikeContact(reply)
+      : replyLooksLikeContact(reply)
+    : false;
+  if (hasContact) return "none";
+
+  if (reply && matchedNoInfoPhrase(reply) && wordCount(reply) <= 48) return "no-answer";
+
   const top = input.topScore ?? (input.sourceCount > 0 ? 1 : 0);
-  // sharesTopic false appends only when the top score is also low. A strong hit is
-  // already an answer, including when the overlap check missed the clinic spelling.
-  if (input.sharesTopic === false && retrievalHasAnswer(input.sourceCount, top)) return false;
-  return !retrievalHasAnswer(input.sourceCount, top);
+  const low = !retrievalHasAnswer(input.sourceCount, top);
+  if (!reply) return low ? "no-answer" : "none";
+
+  const concrete = looksLikeConcreteAnswer(reply, input.facts);
+  const short = wordCount(reply) <= 14 || letterCount(reply) <= 12;
+  // Low score, or a short reply that repeats nothing from the pages. A sentence in
+  // another script is left alone unless it uses a no-information phrase, because
+  // the English pages do not overlap that reply.
+  if ((low || short) && !concrete) return "no-answer";
+  if (questionAsksForContact(question)) return "route";
+  return "none";
+}
+
+export function shouldAppendContactFooter(input: FooterDecision): boolean {
+  return chooseContactFooter(input) !== "none";
 }
 
 type FooterChunk = { type: string; id?: string; delta?: string };
@@ -351,6 +536,9 @@ export function attachContactFooter<T extends FooterChunk>(
     sharesTopic?: boolean;
     index?: KnowledgeIndex;
     focus?: ClinicFocus;
+    facts?: string;
+    /** Neutral “Book or call” block. Used only when the visitor asked for a contact route. */
+    routeFooter?: string;
   },
 ): ReadableStream<T> {
   let textId: string | undefined;
@@ -367,7 +555,7 @@ export function attachContactFooter<T extends FooterChunk>(
     if (drained.sawSentinel) sawSentinel = true;
     shown += drained.visible;
     if (drained.visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: drained.visible } as T);
-    const append = shouldAppendContactFooter({
+    const kind = chooseContactFooter({
       question: input.question,
       sourceCount: input.sourceCount ?? (input.sourcesFound ? 1 : 0),
       topScore: input.topScore ?? (input.sourcesFound ? 1 : 0),
@@ -376,10 +564,12 @@ export function attachContactFooter<T extends FooterChunk>(
       sharesTopic: input.sharesTopic,
       index: input.index,
       focus: input.focus,
+      facts: input.facts,
     });
-    if (!append || !input.footer || input.covered(shown)) return;
+    const block = kind === "no-answer" ? input.footer : kind === "route" ? input.routeFooter ?? "" : "";
+    if (!block || input.covered(shown)) return;
     const id = textId ?? "contact-footer";
-    const delta = `${shown.trim() ? "\n\n" : ""}${input.footer}`;
+    const delta = `${shown.trim() ? "\n\n" : ""}${block}`;
     if (!textId) controller.enqueue({ type: "text-start", id } as T);
     controller.enqueue({ type: "text-delta", id, delta } as T);
     if (!textId) controller.enqueue({ type: "text-end", id } as T);

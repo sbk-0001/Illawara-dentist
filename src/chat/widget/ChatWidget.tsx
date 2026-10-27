@@ -8,6 +8,7 @@ import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
 import { correctTranscript, deepgramListenUrl } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
+import { dedupeSourceChips } from "./sources";
 import styles from "./ChatWidget.module.css";
 
 export type ClinicUIMessage = UIMessage<ChatMetadata>;
@@ -276,8 +277,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
                   <MessageText text={text} />
                   {message.role === "assistant" && message.metadata?.sources?.length ? (
                     <div className={styles.sources}>
-                      {message.metadata.sources.map((source) => (
-                        <a key={source.url} className={styles.source} href={source.url} target="_blank" rel="noreferrer" data-testid="chat-source">
+                      {dedupeSourceChips(message.metadata.sources).map((source) => (
+                        <a key={`${source.url} ${source.title}`} className={styles.source} href={source.url} target="_blank" rel="noreferrer" data-testid="chat-source">
                           {source.title}
                         </a>
                       ))}

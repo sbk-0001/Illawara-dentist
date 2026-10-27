@@ -9,7 +9,7 @@
 import { streamText } from "ai";
 import { EVAL_CASES } from "../src/chat/eval/cases.ts";
 import { replyMatchesLanguage } from "../src/chat/language/reply-script.ts";
-import { ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, sharesClinicOrService, shouldAppendContactFooter, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
+import { chooseContactFooter, contactRouteFooter, ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, sharesClinicOrService, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
 import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
@@ -83,7 +83,7 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const finished = hoursRelevant(turn.text, chunks) ? rewriteEnglishHours(scripted, turn.reply.code) : scripted;
   const saidNo = modelSignalsNoAnswer(finished);
   const visible = stripNoAnswerSentinel(finished);
-  const withContacts = shouldAppendContactFooter({
+  const kind = chooseContactFooter({
     question: turn.text,
     sourceCount: chunks.length,
     topScore,
@@ -92,9 +92,14 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     sharesTopic: shares,
     index,
     focus: turn.focus,
-  })
-    ? ensureContactFooter(visible, index, turn.reply, turn.focus)
-    : visible;
+    facts: chunks.slice(0, 4).map((chunk) => `${chunk.title}\n${chunk.heading}\n${chunk.text}`).join("\n"),
+  });
+  const withContacts =
+    kind === "no-answer"
+      ? ensureContactFooter(visible, index, turn.reply, turn.focus)
+      : kind === "route"
+        ? `${visible.trim()}\n\n${contactRouteFooter(index, turn.reply, turn.focus)}`.trim()
+        : visible;
   return { reply: withContacts, ttftMs, totalMs: performance.now() - started, detected: turn.reply.code };
 }
 
