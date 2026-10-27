@@ -20,7 +20,7 @@ import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions } from "./prompt";
 import { attachScriptFix } from "./script-fix";
 import type { StatusTag } from "./status-tag";
-import { chatGenerationSettings, createRetryingTextStream, type ChatTimingEvent } from "./stream-timing";
+import { FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, type ChatTimingEvent } from "./stream-timing";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -115,13 +115,16 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const messages = parsed.data.messages as unknown as ClinicUIMessage[];
+  const startedAt = Date.now();
   const index = getKnowledgeIndex();
   const lexical = prepareTurn(messages, parsed.data.language, index);
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }
   const letterless = !hasLetters(lexical.text);
+  const retrievalStarted = Date.now();
   const chunks = letterless ? [] : await hybridRetrieve(index, lexical.query, lexical.chunks);
+  const retrievalMs = Date.now() - retrievalStarted;
   const topScore = chunks[0]?.score ?? 0;
   const shares = sharesClinicOrService(lexical.topicText, chunks);
   const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
@@ -139,6 +142,8 @@ export async function POST(request: Request): Promise<Response> {
   const replyStatus: { tag: StatusTag | null; missing: boolean } = { tag: null, missing: true };
   const textStream = createRetryingTextStream({
     language: lexical.reply.code,
+    startedAt,
+    retrievalMs,
     log: scheduleRequestTimingLog(),
     onStatus: (status) => {
       replyStatus.tag = status.tag;
@@ -146,7 +151,7 @@ export async function POST(request: Request): Promise<Response> {
     },
     run: (attempt, signal) =>
       streamText({
-        ...chatGenerationSettings(attempt),
+        ...chatGenerationSettings(attempt, firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt })),
         instructions,
         messages: modelMessages,
         abortSignal: signal,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
-import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
+import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
 
 async function readText(stream: ReadableStream<{ type: string; text?: string }>): Promise<string> {
   const reader = stream.getReader();
@@ -78,7 +78,47 @@ describe("first-token timeout", () => {
     });
     expect(events[0]?.ttftMs).toEqual(expect.any(Number));
     expect(events[0]?.firstAttemptMs).toBeGreaterThan(0);
+    expect(events[0]?.retrievalMs).toBe(0);
     expect(events[0]?.error).toBeUndefined();
+  });
+
+  it("counts retrieval against the 8s budget and logs retrievalMs", async () => {
+    expect(firstTokenBudget({ attempt: 0, timeoutMs: 8000, startedAt: 0, now: 7900 })).toBe(250);
+    expect(firstTokenBudget({ attempt: 1, timeoutMs: 8000, startedAt: 0, now: 7900 })).toBe(8000);
+    expect(firstTokenBudget({ attempt: 0, timeoutMs: 30 })).toBe(30);
+
+    const events: ChatTimingEvent[] = [];
+    let calls = 0;
+    const startedAt = Date.now() - 7900;
+    const stream = createRetryingTextStream({
+      language: "ur",
+      timeoutMs: 8000,
+      startedAt,
+      retrievalMs: 7900,
+      log: (event) => events.push(event),
+      run: (attempt, signal) => ({
+        async *[Symbol.asyncIterator]() {
+          calls += 1;
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(resolve, 500);
+            signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+            });
+          });
+          expect(attempt).toBe(1);
+          yield { type: "text-delta", text: "فون" };
+        },
+      }),
+    });
+    expect(await readText(stream)).toBe("فون");
+    expect(calls).toBe(2);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.retrievalMs).toBe(7900);
+    expect(events[0]?.retried).toBe(true);
+    expect(events[0]?.ttftMs).toBeGreaterThanOrEqual(7900);
+    expect(events[0]?.ttftMs).toBeLessThan(14000);
+    expect(events[0]?.totalMs).toBeGreaterThanOrEqual(events[0]?.ttftMs ?? 0);
   });
 
   it("prints one structured line and nothing from the prompt", async () => {
@@ -109,6 +149,7 @@ describe("first-token timeout", () => {
       outcome: "done",
     });
     expect(parsed.ttftMs).toEqual(expect.any(Number));
+    expect(parsed.retrievalMs).toBe(0);
     expect(parsed.tag_missing).toBe(true);
     expect(parsed.tag_missing_rate).toBeGreaterThan(0);
     expect(parsed.tag_missing_rate).toBeLessThanOrEqual(1);

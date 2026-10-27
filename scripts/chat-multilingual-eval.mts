@@ -20,7 +20,7 @@ import { hasLetters } from "../src/chat/language/detect.ts";
 import { sourcesFromChunks } from "../src/chat/retrieval/search.ts";
 import { fixReplyScript } from "../src/chat/server/script-fix.ts";
 import { hoursRelevant, rewriteEnglishHours } from "../src/chat/server/hours.ts";
-import { chatGenerationSettings, createRetryingTextStream } from "../src/chat/server/stream-timing.ts";
+import { FIRST_TOKEN_TIMEOUT_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget } from "../src/chat/server/stream-timing.ts";
 
 type Row = {
   id: string;
@@ -44,9 +44,12 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const index = getKnowledgeIndex();
   const messages = [{ role: "user" as const, parts: [{ type: "text", text: prompt }] }];
   const started = performance.now();
+  const startedAt = Date.now();
   const turn = prepareTurn(messages, "auto", index);
   const letterless = !hasLetters(turn.text);
+  const retrievalStarted = Date.now();
   const chunks = letterless ? [] : await hybridRetrieve(index, turn.query, turn.chunks);
+  const retrievalMs = Date.now() - retrievalStarted;
   const topScore = chunks[0]?.score ?? 0;
   const shares = sharesClinicOrService(turn.topicText, chunks);
   const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
@@ -62,12 +65,14 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const replyStatus: { tag: StatusTag | null } = { tag: null };
   const stream = createRetryingTextStream({
     language: turn.reply.code,
+    startedAt,
+    retrievalMs,
     onStatus: (status) => {
       replyStatus.tag = status.tag;
     },
     run: (attempt, signal) =>
       streamText({
-        ...chatGenerationSettings(attempt),
+        ...chatGenerationSettings(attempt, firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt })),
         instructions,
         prompt,
         abortSignal: signal,

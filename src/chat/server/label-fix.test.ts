@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getKnowledgeIndex } from "./index-store";
-import { attachContactLabels, isOnlyContactLine, rewriteContactLabels } from "./label-fix";
+import { attachContactLabels, isLabelValueLine, isOnlyContactLine, isShortLabelReply, rewriteContactLabels } from "./label-fix";
 
 const index = getKnowledgeIndex();
 
@@ -61,7 +61,8 @@ describe("contact label rewrite", () => {
       attachContactLabels(source(["Pho", "ne: 02 4284 4486"]), { code: "hi", index, replyStatus: { missing: false } }),
     );
     const text = split.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(text).toBe("फ़ोन: 02 4284 4486");
+    expect(text.startsWith("Woonona Dentists का फ़ोन नंबर 02 4284 4486 है।")).toBe(true);
+    expect(text).toContain("फ़ोन: 02 4284 4486");
     expect(text).not.toContain("Phone");
     expect(split.some((chunk) => chunk.delta?.includes("Pho"))).toBe(false);
   });
@@ -89,7 +90,45 @@ describe("contact label rewrite", () => {
       attachContactLabels(source(["Phone: 02 4284 4486"]), { code: "ar", index, replyStatus: { missing: false } }),
     );
     const arText = tagged.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(arText).toBe("الهاتف: 02 4284 4486");
-    expect(arText).not.toContain("رقم هاتف");
+    expect(arText.startsWith("رقم هاتف Woonona Dentists هو 02 4284 4486.")).toBe(true);
+    expect(arText).toContain("الهاتف: 02 4284 4486");
+    expect(arText).not.toContain("Phone:");
+  });
+
+  it("prepends a sentence for a short label line even when the tag is present", async () => {
+    const greekLine = "Τηλέφωνο: 02 4284 4486.";
+    expect(greekLine.length).toBeLessThan(60);
+    expect(isShortLabelReply(greekLine, "el")).toBe(true);
+    expect(isShortLabelReply("Call the phone: 02 4216 9911", "bn")).toBe(false);
+    expect(isLabelValueLine("Ανοιχτά 8:00–18:00.", "el")).toBe(false);
+
+    const greek = await readChunks(
+      attachContactLabels(source([greekLine]), { code: "el", index, replyStatus: { missing: false } }),
+    );
+    const text = greek.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text.startsWith("Το τηλέφωνο του Woonona Dentists είναι 02 4284 4486.")).toBe(true);
+    expect(text).toContain("Τηλέφωνο: 02 4284 4486.");
+
+    let releaseEnd: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseEnd = resolve;
+    });
+    const early = new ReadableStream({
+      async start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "Ναι, το ιατρείο Woonona είναι ανοιχτό από τις 8." });
+        await gate;
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const reader = attachContactLabels(early, { code: "el", index, replyStatus: { missing: false } }).getReader();
+    let first = await reader.read();
+    if (first.value?.type === "text-start") first = await reader.read();
+    expect(first.value?.type).toBe("text-delta");
+    expect(first.value?.delta).toContain("Woonona");
+    expect(first.value?.delta?.startsWith("Το τηλέφωνο")).toBe(false);
+    releaseEnd();
+    await reader.cancel();
   });
 });

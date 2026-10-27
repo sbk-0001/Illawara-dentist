@@ -21,6 +21,61 @@ export function rewriteContactLabels(text: string, code: string): string {
   });
 }
 
+const BARE_REPLY_MAX = 60;
+
+function normalizeLabel(value: string): string {
+  return value.replace(/[:：]\s*$/u, "").trim().toLowerCase();
+}
+
+function knownLabels(code: string): string[] {
+  const labels = directoryLabels(!code || code === "und" ? "en" : code);
+  return [...new Set(["phone", "booking", "email", "address", labels.phone, labels.booking, labels.email, labels.address].map(normalizeLabel))];
+}
+
+/** One short `label: value` line, in English or the reply language. */
+export function isLabelValueLine(line: string, code: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length >= BARE_REPLY_MAX) return false;
+  const match = trimmed.match(/^([^:：\n]{1,32}?)\s*[:：]\s*(\S[\s\S]*)$/);
+  if (!match) return false;
+  const label = match[1].trim();
+  const value = match[2].trim();
+  if (!label || !value || label.split(/\s+/).length > 3) return false;
+  const known = knownLabels(code).includes(normalizeLabel(label));
+  const contactValue = /\d[\d\s()-]{8,}\d/.test(value) || /@/.test(value) || /https?:|zavy360/i.test(value);
+  if (known) return true;
+  return contactValue && label.split(/\s+/).length === 1 && label.length <= 16;
+}
+
+/** The finished reply is only contact lines and is short enough to need a sentence. */
+export function isShortLabelReply(text: string, code: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length >= BARE_REPLY_MAX) return false;
+  const lines = trimmed.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length || lines.length > 3) return false;
+  return lines.every((line) => isLabelValueLine(line, code));
+}
+
+function isPendingLabel(line: string, code: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 40 || /[.!?।,]/.test(trimmed)) return false;
+  if (isLabelValueLine(trimmed, code)) return true;
+  const head = trimmed.replace(/\s*[:：].*$/, "").trim().toLowerCase();
+  if (!head || head.split(/\s+/).length > 2) return false;
+  return knownLabels(code).some((label) => label.startsWith(head) || head.startsWith(label));
+}
+
+/** True while the text so far could still be only a short label line. A sentence is released. */
+export function mayBeShortLabelReply(text: string, code: string): boolean {
+  if (text.length >= BARE_REPLY_MAX) return false;
+  const parts = text.split("\n");
+  const complete = parts.slice(0, -1).map((line) => line.trim()).filter(Boolean);
+  if (complete.some((line) => !isLabelValueLine(line, code))) return false;
+  const last = (parts[parts.length - 1] ?? "").trim();
+  if (!last) return complete.length > 0;
+  return isPendingLabel(last, code);
+}
+
 /** A reply that is only a phone, email, address or booking line, with no sentence. */
 export function isOnlyContactLine(text: string): boolean {
   const lines = text.trim().split(/\n/).map((line) => line.trim()).filter(Boolean);
@@ -102,8 +157,8 @@ type LabelChunk = { type: string; id?: string; delta?: string };
 
 /**
  * Rewrite line-leading English contact labels for a non-English reply.
- * When the status tag was missing and the whole reply is only a contact line,
- * prepend one localized sentence. A real sentence is not held.
+ * A finished reply that is only a short label line gets one localized sentence,
+ * whether or not the status tag was present. A real sentence is not held.
  */
 export function attachContactLabels<T extends LabelChunk>(
   stream: ReadableStream<T>,
@@ -144,7 +199,8 @@ export function attachContactLabels<T extends LabelChunk>(
     held = "";
     if (!raw) return "";
     const body = rewriteContactLabels(raw, input.code);
-    if (input.replyStatus.missing && isOnlyContactLine(raw)) {
+    const bare = isShortLabelReply(body, input.code) || isShortLabelReply(raw, input.code) || (input.replyStatus.missing && isOnlyContactLine(raw));
+    if (bare) {
       const preface = bareContactPreface(input.code, raw, input.index);
       if (preface) return `${preface}\n${body}`;
     }
@@ -167,9 +223,10 @@ export function attachContactLabels<T extends LabelChunk>(
           controller.enqueue(chunk);
           return;
         }
-        if (!passed && input.replyStatus.missing) {
+        if (!passed) {
           held += chunk.delta;
-          if (mayBeOnlyContact(held)) return;
+          const pending = mayBeShortLabelReply(held, input.code) || (input.replyStatus.missing && mayBeOnlyContact(held));
+          if (pending && held.length < 80) return;
           passed = true;
           const visible = releaseHeld();
           if (visible) controller.enqueue({ ...chunk, delta: visible });

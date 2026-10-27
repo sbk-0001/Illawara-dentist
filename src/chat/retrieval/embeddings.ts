@@ -11,6 +11,9 @@ export const EMBEDDING_MODEL = "google/text-multilingual-embedding-002";
 export const EMBEDDING_META = "knowledge-embeddings.meta.json";
 export const EMBEDDING_BIN = "knowledge-embeddings.bin";
 
+/** Query embedding must not eat the 8s first-token budget. Word search is the fallback. */
+export const RETRIEVAL_TIMEOUT_MS = 2_000;
+
 export type EmbeddingMeta = {
   model: string;
   dimensions: number;
@@ -134,28 +137,61 @@ export async function ensureEmbeddings(index: KnowledgeIndex): Promise<StoredMat
   return pending;
 }
 
-export async function hybridRetrieve(index: KnowledgeIndex, query: string, lexical: ScoredChunk[]): Promise<ScoredChunk[]> {
-  const stored = await ensureEmbeddings(index);
-  if (!stored) return lexical.length ? rerankWithEmbeddings(query, lexical) : lexical;
+/**
+ * Run the embedding path until `timeoutMs`. On timeout or failure the caller
+ * gets `fallback` (the lexical hits). The losing call is aborted.
+ */
+export async function withRetrievalDeadline<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  fallback: T,
+  timeoutMs = RETRIEVAL_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(fallback);
+    }, timeoutMs);
+  });
   try {
-    const { embedding } = await embed({
-      model: EMBEDDING_MODEL,
-      value: expandQuery(query).slice(0, 2000),
-      maxRetries: 1,
-    });
-    const semantic = searchByVectors(index, query, embedding, stored.matrix, stored.dimensions, 8);
-    return fuseRetrieval(lexical, semantic, 6);
-  } catch {
-    return lexical;
+    return await Promise.race([work(controller.signal).catch(() => fallback), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
-export async function rerankWithEmbeddings(query: string, chunks: ScoredChunk[]): Promise<ScoredChunk[]> {
+async function semanticRetrieve(
+  index: KnowledgeIndex,
+  query: string,
+  lexical: ScoredChunk[],
+  signal: AbortSignal,
+): Promise<ScoredChunk[]> {
+  const stored = await ensureEmbeddings(index);
+  if (signal.aborted) return lexical;
+  if (!stored) return lexical.length ? rerankWithEmbeddings(query, lexical, signal) : lexical;
+  const { embedding } = await embed({
+    model: EMBEDDING_MODEL,
+    value: expandQuery(query).slice(0, 2000),
+    maxRetries: 0,
+    abortSignal: signal,
+  });
+  const semantic = searchByVectors(index, query, embedding, stored.matrix, stored.dimensions, 8);
+  return fuseRetrieval(lexical, semantic, 6);
+}
+
+export async function hybridRetrieve(index: KnowledgeIndex, query: string, lexical: ScoredChunk[]): Promise<ScoredChunk[]> {
+  return withRetrievalDeadline((signal) => semanticRetrieve(index, query, lexical, signal), lexical);
+}
+
+export async function rerankWithEmbeddings(query: string, chunks: ScoredChunk[], signal?: AbortSignal): Promise<ScoredChunk[]> {
   if (!process.env.AI_GATEWAY_API_KEY || chunks.length < 2) return chunks;
   try {
     const { embeddings } = await embedMany({
       model: EMBEDDING_MODEL,
       values: [query, ...chunks.map((chunk) => chunkEmbeddingText(chunk))],
+      maxRetries: 0,
+      abortSignal: signal,
     });
     const queryVector = embeddings[0];
     if (!queryVector) return chunks;

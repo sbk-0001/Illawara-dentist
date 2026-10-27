@@ -12,13 +12,27 @@ export function modelSupportsTemperature(model: string): boolean {
   return !/(?:^|\/)(?:gpt-5|o1|o3|o4)(?:[.-]|$)/i.test(model);
 }
 
-export function chatGenerationSettings(attempt: number) {
+const MIN_FIRST_TOKEN_BUDGET_MS = 250;
+
+/**
+ * Attempt 0 spends the 8s budget from request start, so retrieval time counts.
+ * A retry gets a fresh full budget. Callers that pass only `timeoutMs` (tests)
+ * keep that value as the attempt budget.
+ */
+export function firstTokenBudget(input: { attempt: number; timeoutMs?: number; startedAt?: number; now?: number }): number {
+  const timeoutMs = input.timeoutMs ?? FIRST_TOKEN_TIMEOUT_MS;
+  if (input.attempt > 0 || input.startedAt === undefined) return timeoutMs;
+  const elapsed = Math.max(0, (input.now ?? Date.now()) - input.startedAt);
+  return Math.max(MIN_FIRST_TOKEN_BUDGET_MS, timeoutMs - elapsed);
+}
+
+export function chatGenerationSettings(attempt: number, firstChunkMs = FIRST_TOKEN_TIMEOUT_MS) {
   const model = attempt > 0 ? CHAT_FALLBACK_MODEL : CHAT_MODEL;
   return {
     model,
     ...(modelSupportsTemperature(model) ? { temperature: 0.2 } : {}),
     maxRetries: 0,
-    timeout: { firstChunkMs: FIRST_TOKEN_TIMEOUT_MS },
+    timeout: { firstChunkMs },
     providerOptions: attempt > 0 ? undefined : { gateway: { models: [CHAT_FALLBACK_MODEL] } },
   };
 }
@@ -34,6 +48,8 @@ export type ChatTimingEvent = {
   outcome: "done" | "error" | "cancelled";
   ttftMs: number | null;
   totalMs: number;
+  /** Time spent in hybrid retrieval before the model stream, in milliseconds. */
+  retrievalMs: number;
   firstAttemptMs?: number;
   error?: string;
   /** True when the reply did not open with [[A]], [[N]] or [[G]]. */
@@ -67,6 +83,7 @@ function errorName(error: unknown): string {
 /**
  * Read a model stream. If no text-delta arrives within the first-token timeout,
  * abort that attempt and run once more (the fallback model).
+ * Pass `startedAt` from request start so retrieval counts toward the 8s budget.
  * One structured line is logged when the stream settles. The chat route prints
  * that line from Next.js after() so it shows up in Vercel runtime logs.
  */
@@ -75,11 +92,16 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   run: (attempt: number, signal: AbortSignal) => AsyncIterable<T>;
   log?: (event: ChatTimingEvent) => void;
   timeoutMs?: number;
+  /** Request start. When set, attempt 0's budget is what remains of `timeoutMs`. */
+  startedAt?: number;
+  /** Logged as-is. Measured by the caller around retrieval. */
+  retrievalMs?: number;
   onStatus?: (status: { tag: StatusTag | null; missing: boolean }) => void;
 }): ReadableStream<T> {
   const log = input.log ?? ((event: ChatTimingEvent) => console.log(JSON.stringify(event)));
   const timeoutMs = input.timeoutMs ?? FIRST_TOKEN_TIMEOUT_MS;
-  const started = Date.now();
+  const origin = input.startedAt ?? Date.now();
+  const retrievalMs = input.retrievalMs ?? 0;
   let settled = false;
   let attempt = 0;
   let model = chatGenerationSettings(0).model;
@@ -124,7 +146,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       retried: firstAttemptMs !== undefined,
       outcome,
       ttftMs,
-      totalMs: Date.now() - started,
+      totalMs: Date.now() - origin,
+      retrievalMs,
       tag_missing: tagMissing,
       tag_missing_rate: noteTagMissing(tagMissing),
     };
@@ -138,7 +161,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       let lastError: unknown;
       try {
         for (attempt = 0; attempt < 2; attempt += 1) {
-          const settings = chatGenerationSettings(attempt);
+          const budget = firstTokenBudget({ attempt, timeoutMs, startedAt: input.startedAt });
+          const settings = chatGenerationSettings(attempt, budget);
           model = settings.model;
           const attemptStarted = Date.now();
           const attemptAbort = new AbortController();
@@ -148,7 +172,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               const error = timeoutError();
               attemptAbort.abort(error);
               reject(error);
-            }, timeoutMs);
+            }, budget);
           });
           const iterator = input.run(attempt, attemptAbort.signal)[Symbol.asyncIterator]();
           const buffered: T[] = [];
@@ -167,7 +191,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               if (!sawText && part.type === "text-delta" && part.text) {
                 sawText = true;
                 if (timer) clearTimeout(timer);
-                ttftMs = Date.now() - started;
+                ttftMs = Date.now() - origin;
                 for (const earlier of buffered) controller.enqueue(earlier);
                 buffered.length = 0;
                 const visible = takeText(part.text, false);
