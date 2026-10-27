@@ -65,38 +65,45 @@ const CONTACT_ROUTE: Record<string, string> = {
   pt: "Ligue ou reserve:",
 };
 
-const CONTACT_LABELS: Record<string, { phone: string; booking: string }> = {
-  en: { phone: "Phone:", booking: "Booking:" },
-  bn: { phone: "ফোন:", booking: "বুকিং:" },
-  "bn-Latn": { phone: "Fon:", booking: "Booking:" },
-  ar: { phone: "الهاتف:", booking: "الحجز:" },
-  hi: { phone: "फ़ोन:", booking: "बुकिंग:" },
-  "hi-Latn": { phone: "Phone:", booking: "Booking:" },
-  zh: { phone: "电话：", booking: "预约：" },
-  es: { phone: "Teléfono:", booking: "Reserva:" },
-  vi: { phone: "Điện thoại:", booking: "Đặt lịch:" },
-  ne: { phone: "फोन:", booking: "बुकिङ:" },
-  ko: { phone: "전화:", booking: "예약:" },
-  el: { phone: "Τηλέφωνο:", booking: "Κράτηση:" },
-  it: { phone: "Telefono:", booking: "Prenotazione:" },
-  ur: { phone: "فون:", booking: "بکنگ:" },
-  fa: { phone: "تلفن:", booking: "نوبت:" },
-  he: { phone: "טלפון:", booking: "קביעת תור:" },
-  fr: { phone: "Téléphone :", booking: "Réservation :" },
-  de: { phone: "Telefon:", booking: "Buchung:" },
-  pt: { phone: "Telefone:", booking: "Reserva:" },
-  ja: { phone: "電話:", booking: "予約:" },
-  id: { phone: "Telepon:", booking: "Pemesanan:" },
-  ms: { phone: "Telefon:", booking: "Tempahan:" },
-  pa: { phone: "ਫ਼ੋਨ:", booking: "ਬੁਕਿੰਗ:" },
-  ta: { phone: "தொலைபேசி:", booking: "முன்பதிவு:" },
-  te: { phone: "ఫోన్:", booking: "బుకింగ్:" },
-  ru: { phone: "Телефон:", booking: "Запись:" },
-  th: { phone: "โทรศัพท์:", booking: "จอง:" },
+export type DirectoryLabels = { phone: string; booking: string; email: string; address: string };
+
+const DIRECTORY_LABELS: Record<string, DirectoryLabels> = {
+  en: { phone: "Phone:", booking: "Booking:", email: "Email:", address: "Address:" },
+  bn: { phone: "ফোন:", booking: "বুকিং:", email: "ইমেইল:", address: "ঠিকানা:" },
+  "bn-Latn": { phone: "Fon:", booking: "Booking:", email: "Email:", address: "Thikana:" },
+  ar: { phone: "الهاتف:", booking: "الحجز:", email: "البريد:", address: "العنوان:" },
+  hi: { phone: "फ़ोन:", booking: "बुकिंग:", email: "ईमेल:", address: "पता:" },
+  "hi-Latn": { phone: "Phone:", booking: "Booking:", email: "Email:", address: "Pata:" },
+  zh: { phone: "电话：", booking: "预约：", email: "邮箱：", address: "地址：" },
+  es: { phone: "Teléfono:", booking: "Reserva:", email: "Correo:", address: "Dirección:" },
+  vi: { phone: "Điện thoại:", booking: "Đặt lịch:", email: "Email:", address: "Địa chỉ:" },
+  ne: { phone: "फोन:", booking: "बुकिङ:", email: "इमेल:", address: "ठेगाना:" },
+  ko: { phone: "전화:", booking: "예약:", email: "이메일:", address: "주소:" },
+  el: { phone: "Τηλέφωνο:", booking: "Κράτηση:", email: "Email:", address: "Διεύθυνση:" },
+  it: { phone: "Telefono:", booking: "Prenotazione:", email: "Email:", address: "Indirizzo:" },
+  ur: { phone: "فون:", booking: "بکنگ:", email: "ای میل:", address: "پتہ:" },
+  fa: { phone: "تلفن:", booking: "نوبت:", email: "ایمیل:", address: "آدرس:" },
+  he: { phone: "טלפון:", booking: "קביעת תור:", email: "אימייל:", address: "כתובת:" },
+  fr: { phone: "Téléphone :", booking: "Réservation :", email: "E-mail :", address: "Adresse :" },
+  de: { phone: "Telefon:", booking: "Buchung:", email: "E-Mail:", address: "Adresse:" },
+  pt: { phone: "Telefone:", booking: "Reserva:", email: "E-mail:", address: "Endereço:" },
+  ja: { phone: "電話:", booking: "予約:", email: "メール:", address: "住所:" },
+  id: { phone: "Telepon:", booking: "Pemesanan:", email: "Email:", address: "Alamat:" },
+  ms: { phone: "Telefon:", booking: "Tempahan:", email: "E-mel:", address: "Alamat:" },
+  pa: { phone: "ਫ਼ੋਨ:", booking: "ਬੁਕਿੰਗ:", email: "ਈਮੇਲ:", address: "ਪਤਾ:" },
+  ta: { phone: "தொலைபேசி:", booking: "முன்பதிவு:", email: "மின்னஞ்சல்:", address: "முகவரி:" },
+  te: { phone: "ఫోన్:", booking: "బుకింగ్:", email: "ఇమెయిల్:", address: "చిరునామా:" },
+  ru: { phone: "Телефон:", booking: "Запись:", email: "Почта:", address: "Адрес:" },
+  th: { phone: "โทรศัพท์:", booking: "จอง:", email: "อีเมล:", address: "ที่อยู่:" },
 };
 
+export function directoryLabels(code: string): DirectoryLabels {
+  return DIRECTORY_LABELS[code] ?? DIRECTORY_LABELS.en;
+}
+
 export function contactLabels(code: string): { phone: string; booking: string } {
-  return CONTACT_LABELS[code] ?? CONTACT_LABELS.en;
+  const labels = directoryLabels(code);
+  return { phone: labels.phone, booking: labels.booking };
 }
 
 function clinicContactLine(code: string, card: { name: string; phone: string; bookingUrl: string }): string {
@@ -361,6 +368,12 @@ export function replySignalsNoInformation(text: string): boolean {
   return wordCount(flat) <= 28 || hit.length >= flat.length * 0.35;
 }
 
+/** The reply itself says the site does not have the fact, even if the model opened with [[A]]. */
+function replyClearlyHasNoInfo(text: string): boolean {
+  if (replySignalsNoInformation(text)) return true;
+  return Boolean(matchedNoInfoPhrase(text)) && wordCount(text) <= 48;
+}
+
 const CONTACT_QUESTION =
   /phone|e-?mail|\bnumber\b|\bcall\b|address|booking|\bbook\b|appointment|\bcontact\b|zavy|ফোন|নম্বর|বুকিং|ঠিকানা|फ़ोन|फोन|नंबर|पता|बुकिंग|هاتف|رقم|حجز|عنوان|电话|預約|预约|地址|전화|예약|주소|điện thoại|đặt lịch|địa chỉ|τηλέφων|ραντεβού|διεύθυνσ|telefono|prenot|indirizzo|teléfono|reserv|dirección|فون|نمبر|بکنگ|پتہ|تلفن|آدرس|نوبت|טלפון|כתובת|לקבוע|téléphon|rendez-vous|adresse|anrufen|buchen|telefone|endereço/i;
 
@@ -503,7 +516,13 @@ export function chooseContactFooter(input: FooterDecision): FooterKind {
   if (!question && !input.modelSaidNoAnswer && !reply && !input.statusTag) return "none";
   if (question && !hasLetters(question)) return "no-answer";
   if (input.statusTag === "N") return replyHasRoute(reply, input) ? "none" : "no-answer";
-  if (input.statusTag === "A" || input.statusTag === "G") {
+  if (input.statusTag === "A") {
+    if (replyHasRoute(reply, input)) return "none";
+    if (reply && replyClearlyHasNoInfo(reply)) return "no-answer";
+    if (questionAsksForContact(question)) return "route";
+    return "none";
+  }
+  if (input.statusTag === "G") {
     if (replyHasRoute(reply, input)) return "none";
     if (questionAsksForContact(question)) return "route";
     return "none";

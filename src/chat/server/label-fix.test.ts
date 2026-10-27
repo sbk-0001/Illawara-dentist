@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import { getKnowledgeIndex } from "./index-store";
+import { attachContactLabels, isOnlyContactLine, rewriteContactLabels } from "./label-fix";
+
+const index = getKnowledgeIndex();
+
+async function readChunks(stream: ReadableStream<{ type: string; id?: string; delta?: string }>) {
+  const reader = stream.getReader();
+  const chunks: { type: string; id?: string; delta?: string }[] = [];
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) return chunks;
+    chunks.push(next.value);
+  }
+}
+
+function source(parts: string[]) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "text-start", id: "t1" });
+      for (const delta of parts) controller.enqueue({ type: "text-delta", id: "t1", delta });
+      controller.enqueue({ type: "text-end", id: "t1" });
+      controller.close();
+    },
+  });
+}
+
+describe("contact label rewrite", () => {
+  it("rewrites line-leading English labels and leaves a sentence alone", () => {
+    expect(rewriteContactLabels("ফোন নম্বর\nPhone: 02 4216 9911", "bn")).toBe("ফোন নম্বর\nফোন: 02 4216 9911");
+    expect(rewriteContactLabels("Booking: https://bookings.zavy360.com/a", "ar")).toContain("الحجز:");
+    expect(rewriteContactLabels("Email: info@shellharbourdentist.com.au", "hi")).toContain("ईमेल:");
+    expect(rewriteContactLabels("Address: 35 Baan Baan Street", "id")).toContain("Alamat:");
+    expect(rewriteContactLabels("Phone: 02 4216 9911", "en")).toBe("Phone: 02 4216 9911");
+    expect(rewriteContactLabels("Call the phone: 02 4216 9911", "bn")).toContain("phone:");
+  });
+
+  it("does not hold a real sentence, and rewrites a label split across chunks", async () => {
+    let releaseEnd: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseEnd = resolve;
+    });
+    const early = new ReadableStream({
+      async start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "হ্যাঁ, ড্যাপ্টোতে হোয়াইটেনিং আছে।" });
+        await gate;
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const reader = attachContactLabels(early, { code: "bn", index, replyStatus: { missing: true } }).getReader();
+    let first = await reader.read();
+    if (first.value?.type === "text-start") first = await reader.read();
+    expect(first.value?.type).toBe("text-delta");
+    expect(first.value?.delta).toContain("হোয়াইটেনিং");
+    releaseEnd();
+    await reader.cancel();
+
+    const split = await readChunks(
+      attachContactLabels(source(["Pho", "ne: 02 4284 4486"]), { code: "hi", index, replyStatus: { missing: false } }),
+    );
+    const text = split.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toBe("फ़ोन: 02 4284 4486");
+    expect(text).not.toContain("Phone");
+    expect(split.some((chunk) => chunk.delta?.includes("Pho"))).toBe(false);
+  });
+
+  it("prepends a localized sentence when a missing tag left only a contact line", async () => {
+    expect(isOnlyContactLine("Phone: 02 4216 9911")).toBe(true);
+    expect(isOnlyContactLine("হ্যাঁ, ড্যাপ্টোতে হোয়াইটেনিং আছে।")).toBe(false);
+    const bn = await readChunks(
+      attachContactLabels(source(["Phone: 02 4216 9911"]), { code: "bn", index, replyStatus: { missing: true } }),
+    );
+    const bnText = bn.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(bnText.startsWith("Shellharbour Dentists-এর ফোন নম্বর 02 4216 9911।")).toBe(true);
+    expect(bnText).toContain("ফোন: 02 4216 9911");
+    expect(bnText).not.toContain("Phone:");
+
+    const id = await readChunks(
+      attachContactLabels(source(["Phone: ", "02 4284 4486"]), { code: "id", index, replyStatus: { missing: true } }),
+    );
+    const idText = id.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(idText).toContain("Nomor telepon Woonona Dentists adalah 02 4284 4486.");
+    expect(idText).toContain("Telepon: 02 4284 4486");
+    expect(idText).not.toContain("Phone:");
+
+    const tagged = await readChunks(
+      attachContactLabels(source(["Phone: 02 4284 4486"]), { code: "ar", index, replyStatus: { missing: false } }),
+    );
+    const arText = tagged.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(arText).toBe("الهاتف: 02 4284 4486");
+    expect(arText).not.toContain("رقم هاتف");
+  });
+});

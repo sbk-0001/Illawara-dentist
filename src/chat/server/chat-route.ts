@@ -15,6 +15,7 @@ import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
 import { attachContactFooter, contactFooter, contactRouteFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService, topicShareText } from "./contacts";
 import { guardRequest, withCors } from "./guard";
 import { attachHoursWording, hoursRelevant } from "./hours";
+import { attachContactLabels } from "./label-fix";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions } from "./prompt";
 import { attachScriptFix } from "./script-fix";
@@ -135,12 +136,13 @@ export async function POST(request: Request): Promise<Response> {
   });
   const modelMessages = await convertToModelMessages(messages);
 
-  const replyStatus: { tag: StatusTag | null } = { tag: null };
+  const replyStatus: { tag: StatusTag | null; missing: boolean } = { tag: null, missing: true };
   const textStream = createRetryingTextStream({
     language: lexical.reply.code,
     log: scheduleRequestTimingLog(),
     onStatus: (status) => {
       replyStatus.tag = status.tag;
+      replyStatus.missing = status.missing;
     },
     run: (attempt, signal) =>
       streamText({
@@ -158,18 +160,21 @@ export async function POST(request: Request): Promise<Response> {
     sources,
   } satisfies ChatMetadata;
 
-  const uiStream = attachHoursWording(
-    attachScriptFix(
-      toUIMessageStream({
-        stream: textStream,
-        sendReasoning: false,
-        messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
-      }),
+  const uiStream = attachContactLabels(
+    attachHoursWording(
+      attachScriptFix(
+        toUIMessageStream({
+          stream: textStream,
+          sendReasoning: false,
+          messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
+        }),
+        lexical.reply.code,
+        lexical.text,
+      ),
       lexical.reply.code,
-      lexical.text,
+      hoursRelevant(lexical.text, chunks),
     ),
-    lexical.reply.code,
-    hoursRelevant(lexical.text, chunks),
+    { code: lexical.reply.code, index, replyStatus },
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),

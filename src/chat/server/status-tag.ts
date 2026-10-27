@@ -1,7 +1,7 @@
 /** The model starts every reply with one of these. The visitor never sees it. */
 export type StatusTag = "A" | "N" | "G";
 
-const TAGS = ["[[A]]", "[[N]]", "[[G]]"] as const;
+const TAGS = new Set<StatusTag>(["A", "N", "G"]);
 
 export type StatusDrain = {
   visible: string;
@@ -13,23 +13,36 @@ export type StatusDrain = {
   bare: boolean;
 };
 
+const HOLD_LIMIT = 12;
+
 /**
- * Hold text until the opening status tag is closed. A prefix of [[A]], [[N]] or [[G]]
- * is not released, so the tag cannot flash. Anything else is a missing tag.
+ * Hold text only until the opening status tag closes.
+ * Release on the first `]]`, or once 12 characters arrive with no `[[`.
+ * A non-tag character is released immediately so the first token is not delayed.
  */
 export function drainStatusTag(buffer: string, final: boolean): StatusDrain {
+  const miss = (): StatusDrain => ({ visible: buffer, hold: "", decided: true, tag: null, missing: true, bare: false });
+  const hold = (): StatusDrain => ({ visible: "", hold: buffer, decided: false, tag: null, missing: false, bare: false });
+
   const leading = buffer.match(/^\s*/)?.[0] ?? "";
   const rest = buffer.slice(leading.length);
-  for (const tag of TAGS) {
-    if (!rest.startsWith(tag)) continue;
-    const after = rest.slice(tag.length);
-    const visible = after.replace(/^[ \t]*\r?\n?/, "");
-    return { visible, hold: "", decided: true, tag: tag[2] as StatusTag, missing: false, bare: after.length === 0 };
+
+  if (rest.startsWith("[[")) {
+    const close = rest.indexOf("]]");
+    if (close >= 0) {
+      const inner = rest.slice(2, close);
+      if (TAGS.has(inner as StatusTag)) {
+        const after = rest.slice(close + 2);
+        const visible = after.replace(/^[ \t]*\r?\n?/, "");
+        return { visible, hold: "", decided: true, tag: inner as StatusTag, missing: false, bare: after.length === 0 };
+      }
+      return miss();
+    }
+    if (!final && buffer.length < HOLD_LIMIT) return hold();
+    return miss();
   }
-  const pending = TAGS.some((tag) => tag.startsWith(rest));
-  const waitingOnSpace = rest.length === 0 && leading.length <= 8;
-  if (!final && buffer.length <= 16 && (pending || waitingOnSpace)) {
-    return { visible: "", hold: buffer, decided: false, tag: null, missing: false, bare: false };
-  }
-  return { visible: buffer, hold: "", decided: true, tag: null, missing: true, bare: false };
+
+  const pendingOpen = rest === "" || rest === "[";
+  if (!final && pendingOpen && buffer.length < HOLD_LIMIT) return hold();
+  return miss();
 }

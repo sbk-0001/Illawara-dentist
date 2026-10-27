@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { drainStatusTag } from "./status-tag";
-import { createRetryingTextStream, type ChatTimingEvent } from "./stream-timing";
+import { createRetryingTextStream, resetTagMissingStats, type ChatTimingEvent } from "./stream-timing";
 
 async function readDeltas(stream: ReadableStream<{ type: string; text?: string }>): Promise<string[]> {
   const reader = stream.getReader();
@@ -39,9 +39,17 @@ describe("status tag", () => {
       missing: true,
     });
     expect(drainStatusTag("[[G]]\nXin chào", true)).toMatchObject({ visible: "Xin chào", tag: "G", missing: false });
+    expect(drainStatusTag("Hello, the hours are Monday.", false)).toMatchObject({
+      visible: "Hello, the hours are Monday.",
+      decided: true,
+      missing: true,
+    });
+    expect(drainStatusTag("123456789012", false).visible).toBe("123456789012");
+    expect(drainStatusTag("[[A]]Dapto is open.", false)).toMatchObject({ visible: "Dapto is open.", tag: "A", missing: false });
   });
 
   it("strips a tag split across stream chunks and logs when the tag is missing", async () => {
+    resetTagMissingStats();
     const present: ChatTimingEvent[] = [];
     let status: { tag: string | null; missing: boolean } | undefined;
     const tagged = createRetryingTextStream({
@@ -63,6 +71,7 @@ describe("status tag", () => {
     expect(status).toEqual({ tag: "A", missing: false });
     expect(present).toHaveLength(1);
     expect(present[0]?.tag_missing).toBe(false);
+    expect(present[0]?.tag_missing_rate).toBe(0);
     expect(JSON.stringify(present[0])).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
 
     const missing: ChatTimingEvent[] = [];
@@ -76,6 +85,7 @@ describe("status tag", () => {
     });
     expect((await readDeltas(untagged)).join("")).toBe("抱歉，我无法确认。");
     expect(missing[0]?.tag_missing).toBe(true);
+    expect(missing[0]?.tag_missing_rate).toBe(0.5);
     expect(JSON.stringify(missing[0])).not.toMatch(/\[\[A\]\]|\[\[N\]\]|\[\[G\]\]/);
   });
 });

@@ -38,7 +38,23 @@ export type ChatTimingEvent = {
   error?: string;
   /** True when the reply did not open with [[A]], [[N]] or [[G]]. */
   tag_missing: boolean;
+  /** Share of replies in this process that opened without a status tag. */
+  tag_missing_rate: number;
 };
+
+const tagStats = { seen: 0, missing: 0 };
+
+/** Test helper. The rate is otherwise the lifetime of this server process. */
+export function resetTagMissingStats(): void {
+  tagStats.seen = 0;
+  tagStats.missing = 0;
+}
+
+function noteTagMissing(missing: boolean): number {
+  tagStats.seen += 1;
+  if (missing) tagStats.missing += 1;
+  return Math.round((tagStats.missing / tagStats.seen) * 1000) / 1000;
+}
 
 function timeoutError(): Error {
   return Object.assign(new Error("first-token timeout"), { name: "TimeoutError" });
@@ -110,6 +126,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       ttftMs,
       totalMs: Date.now() - started,
       tag_missing: tagMissing,
+      tag_missing_rate: noteTagMissing(tagMissing),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
     if (error) line.error = error;

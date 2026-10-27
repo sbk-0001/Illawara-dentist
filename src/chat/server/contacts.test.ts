@@ -559,6 +559,27 @@ describe("contact footer", () => {
         facts: "implants",
         statusTag: "A",
       }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?",
+        sourceCount: 3,
+        topScore: 0.84,
+        replyText: "ওয়েবসাইটে এটি উল্লেখ নেই।",
+        facts: "implants",
+        statusTag: "A",
+      }),
+    ).toBe("no-answer");
+    expect(
+      chooseContactFooter({
+        question: "울로나 전화번호",
+        sourceCount: 2,
+        topScore: 0.9,
+        replyText: "抱歉，我无法确认。02 4284 4486",
+        index,
+        focus: { kind: "one", clinic: "woonona" },
+        statusTag: "A",
+      }),
     ).toBe("none");
     expect(
       chooseContactFooter({

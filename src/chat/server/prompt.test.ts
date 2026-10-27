@@ -130,6 +130,56 @@ describe("prompt rules", () => {
     expect(found.instructions).not.toContain("[[NO_ANSWER]]");
   });
 
+  it("puts status-tag examples at the end and localises directory labels", () => {
+    const language = { code: "bn", label: "বাংলা", script: "Bengali", dir: "ltr" as const, fallback: false, source: "detected" as const };
+    const bn = buildInstructions({ index, language, focus: { kind: "one", clinic: "shellharbour" }, severe: false, chunks: [], question: "ফোন নম্বর কী?" });
+    expect(bn.lastIndexOf("[[G]]")).toBeGreaterThan(bn.lastIndexOf("CONTEXT"));
+    expect(bn.indexOf("[[A]]")).toBeLessThan(bn.indexOf("LANGUAGE"));
+    expect(bn).toMatch(/at least one full sentence/i);
+    expect(bn).toContain(`ফোন: ${index.contacts.shellharbour.phone}`);
+    expect(bn).toContain(`বুকিং: ${index.contacts.shellharbour.bookingUrl}`);
+    expect(bn).toContain("ইমেইল:");
+    expect(bn).toContain("ঠিকানা:");
+    expect(bn).not.toContain("Phone:");
+    expect(bn).not.toContain("Booking:");
+    expect(bn).not.toContain("Email:");
+    expect(bn).not.toContain("Address:");
+    const ar = buildInstructions({
+      index,
+      language: { code: "ar", label: "العربية", script: "Arabic", dir: "rtl", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "ما رقم الهاتف؟",
+    });
+    expect(ar).toContain(`الهاتف: ${index.contacts.dapto.phone}`);
+    expect(ar).not.toContain("Phone:");
+    const hi = buildInstructions({
+      index,
+      language: { code: "hi", label: "हिन्दी", script: "Devanagari", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "फ़ोन नंबर क्या है?",
+    });
+    expect(hi).toContain(`फ़ोन: ${index.contacts.dapto.phone}`);
+    expect(hi).toContain("बुकिंग:");
+    expect(hi).not.toContain("Phone:");
+    const id = buildInstructions({
+      index,
+      language: { code: "id", label: "Bahasa Indonesia", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "Berapa nomor telepon Shellharbour?",
+    });
+    expect(id).toContain(`Telepon: ${index.contacts.shellharbour.phone}`);
+    expect(id).toContain("Pemesanan:");
+    expect(id).toContain("Alamat:");
+    expect(id).not.toContain("Phone:");
+    expect(id).not.toContain("Booking:");
+  });
+
   it("localises Phone and Booking labels in a French directory", () => {
     const instructions = buildInstructions({
       index,
