@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { clinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
-import { fuseRetrieval, searchByVectors, searchIndex, sourcesFromChunks } from "./search";
+import { expandQuery, fuseRetrieval, searchByVectors, searchIndex, sourcesFromChunks } from "./search";
 import type { KnowledgeChunk } from "../types";
 
 const index = JSON.parse(readFileSync(path.join(process.cwd(), "src/chat/data/knowledge-index.json"), "utf8")) as KnowledgeIndex;
@@ -66,6 +66,14 @@ describe("retrieval", () => {
       expect(hit.title).not.toMatch(/^[a-z0-9-]+$/);
       expect(hit.url.startsWith("https://")).toBe(true);
     }
+  });
+
+  it("maps a Bengali address question onto address and location", () => {
+    const expanded = expandQuery("ডাপ্টো ক্লিনিকের ঠিকানা কোথায়");
+    expect(expanded).toMatch(/address/);
+    expect(expanded).toMatch(/location/);
+    const hits = searchIndex(index, "ডাপ্টো ক্লিনিকের ঠিকানা কোথায়", 4);
+    expect(hits.some((hit) => hit.clinic === "dapto" && /Baan Baan|located/i.test(`${hit.heading} ${hit.text}`))).toBe(true);
   });
 
   it("retrieves implants, Invisalign and children's dentistry for non-Latin questions", () => {

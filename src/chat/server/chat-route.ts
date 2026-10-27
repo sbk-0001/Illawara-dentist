@@ -9,7 +9,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { hasLetters, detectLanguage, resolveReplyLanguage } from "../language/detect";
-import { spokenLanguageForTranscript } from "../stt";
+import { normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
@@ -69,6 +69,15 @@ function userTexts(messages: { role?: string; parts?: unknown; content?: unknown
     .filter(Boolean);
 }
 
+function priorReplyLanguage(messages: { role?: string; metadata?: { language?: string } }[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role !== "assistant") continue;
+    const code = normalizeSpokenLanguage(messages[i]?.metadata?.language);
+    if (code && code !== "en") return code;
+  }
+  return null;
+}
+
 /** Follow-up location questions keep the clinic named in a recent turn, without replacing the latest wording. */
 export function retrievalQuery(latest: string, prior: string[]): string {
   const context = clinicContextText([...prior, latest]);
@@ -78,7 +87,7 @@ export function retrievalQuery(latest: string, prior: string[]): string {
 }
 
 export function prepareTurn(
-  messages: { role?: string; parts?: unknown; content?: unknown }[],
+  messages: { role?: string; parts?: unknown; content?: unknown; metadata?: { language?: string } }[],
   language: string | undefined,
   index: KnowledgeIndex,
   voice?: VoiceTurn,
@@ -89,11 +98,12 @@ export function prepareTurn(
   const textDetection = detectLanguage(text);
   let reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
-  const spokenLanguage = inputMode === "voice" ? spokenLanguageForTranscript(voice?.spokenLanguage, text) : null;
+  const spokenLanguage = inputMode === "voice" ? spokenLanguageForTranscript(voice?.spokenLanguage, text, priorReplyLanguage(messages)) : null;
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
+  const hindiOnBengali = spokenLanguage === "bn" && (reply.code === "hi" || reply.code === "hi-Latn");
   let langOverride = false;
-  if (inputMode === "voice" && spokenLanguage && spokenLanguage !== "en" && !pickerLocked && softText) {
+  if (inputMode === "voice" && spokenLanguage && spokenLanguage !== "en" && !pickerLocked && (softText || hindiOnBengali)) {
     const option = languageOption(spokenLanguage);
     if (option) {
       const forced = { ...replyFromOption(option, "detected" as const, false), confidence: "high" as const };
@@ -226,6 +236,7 @@ export async function POST(request: Request): Promise<Response> {
       ),
       lexical.reply.code,
       hoursRelevant(lexical.text, chunks),
+      lexical.text,
     ),
     { code: lexical.reply.code, index, replyStatus, focus: lexical.focus },
   );

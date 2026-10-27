@@ -340,7 +340,7 @@ export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (cl
   });
   return [
     "LOCALISED OPENING HOURS",
-    "When you state opening hours, quote the matching line below verbatim. Do not translate it again. Do not use English day names or AM/PM.",
+    "When you state opening hours, quote the matching line below verbatim, including both the opening and the closing time. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
     ...lines,
   ].join("\n");
 }
@@ -362,6 +362,62 @@ export function rewriteEnglishHours(text: string, code: string): string {
   });
 }
 
+const NAMED_DAYS: { day: Day; re: RegExp }[] = [
+  { day: "mon", re: /\bmonday\b/i },
+  { day: "tue", re: /\btuesday\b/i },
+  { day: "wed", re: /\bwednesday\b/i },
+  { day: "thu", re: /\bthursday\b/i },
+  { day: "fri", re: /\bfriday\b/i },
+  { day: "sat", re: /\bsaturday\b/i },
+  { day: "sun", re: /\bsunday\b/i },
+];
+
+function daysMentioned(text: string): Day[] {
+  return NAMED_DAYS.filter((item) => item.re.test(text)).map((item) => item.day);
+}
+
+function replyHasClock(text: string, hhmm: string, code: string): boolean {
+  const formatted = formatClock(hhmm, code);
+  if (text.toLowerCase().includes(formatted.toLowerCase())) return true;
+  const { hour, minute } = parts(hhmm);
+  const h12 = hour12(hour);
+  const suffix = hour >= 12 ? "pm" : "am";
+  const compact = text.toLowerCase().replace(/\s+/g, "");
+  if (compact.includes(`${h12}:${minute}${suffix}`)) return true;
+  if (minute === "00" && compact.includes(`${h12}${suffix}`)) return true;
+  return compact.includes(hhmm);
+}
+
+/**
+ * A hours answer that only says when the clinic opens gets the open–close range.
+ * "opens at 8:00 AM" on Saturday at Dapto becomes the Saturday 8:00 AM–4:00 PM line.
+ */
+export function hoursRangeClause(reply: string, question: string, code: string): string {
+  const asked = `${question}\n${reply}`;
+  if (!questionAsksHours(question) && !questionAsksHours(reply)) return "";
+  const clinics = mentionedClinics(asked);
+  if (clinics.length !== 1) return "";
+  const days = daysMentioned(asked);
+  if (days.length !== 1) return "";
+  const clinic = clinics[0];
+  const day = days[0];
+  const schedule = CLINIC_HOURS[clinic];
+  const span = schedule.spans.find((item) => item.days.includes(day));
+  const dayLabel = formatDays([day], code);
+  const name = clinicName(clinic);
+  if (!span) {
+    const appointment = schedule.notes.some((note) => note.kind === "appointment" && note.days.includes(day));
+    if (!appointment) return "";
+    const phrase = APPOINTMENT[code] ?? APPOINTMENT.en;
+    if (reply.toLowerCase().includes(phrase.toLowerCase())) return "";
+    return `${name}: ${dayLabel} ${phrase}`;
+  }
+  if (replyHasClock(reply, span.open, code) && replyHasClock(reply, span.close, code)) return "";
+  const line = `${name}: ${dayLabel} ${formatSpan(span.open, span.close, code)}`;
+  if (reply.includes(line)) return "";
+  return line;
+}
+
 type HoursChunk = { type: string; id?: string; delta?: string };
 
 function splitHold(text: string, final: boolean): { stable: string; rest: string } {
@@ -371,10 +427,13 @@ function splitHold(text: string, final: boolean): { stable: string; rest: string
   return { stable: match[1] ?? "", rest: match[2] ?? "" };
 }
 
-/** Stream rewrite for leftover English hours wording. No-op when hours are not relevant. */
-export function attachHoursWording<T extends HoursChunk>(stream: ReadableStream<T>, code: string, enabled: boolean): ReadableStream<T> {
-  if (!enabled || SKIP_REWRITE.has(code)) return stream;
+/** Stream rewrite for leftover English hours wording, and append a missing open–close range. */
+export function attachHoursWording<T extends HoursChunk>(stream: ReadableStream<T>, code: string, enabled: boolean, question = ""): ReadableStream<T> {
+  if (!enabled) return stream;
+  const rewrite = !SKIP_REWRITE.has(code);
+  if (!rewrite && !question) return stream;
   let hold = "";
+  let full = "";
   let textId: string | undefined;
   let flushed = false;
   const emit = (controller: TransformStreamDefaultController<T>, final: boolean) => {
@@ -383,29 +442,36 @@ export function attachHoursWording<T extends HoursChunk>(stream: ReadableStream<
     const visible = rewriteEnglishHours(split.stable, code);
     if (visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
   };
+  const finish = (controller: TransformStreamDefaultController<T>) => {
+    if (flushed) return;
+    flushed = true;
+    if (rewrite) emit(controller, true);
+    const extra = hoursRangeClause(full, question, code);
+    if (extra && textId) controller.enqueue({ type: "text-delta", id: textId, delta: `\n${extra}` } as T);
+  };
   return stream.pipeThrough(
     new TransformStream<T, T>({
       transform(chunk, controller) {
         if (chunk.type === "text-start" && chunk.id) textId = chunk.id;
         if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
+          full += chunk.delta;
+          if (!rewrite) {
+            controller.enqueue(chunk);
+            return;
+          }
           hold += chunk.delta;
           emit(controller, false);
           return;
         }
         if (chunk.type === "text-end" || chunk.type === "finish") {
-          if (!flushed) {
-            flushed = true;
-            emit(controller, true);
-          }
+          finish(controller);
           controller.enqueue(chunk);
           return;
         }
         controller.enqueue(chunk);
       },
       flush(controller) {
-        if (flushed) return;
-        flushed = true;
-        emit(controller, true);
+        finish(controller);
       },
     }),
   );

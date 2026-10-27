@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bareHoursClinic, formatClinicHours, guardBareHoursReply, hoursRelevant, hoursSource, mayBeBareHours, rewriteEnglishHours } from "./hours";
+import { attachHoursWording, bareHoursClinic, formatClinicHours, guardBareHoursReply, hoursRangeClause, hoursRelevant, hoursSource, mayBeBareHours, rewriteEnglishHours } from "./hours";
 
 const ENGLISH_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const AMPM = /\b(am|pm)\b/i;
@@ -74,6 +74,35 @@ describe("localised opening hours", () => {
     expect(unnamed).toContain("Woonona Dentists:");
     expect(guardBareHoursReply(line, "en", { kind: "one", clinic: "dapto" }).startsWith("Dapto Dentists:")).toBe(true);
     expect(guardBareHoursReply("We are open on Saturday.", "en", { kind: "ask" })).toBe("We are open on Saturday.");
+  });
+
+  it("adds the open and close when a Saturday answer only says when Dapto opens", async () => {
+    const question = "Does Dapto open on Saturday?";
+    const reply = "opens at 8:00 AM";
+    expect(hoursRangeClause(reply, question, "en")).toBe("Dapto Dentists: Saturday 8:00 AM–4:00 PM");
+    expect(hoursRangeClause("Dapto is open Saturday 8:00 AM–4:00 PM.", question, "en")).toBe("");
+    const stream = attachHoursWording(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "t1" });
+          controller.enqueue({ type: "text-delta", id: "t1", delta: reply });
+          controller.enqueue({ type: "text-end", id: "t1" });
+          controller.close();
+        },
+      }),
+      "en",
+      true,
+      question,
+    );
+    const reader = stream.getReader();
+    let text = "";
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value.delta) text += next.value.delta;
+    }
+    expect(text).toContain("opens at 8:00 AM");
+    expect(text).toContain("Dapto Dentists: Saturday 8:00 AM–4:00 PM");
   });
 
   it("treats an hours question or an hours chunk as relevant", () => {

@@ -3,7 +3,7 @@ import type { ClinicId } from "./types";
 const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   {
     clinic: "dapto",
-    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト/i,
+    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ডাপ্টো|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト/i,
   },
   {
     clinic: "shellharbour",

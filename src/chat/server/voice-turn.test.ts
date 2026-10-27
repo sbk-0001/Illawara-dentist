@@ -72,6 +72,22 @@ describe("spoken language on a voice turn", () => {
     expect(address.reply.code).toBe("bn");
   });
 
+  it("does not answer a mixed Devanagari and Bengali voice clip in Hindi", () => {
+    const turn = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "ডাপ্টো শনিবার খোলা থাকে।" },
+        { role: "user", content: "डाप्टो क्लिनिक का पता क्या है ক absentment" },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "hi" },
+    );
+    expect(turn.spokenLanguage).toBe("bn");
+    expect(turn.reply.code).toBe("bn");
+    expect(turn.reply.script).toBe("Bengali");
+    expect(turn.langOverride).toBe(true);
+  });
+
   it("does not send a Han transcript as English", () => {
     const turn = prepareTurn([{ role: "user", content: "伍诺纳诊所几点开门" }], "auto", index, {
       inputMode: "voice",

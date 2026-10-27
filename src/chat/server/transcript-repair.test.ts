@@ -22,6 +22,13 @@ describe("native-script transcript repair", () => {
       transcribe: async () => ({ text: "Woonona ক্লিনিকের ঠিকানা কি?" }),
     });
     expect(mixed).toBe("Woonona ক্লিনিকের ঠিকানা কি?");
+
+    const hindi = await repairNativeTranscript({
+      audio: new Uint8Array([7, 8, 9]),
+      language: "bn",
+      transcribe: async () => ({ text: "डाप्टो क्लिनिक कब खुलेगा?" }),
+    });
+    expect(hindi).toBe("डाप्टो क्लिनिक कब खुलेगा?");
   });
 
   it("keeps the original when the repair is still Latin or misses the deadline", async () => {

@@ -63,6 +63,7 @@ function bm25(query: string[], doc: string[], df: Map<string, number>, avg: numb
 const EXPANSIONS: { re: RegExp; terms: string }[] = [
   { re: /fee|fees|cost|price|payment|fund|hicaps|afterpay|খরচ|ফি|फीस|शुल्क|费用|phí|비용|κόστ|costa|cuesta|cuánto|cuanto|dam|kitna|kitni|معائنہ|معاینه|فحص|تنظيف|जांच|सफाई|检查|洗牙|洁牙|revisión|limpieza|khám|스케일링|검진|έλεγχος|καθαρισμ|controllo|pulizia|চেকআপ|পরিষ্কার/i, terms: "fees payment cost price check-up clean" },
   { re: /hour|hours|saturday|sunday|open|opening|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở|ώρα|orari|sabato|horario|sábado|shonibar|khula|khola|baje/i, terms: "hours opening Saturday" },
+  { re: /ঠিকানা|কোথায়|\bthikana\b|\bkothay\b|\bkothai\b/i, terms: "address location located" },
   { re: /emergency|pain|broken|tooth|swelling|ব্যথা|দাঁত|दर्द|दांत|牙疼|牙齿|đau|răng|δόντι|πονά|dente|diente|daat|daant|byatha|dard/i, terms: "emergency toothache appointment" },
   { re: /implant|ইমপ্লান্ট|زراعة|زرعات|इम्प्लांट|प्रत्यारोपण|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants" },
   { re: /invisalign|aligner|ইনভিজালাইন|অ্যালাইনার|إنفزلاين|تقويم شفاف|इनविज़लाइन|एलाइनर|隐适美|隐形矫正|隐形牙套|alineador|انویزلائن|اینویزالاین|niềng trong suốt|인비절라인|투명교정|ευθυγραμμ|allineator/i, terms: "invisalign aligners" },

@@ -266,13 +266,21 @@ export function languageFromNativeScript(text: string): string | null {
   return best.code;
 }
 
+/** Devanagari and Bengali in the same utterance. One stray character of either is enough. */
+export function mixedIndicScripts(text: string): boolean {
+  return countScript(text, /[\u0980-\u09FF]/g) >= 1 && countScript(text, /[\u0900-\u097F]/g) >= 1;
+}
+
 /**
  * Do not keep an English or Indonesian Deepgram tag once the transcript contains
  * Bengali, Devanagari, Arabic, Han, or another non-Latin script.
+ * Mixed Devanagari and Bengali, or a Bengali session hint, does not settle on Hindi.
  */
-export function spokenLanguageForTranscript(heard: string | null | undefined, text: string): string | null {
+export function spokenLanguageForTranscript(heard: string | null | undefined, text: string, hint?: string | null): string | null {
   const normalized = normalizeSpokenLanguage(heard);
+  const hinted = normalizeSpokenLanguage(hint);
   const fromScript = languageFromNativeScript(text);
+  if (mixedIndicScripts(text) || (hinted === "bn" && (normalized === "hi" || fromScript === "hi"))) return "bn";
   if (!fromScript) return normalized;
   if (!normalized || normalized === "en" || normalized === "id") return fromScript;
   if (scriptFamily(normalized) === scriptFamily(fromScript)) return normalized;
@@ -280,11 +288,62 @@ export function spokenLanguageForTranscript(heard: string | null | undefined, te
   return fromScript;
 }
 
+/** Language for the gpt-4o-mini-transcribe pass. A Bengali hint wins over a Hindi tag. */
+export function repairLanguageForTranscript(heard: string | null | undefined, text: string, hint?: string | null): string | null {
+  return spokenLanguageForTranscript(heard, text, hint);
+}
+
+/**
+ * Language sent with a voice turn. Deepgram votes and this utterance come first.
+ * The transcript script fills in when Deepgram never named a language.
+ */
+export function spokenLanguageAtSubmit(input: {
+  votes?: readonly string[];
+  interim?: string | null;
+  draft?: string | null;
+  text: string;
+  hint?: string | null;
+}): string {
+  const heard =
+    majoritySpokenLanguage(input.votes ?? []) ||
+    normalizeSpokenLanguage(input.interim) ||
+    normalizeSpokenLanguage(input.draft) ||
+    "";
+  return spokenLanguageForTranscript(heard, input.text, input.hint) || languageFromNativeScript(input.text) || heard;
+}
+
+/**
+ * After the second pass, pure Hindi can stand when this turn was not hinted as Bengali.
+ * A bn hint does not settle on hi.
+ */
+export function languageAfterRepair(requested: string | null | undefined, repaired: string, hint?: string | null): string | null {
+  const hinted = normalizeSpokenLanguage(hint);
+  const script = languageFromNativeScript(repaired);
+  if (hinted === "bn") return "bn";
+  if (script === "hi" && !mixedIndicScripts(repaired)) return "hi";
+  return spokenLanguageForTranscript(requested, repaired, hint) || script;
+}
+
+/**
+ * Language of this Deepgram result. The script on the current text wins over a tag
+ * left over from the previous turn, so Hindi speech does not keep a Bengali note.
+ */
+export function interimMicLanguage(alternative: DeepgramAlternative | undefined, transcript: string): string {
+  const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
+  const script = languageFromNativeScript(transcript);
+  if (script && script !== heard) return script;
+  return heard || script || "";
+}
+
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
 
-/** A native language still written in Latin, or mixed with Latin, needs the second pass. */
-export function transcriptNeedsRepair(code: string | null | undefined, text: string): boolean {
+/** A native language still written in Latin, mixed with Latin, or split across Devanagari and Bengali, needs the second pass. */
+export function transcriptNeedsRepair(code: string | null | undefined, text: string, hint?: string | null): boolean {
+  if (mixedIndicScripts(text)) return true;
+  const hinted = normalizeSpokenLanguage(hint);
+  const fromScript = languageFromNativeScript(text);
   const normalized = normalizeSpokenLanguage(code);
+  if (hinted === "bn" && (normalized === "hi" || fromScript === "hi")) return true;
   if (!normalized || !requiresNativeScript(normalized)) return false;
   if (!NATIVE_SCRIPT[normalized]?.test(text)) return true;
   return LATIN_LETTERS.test(text);
@@ -309,6 +368,18 @@ function correctDoctorClinic(text: string): string {
   return text.replace(/ডাক্তার ক্লিনিক(?:ের|ে)?/g, "Dapto");
 }
 
+const ADDRESS_MISHEAR = /চিকা\s*নাকি|চিকানাকি|চিকানা/g;
+const ADDRESS_BEFORE = /ক্লিনিকের|ক্লিনিক|ডাপ্টো|ড্যাপ্টো|উনোনা|শেলহারবার|ব্যারাক হাইটস|\b(?:dapto|woonona|unona|shellharbour|illawarra)\b/i;
+
+/** Indian Bengali often hears ঠিকানা as চিকানা, চিকা নাকি, or চিকানাকি after a clinic name. */
+function correctBengaliAddress(text: string): string {
+  return text.replace(ADDRESS_MISHEAR, (match, offset: number, whole: string) => {
+    const before = whole.slice(Math.max(0, offset - 48), offset);
+    if (!ADDRESS_BEFORE.test(before)) return match;
+    return "ঠিকানা";
+  });
+}
+
 /** "饥食美" is 种植牙 or 隐适美 only when the rest of the utterance says which. */
 function correctJiShiMei(text: string): string {
   if (!text.includes("饥食美")) return text;
@@ -323,7 +394,9 @@ function correctJiShiMei(text: string): string {
  * "Buona" becomes Woonona only beside a clinic or dentist word, and not in "Buona sera".
  */
 export function correctTranscript(text: string): string {
-  const replaced = correctJiShiMei(correctDoctorClinic(text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو")));
+  const replaced = correctJiShiMei(
+    correctDoctorClinic(correctBengaliAddress(text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو"))),
+  );
   return replaced.replace(/\bBuona\b/gi, (match, offset: number, whole: string) => {
     const after = whole.slice(offset + match.length, offset + match.length + 12);
     if (/^\s+(?:sera|notte|giornata|giorno|serata)\b/i.test(after)) return match;

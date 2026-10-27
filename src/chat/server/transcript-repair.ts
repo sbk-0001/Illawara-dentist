@@ -1,5 +1,5 @@
 import { transcribe } from "ai";
-import { hasNativeScript, normalizeSpokenLanguage, requiresNativeScript } from "../stt";
+import { hasNativeScript, languageFromNativeScript, normalizeSpokenLanguage, requiresNativeScript } from "../stt";
 
 /**
  * Second pass when Nova-3 names a non-Latin language but returns Latin text.
@@ -37,7 +37,7 @@ export async function repairNativeTranscript(input: {
       providerOptions: { openai: { language } },
     });
     const text = result.text?.trim() || "";
-    if (!text || !hasNativeScript(language, text)) return null;
+    if (!text || (!hasNativeScript(language, text) && !languageFromNativeScript(text))) return null;
     return text;
   } catch {
     return null;

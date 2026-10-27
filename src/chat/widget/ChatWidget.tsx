@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording, type MicAudioQueue } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -65,10 +65,13 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     finals: string;
     langVotes: string[];
     spokenLanguage: string;
+    interimLanguage: string;
     liveDrop: string;
     ignoreClose: boolean;
-  }>({ chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", liveDrop: "", ignoreClose: false });
+    generation: number;
+  }>({ chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: 0 });
   const voiceRequest = useRef<VoiceDraft | null>(null);
+  const draftGeneration = useRef(0);
 
   const transport = useMemo(
     () =>
@@ -104,14 +107,20 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     current.socket?.close();
     if (current.recorder && current.recorder.state !== "inactive") current.recorder.stop();
     current.stream?.getTracks().forEach((track) => track.stop());
-    session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", liveDrop: "", ignoreClose: false };
+    session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
+  }
+
+  function staleDraft(): boolean {
+    return session.current.generation !== draftGeneration.current;
   }
 
   function bindVoice(transcript: string, heard: string) {
-    const spoken = spokenLanguageForTranscript(heard, transcript) || "";
+    if (staleDraft()) return;
+    const spoken = spokenLanguageForTranscript(heard, transcript, preferredSpeechLanguage()) || "";
     voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop: session.current.liveDrop };
     setInput(transcript);
-    setMicNote(spoken ? micListeningNote(spoken) : "Listening…");
+    const note = interimMicLanguage(undefined, transcript) || heard;
+    setMicNote(note ? micListeningNote(note) : "Listening…");
   }
 
   function preferredSpeechLanguage(): string | null {
@@ -126,8 +135,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const current = session.current;
     const hadSocket = current.socket?.readyState === WebSocket.OPEN;
     const finals = current.finals.trim();
-    const heard = majoritySpokenLanguage(current.langVotes) || current.spokenLanguage;
-    const spokenLanguage = spokenLanguageForTranscript(heard, finals) || "";
+    const heard = majoritySpokenLanguage(current.langVotes) || current.interimLanguage || current.spokenLanguage;
+    const spokenLanguage = spokenLanguageForTranscript(heard, finals, preferredSpeechLanguage()) || "";
     const liveDrop = current.liveDrop;
     const recorder = current.recorder;
     current.ignoreClose = true;
@@ -136,7 +145,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       const finish = () => {
         const blob = new Blob(current.chunks, { type: current.chunks[0]?.type || "audio/webm" });
         current.stream?.getTracks().forEach((track) => track.stop());
-        session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", liveDrop: "", ignoreClose: false };
+        session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
         resolve({ blob, hadSocket, finals, spokenLanguage, liveDrop });
       };
       if (!recorder || recorder.state === "inactive") {
@@ -151,9 +160,20 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
 
   useEffect(() => () => releaseMic(), []);
 
-  async function uploadFallback(blob: Blob, liveDrop: string): Promise<boolean> {
+  async function uploadFallback(blob: Blob, liveDrop: string, priorSpoken: string): Promise<boolean> {
+    const generation = draftGeneration.current;
     setMic("transcribing");
     setMicNote("Transcribing…");
+    const abandoned = () => draftGeneration.current !== generation;
+    const finishNote = (note: string) => {
+      if (abandoned()) {
+        setMicNote("");
+        setMic("idle");
+        return;
+      }
+      setMicNote(note);
+      setMic("idle");
+    };
     try {
       const hint = preferredSpeechLanguage();
       const body = new FormData();
@@ -162,32 +182,60 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       if (liveDrop) body.set("liveDrop", liveDrop);
       const response = await fetch("/api/chat/transcribe", { method: "POST", body });
       const payload = (await response.json()) as { transcript?: string; language?: string; error?: string };
-      if (!response.ok || !payload.transcript) {
-        setMicNote(payload.error || "Could not transcribe that.");
+      if (abandoned()) {
+        setMicNote("");
         setMic("idle");
         return false;
       }
+      if (!response.ok || !payload.transcript) {
+        finishNote(payload.error || "Could not transcribe that.");
+        return false;
+      }
       const transcript = correctTranscript(payload.transcript);
-      const spoken = spokenLanguageForTranscript(payload.language, transcript) || "";
+      const spoken = spokenLanguageAtSubmit({
+        interim: payload.language,
+        draft: priorSpoken,
+        text: transcript,
+        hint,
+      });
       voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop };
       setInput(transcript);
-      setMicNote(spoken ? micListeningNote(spoken) : "Listening…");
-      setMic("idle");
+      const note = interimMicLanguage(undefined, transcript) || spoken;
+      finishNote(note ? micListeningNote(note) : "Listening…");
       return true;
     } catch {
-      setMicNote("Could not transcribe that.");
-      setMic("idle");
+      if (abandoned()) {
+        setMicNote("");
+        setMic("idle");
+        return false;
+      }
+      finishNote("Could not transcribe that.");
       return false;
     }
   }
 
   async function toggleMic() {
     if (mic === "listening" || mic === "requesting") {
+      const generation = draftGeneration.current;
       const { blob, hadSocket, finals, spokenLanguage, liveDrop } = await captureRecording();
-      const needsRepair = Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals));
+      if (draftGeneration.current !== generation) {
+        setMic("idle");
+        setMicNote("");
+        return;
+      }
+      if (finals) {
+        voiceRequest.current = { transcript: finals, spokenLanguage, liveDrop };
+        setInput(finals);
+      }
+      const needsRepair = Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
       if (shouldUploadRecording({ byteLength: blob.size, transcript: finals, socketOpened: hadSocket, needsRepair })) {
-        const uploaded = await uploadFallback(blob, liveDrop);
+        const uploaded = await uploadFallback(blob, liveDrop, spokenLanguage);
         if (uploaded || !finals) return;
+      }
+      if (draftGeneration.current !== generation) {
+        setMic("idle");
+        setMicNote("");
+        return;
       }
       if (finals) {
         bindVoice(finals, spokenLanguage);
@@ -215,8 +263,10 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     session.current.finals = "";
     session.current.langVotes = [];
     session.current.spokenLanguage = "";
+    session.current.interimLanguage = "";
     session.current.liveDrop = "";
     session.current.ignoreClose = false;
+    session.current.generation = draftGeneration.current;
     voiceRequest.current = null;
 
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
@@ -278,18 +328,33 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           };
           const alternative = payload.channel?.alternatives?.[0];
           const transcript = alternative?.transcript?.trim() || "";
-          if (!transcript) return;
-          const raw = `${transcript} ${session.current.finals}`;
+          if (staleDraft()) return;
+          const heardNow = interimMicLanguage(alternative, transcript);
+          const deepgram = majoritySpokenLanguage(votesFromAlternative(alternative));
+          if (deepgram) session.current.interimLanguage = deepgram;
+          if (!transcript) {
+            if (heardNow) setMicNote(micListeningNote(heardNow));
+            return;
+          }
+          const hint = preferredSpeechLanguage();
           if (payload.is_final) {
             session.current.langVotes.push(...votesFromAlternative(alternative));
             const spoken = majoritySpokenLanguage(session.current.langVotes);
             if (spoken) session.current.spokenLanguage = spoken;
             session.current.finals = correctTranscript(`${session.current.finals} ${transcript}`.trim());
-            bindVoice(session.current.finals, spokenLanguageForTranscript(spoken || session.current.spokenLanguage, raw) || session.current.spokenLanguage);
+            const resolved = spokenLanguageForTranscript(spoken || heardNow || session.current.interimLanguage, session.current.finals, hint) || "";
+            if (staleDraft()) return;
+            voiceRequest.current = { transcript: session.current.finals, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
+            setInput(session.current.finals);
           } else {
             const shown = correctTranscript(`${session.current.finals} ${transcript}`.trim());
-            bindVoice(shown, spokenLanguageForTranscript(session.current.spokenLanguage, `${transcript} ${shown}`) || session.current.spokenLanguage);
+            const resolved = spokenLanguageForTranscript(heardNow || session.current.interimLanguage, shown, hint) || "";
+            if (staleDraft()) return;
+            voiceRequest.current = { transcript: shown, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
+            setInput(shown);
           }
+          const noteLang = heardNow || session.current.interimLanguage || "";
+          setMicNote(noteLang ? micListeningNote(noteLang) : "Listening…");
         } catch {
           // Ignore non-JSON socket frames.
         }
@@ -309,6 +374,20 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     if (!text || busy) return;
     const voice = voiceRequest.current;
     const useVoice = Boolean(voice && voiceDraftStillApplies(voice, text));
+    const hint = preferredSpeechLanguage();
+    const spoken = useVoice
+      ? spokenLanguageAtSubmit({
+          votes: session.current.langVotes,
+          interim: session.current.interimLanguage,
+          draft: voice?.spokenLanguage,
+          text,
+          hint,
+        })
+      : "";
+    const liveDrop = voice?.liveDrop || "";
+    draftGeneration.current += 1;
+    releaseMic();
+    setMic("idle");
     setInput("");
     clearError();
     setMicNote("");
@@ -319,15 +398,18 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           body: useVoice
             ? {
                 inputMode: "voice" as const,
-                ...(voice?.spokenLanguage ? { spokenLanguage: voice.spokenLanguage } : {}),
-                ...(voice?.liveDrop ? { liveDrop: voice.liveDrop } : {}),
+                ...(spoken ? { spokenLanguage: spoken } : {}),
+                ...(liveDrop ? { liveDrop } : {}),
               }
             : { inputMode: "text" as const },
         },
       );
-      voiceRequest.current = null;
     } catch {
-      // The transcript is still the voice utterance if the request never left.
+      setMicNote("");
+    } finally {
+      voiceRequest.current = null;
+      setInput("");
+      setMicNote("");
     }
   }
 
