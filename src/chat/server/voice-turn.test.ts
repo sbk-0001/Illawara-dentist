@@ -88,6 +88,32 @@ describe("spoken language on a voice turn", () => {
     expect(turn.langOverride).toBe(true);
   });
 
+  it("answers a short unidentified Latin question in English when nothing earlier was another language", () => {
+    const first = prepareTurn([{ role: "user", content: "ডাপ্টো ক্লিনিকের ঠিকানা কি?" }], "auto", index);
+    expect(first.reply.code).toBe("bn");
+    const turn = prepareTurn([{ role: "user", content: "Woonona phone?" }], "auto", index);
+    expect(turn.reply.code).toBe("en");
+    expect(turn.spokenLanguage).toBeNull();
+    expect(turn.instructions).toContain("Write in English.");
+    expect(turn.instructions).not.toMatch(/Do not switch to English/);
+
+    const followed = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ।" },
+        { role: "user", content: "Woonona phone?" },
+      ],
+      "auto",
+      index,
+    );
+    expect(followed.reply.code).toBe("und");
+
+    const voiced = prepareTurn([{ role: "user", content: "Woonona phone?" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "bn",
+    });
+    expect(voiced.reply.code).toBe("bn");
+  });
+
   it("does not send a Han transcript as English", () => {
     const turn = prepareTurn([{ role: "user", content: "伍诺纳诊所几点开门" }], "auto", index, {
       inputMode: "voice",

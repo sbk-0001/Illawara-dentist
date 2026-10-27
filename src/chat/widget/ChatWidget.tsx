@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, micWaitingNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording, type MicAudioQueue } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -120,8 +120,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const spoken = spokenLanguageForTranscript(heard, transcript, preferredSpeechLanguage()) || "";
     voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop: session.current.liveDrop };
     setInput(transcript);
-    const note = interimMicLanguage(undefined, transcript, { hint: preferredSpeechLanguage(), previous: heard }) || heard;
-    setMicNote(note ? micListeningNote(note) : "Listening…");
+    const note = interimMicLanguage(heard ? { languages: [heard] } : undefined, transcript, { final: true, seen: transcript });
+    setMicNote(note ? micListeningNote(note) : micWaitingNote(preferredSpeechLanguage()));
   }
 
   function preferredSpeechLanguage(): string | null {
@@ -201,8 +201,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       });
       voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop };
       setInput(transcript);
-      const note = interimMicLanguage(undefined, transcript) || spoken;
-      finishNote(note ? micListeningNote(note) : "Listening…");
+      const note = interimMicLanguage(spoken ? { languages: [spoken] } : undefined, transcript, { final: true, seen: transcript });
+      finishNote(note ? micListeningNote(note) : micWaitingNote(hint));
       return true;
     } catch {
       if (abandoned()) {
@@ -339,13 +339,15 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             hint: preferredSpeechLanguage(),
             previous: session.current.spokenLanguage,
             seen: `${session.current.finals} ${transcript}`,
+            final: payload.is_final === true,
             streak: session.current.noteStreak,
           });
           if (heardNow) {
             session.current.interimLanguage = heardNow;
             setMicNote(micListeningNote(heardNow));
-          } else if (!session.current.interimLanguage) {
-            setMicNote("Listening…");
+          } else {
+            if (!session.current.noteStreak.code) session.current.interimLanguage = "";
+            setMicNote(micWaitingNote(preferredSpeechLanguage()));
           }
           if (!transcript) return;
           const hint = preferredSpeechLanguage();
@@ -365,13 +367,13 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             voiceRequest.current = { transcript: shown, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
             setInput(shown);
           }
-          if (!heardNow && !session.current.interimLanguage) setMicNote("Listening…");
+          if (!heardNow && !session.current.noteStreak.code) setMicNote(micWaitingNote(preferredSpeechLanguage()));
         } catch {
           // Ignore non-JSON socket frames.
         }
       });
       setMic("listening");
-      setMicNote((current) => (current && current !== "Starting microphone…" ? current : "Listening…"));
+      setMicNote(micWaitingNote(preferredSpeechLanguage()));
     } catch {
       if (!session.current.liveDrop) session.current.liveDrop = formatLiveDrop({ fallback: "open-failed" });
       setMic("listening");

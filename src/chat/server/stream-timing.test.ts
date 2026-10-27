@@ -269,8 +269,9 @@ describe("first-token timeout", () => {
       },
     });
     const repaired = await readText(heavy);
-    expect(heavyCalls).toBe(1);
+    expect(heavyCalls).toBe(2);
     expect(repaired).toContain("বিস্তারিত");
+    expect(repaired).not.toContain("professional teeth whitening");
 
     const hindi =
       "Dapto Dentists में urgent dental समस्या है। दाँत में तेज़ दर्द हो रहा है, तो क्लिनिक को फ़ोन करें। Invisalign और appointment के लिए भी कॉल कर सकते हैं।";

@@ -258,7 +258,9 @@ describe("prompt rules", () => {
     expect(instructions).toContain("Whitening is available.");
     expect(instructions).toMatch(/write that sentence in the reply language/i);
     expect(instructions).toContain("দাঁত সাদা করা");
-    expect(instructions).toMatch(/Do not leave English service words/i);
+    expect(instructions).toMatch(/same-day appointment/i);
+    expect(instructions).toMatch(/urgent care/i);
+    expect(instructions).toMatch(/Do not leave English phrases/i);
     expect(scriptRetryInstruction(language)).toMatch(/Bengali/);
     expect(scriptRetryInstruction(language)).toMatch(/Do not write English sentences/);
     expect(scriptRetryInstruction(language)).toMatch(/teeth whitening/);

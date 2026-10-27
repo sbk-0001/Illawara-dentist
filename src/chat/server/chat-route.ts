@@ -80,6 +80,31 @@ function priorReplyLanguage(messages: { role?: string; metadata?: { language?: s
   return null;
 }
 
+/** An earlier turn already committed to a language other than English. */
+function priorNonEnglishTurn(messages: { role?: string; parts?: unknown; content?: unknown; metadata?: { language?: string } }[]): boolean {
+  const earlier = messages.slice(0, -1);
+  for (const message of earlier) {
+    if (message.role === "assistant") {
+      const code = normalizeSpokenLanguage(message.metadata?.language);
+      if (code && code !== "en") return true;
+      continue;
+    }
+    if (message.role !== "user") continue;
+    const detected = detectLanguage(messageText(message));
+    if (detected.code !== "en" && detected.code !== "und" && !detected.fallback) return true;
+  }
+  return false;
+}
+
+/** "Woonona phone?" is real Latin and too short for the detector to name. */
+function shortUnidentifiedLatin(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 40) return false;
+  if (/[^\sA-Za-z0-9?.!',-]/.test(trimmed)) return false;
+  const tokens = trimmed.match(/[A-Za-z]{2,}/g) ?? [];
+  return tokens.length > 0 && tokens.length <= 3;
+}
+
 /** Follow-up location questions keep the clinic named in a recent turn, without replacing the latest wording. */
 export function retrievalQuery(latest: string, prior: string[]): string {
   const context = clinicContextText([...prior, latest]);
@@ -102,6 +127,20 @@ export function prepareTurn(
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
   const spokenLanguage = inputMode === "voice" ? spokenLanguageForTranscript(voice?.spokenLanguage, text, priorReplyLanguage(messages)) : null;
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
+  // Reply language comes only from this request: the latest text, an explicit picker,
+  // a voice language on this turn, or an earlier turn in the same message list.
+  // Nothing here is cached between requests.
+  if (
+    !pickerLocked &&
+    reply.code === "und" &&
+    textDetection.code === "und" &&
+    shortUnidentifiedLatin(text) &&
+    !spokenLanguage &&
+    !priorNonEnglishTurn(messages)
+  ) {
+    const english = languageOption("en");
+    if (english) reply = replyFromOption(english, "detected", false);
+  }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
   const hindiOnBengali = spokenLanguage === "bn" && (reply.code === "hi" || reply.code === "hi-Latn");
   let langOverride = false;

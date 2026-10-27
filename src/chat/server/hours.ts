@@ -424,16 +424,31 @@ function dropRepeatedHours(rest: string, code: string): string {
  * A `Clinic:` label or quotation marks around the hours are rewritten.
  * When the question never named a clinic, each clinic gets its own sentence.
  */
+/** The English schedule is a sentence, so a copied hours line ends with a full stop. */
+export function ensureEnglishHoursStop(text: string): string {
+  const schedules = (["dapto", "shellharbour", "woonona"] as const).map((id) => formatClinicHours(id, "en"));
+  return text
+    .split("\n")
+    .map((line) => {
+      const end = line.trimEnd();
+      if (!schedules.some((schedule) => end.includes(schedule))) return line;
+      if (/[.!?।。？！]$/.test(end.trim())) return line;
+      return `${end}.`;
+    })
+    .join("\n");
+}
+
 export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
   const cleaned = stripHoursQuotes(text).trim();
   const only = hoursOnlyClinics(cleaned, code);
-  if (only) return renderHours(code, hoursIds(focus));
+  const finish = (value: string) => (code === "en" ? ensureEnglishHoursStop(value) : value);
+  if (only) return finish(renderHours(code, hoursIds(focus)));
   const { first, rest } = splitFirstSentence(cleaned);
   const matched = bareHoursClinic(first, code) || hoursOnlyClinics(first, code)?.[0] || null;
-  if (!matched) return text;
+  if (!matched) return finish(text);
   const rendered = renderHours(code, hoursIds(focus));
   const remainder = dropRepeatedHours(rest, code);
-  return remainder ? `${rendered}\n${remainder}` : rendered;
+  return finish(remainder ? `${rendered}\n${remainder}` : rendered);
 }
 
 export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
@@ -444,9 +459,10 @@ export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
 
 export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string): string {
   const lines = clinicIdsForHours(focus).flatMap((clinic) => {
-    const schedule = CLINIC_HOURS[clinic];
-    const row = `${hoursLeadIn(code, names(clinic))} ${formatClinicHours(clinic, code)}`;
-    return schedule.disagreement ? [row, `Do not quote the conflicting page. ${schedule.disagreement}`] : [row];
+    const stored = CLINIC_HOURS[clinic];
+    const schedule = formatClinicHours(clinic, code);
+    const row = `${hoursLeadIn(code, names(clinic))} ${schedule}${code === "en" && !/[.!?]$/.test(schedule) ? "." : ""}`;
+    return stored.disagreement ? [row, `Do not quote the conflicting page. ${stored.disagreement}`] : [row];
   });
   return [
     "LOCALISED OPENING HOURS",

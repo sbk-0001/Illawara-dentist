@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage, hasLetters } from "../language/detect";
 import { mentionedClinics } from "../intent";
 import {
@@ -6,6 +7,7 @@ import {
   chooseContactFooter,
   contactFooter,
   contactLabels,
+  directoryLabels,
   contactRouteFooter,
   ensureContactFooter,
   isClearlyOffTopic,
@@ -808,5 +810,13 @@ describe("contact footer", () => {
     expect(chinese).toContain("电话：");
     expect(chinese).toContain("预约：");
     expect(chinese).not.toContain("Phone:");
+    const englishLabel = /^(?:Phone|Booking|Email|Address|Hours|Website)\s*:/i;
+    for (const option of LANGUAGE_OPTIONS) {
+      if (option.code === "en") continue;
+      for (const value of Object.values(directoryLabels(option.code))) {
+        expect(value, `${option.code} ${value}`).not.toMatch(englishLabel);
+      }
+    }
+    expect(directoryLabels("vi").email).toBe("Thư điện tử:");
   });
 });

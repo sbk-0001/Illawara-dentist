@@ -4,12 +4,12 @@ import { ensureAddressReply, isAddressQuestion } from "./address";
 import { directoryLabels } from "./contacts";
 import { guardBareHoursReply, mayBeBareHours } from "./hours";
 
-const ENGLISH_LABEL = "(?:phone|booking|email|address)";
+const ENGLISH_LABEL = "(?:phone|booking|email|address|hours|website)";
 const LINE_LABEL = new RegExp(`^(${ENGLISH_LABEL})\\s*[:：]\\s*(\\S.*)$`, "i");
-const LABEL_PREFIX = /^(?:p(?:h(?:o(?:n(?:e)?)?)?)?|b(?:o(?:o(?:k(?:i(?:n(?:g)?)?)?)?)?)?|e(?:m(?:a(?:i(?:l)?)?)?)?|a(?:d(?:d(?:r(?:e(?:s(?:s)?)?)?)?)?)?)?$/i;
+const LABEL_PREFIX = /^(?:p(?:h(?:o(?:n(?:e)?)?)?)?|b(?:o(?:o(?:k(?:i(?:n(?:g)?)?)?)?)?)?|e(?:m(?:a(?:i(?:l)?)?)?)?|a(?:d(?:d(?:r(?:e(?:s(?:s)?)?)?)?)?)?|h(?:o(?:u(?:r(?:s)?)?)?)?|w(?:e(?:b(?:s(?:i(?:t(?:e)?)?)?)?)?)?)$/i;
 const OPEN_LABEL = new RegExp(`^${ENGLISH_LABEL}\\s*[:：]?\\s*[\\d\\s()+./:@-]*$`, "i");
 
-type LabelKey = "phone" | "booking" | "email" | "address";
+type LabelKey = "phone" | "booking" | "email" | "address" | "hours" | "website";
 
 function digits(value: string): string {
   return value.replace(/\D/g, "");
@@ -18,7 +18,7 @@ function digits(value: string): string {
 export function rewriteContactLabels(text: string, code: string): string {
   if (!code || code === "en" || code === "und") return text;
   const labels = directoryLabels(code);
-  return text.replace(/(^|\n)([ \t]*)(phone|booking|email|address)[ \t]*[:：][ \t]*/gi, (_all, brk: string, space: string, word: string) => {
+  return text.replace(/(^|\n)([ \t]*)(phone|booking|email|address|hours|website)[ \t]*[:：][ \t]*/gi, (_all, brk: string, space: string, word: string) => {
     const key = word.toLowerCase() as LabelKey;
     return `${brk}${space}${labels[key]} `;
   });

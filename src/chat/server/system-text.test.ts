@@ -19,7 +19,10 @@ describe("localized system text", () => {
     expect(replyScriptConflicts("হ্যাঁ, Dapto Dentists-এ দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।", "bn")).toBe(false);
     expect(
       replyScriptConflicts("পেজে teeth whitening এবং professional teeth whitening সম্পর্কে বলা আছে। আরও বিস্তারিত নেই।", "bn"),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      replyScriptConflicts("হ্যাঁ, same day emergency appointment slots আছে। আরও বিস্তারিত জানতে ক্লিনিকে ফোন করুন আজই।", "bn"),
+    ).toBe(true);
     expect(replyScriptConflicts("Please call the clinic for an urgent dental appointment today.", "hi")).toBe(true);
     expect(
       replyScriptConflicts(

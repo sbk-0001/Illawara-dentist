@@ -82,13 +82,38 @@ function countPattern(text: string, re: RegExp): number {
   return text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))?.length ?? 0;
 }
 
-function countableReply(text: string): string {
+function withoutProperNouns(text: string): string {
   return text
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, " ")
     .replace(/\+?\d[\d\s().-]{7,}\d/g, " ")
     .replace(new RegExp(PROPER_LATIN.source, PROPER_LATIN.flags), " ")
-    .replace(new RegExp(LOAN_LATIN.source, LOAN_LATIN.flags), " ");
+    .replace(/([A-Za-z\u00C0-\u024F])[-‐‑‒–—](?![A-Za-z\u00C0-\u024F])/g, "$1 ");
+}
+
+function countableReply(text: string): string {
+  return withoutProperNouns(text).replace(new RegExp(LOAN_LATIN.source, LOAN_LATIN.flags), " ");
+}
+
+/**
+ * Longest run of consecutive Latin words after proper nouns are removed.
+ * Single clinical terms may stay. A run of three or more is an English phrase.
+ */
+export function latinWordRun(text: string): number {
+  const tokens = withoutProperNouns(text).split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  let run = 0;
+  let longest = 0;
+  for (const token of tokens) {
+    const letters = [...token].filter((ch) => /\p{L}/u.test(ch));
+    const latin = letters.length >= 2 && letters.every((ch) => LATIN_LETTER.test(ch));
+    if (latin) {
+      run += 1;
+      if (run > longest) longest = run;
+    } else if (letters.length > 0) {
+      run = 0;
+    }
+  }
+  return longest;
 }
 
 export type ScriptMeasure = { ratio: number | null; conflicts: boolean };
@@ -105,9 +130,10 @@ export function measureReplyScript(text: string, code: string): ScriptMeasure {
   const latin = countPattern(body, LATIN_LETTER);
   const native = countPattern(body, nativeRe);
   const total = latin + native;
-  if (total < 16) return { ratio: null, conflicts: false };
+  const phrase = latinWordRun(text) >= 3;
+  if (total < 16) return { ratio: null, conflicts: phrase };
   const ratio = native / total;
-  return { ratio, conflicts: ratio < NATIVE_SCRIPT_FLOOR };
+  return { ratio, conflicts: ratio < NATIVE_SCRIPT_FLOOR || phrase };
 }
 
 /** The finished text is in the wrong script when the target script is under 40%. */

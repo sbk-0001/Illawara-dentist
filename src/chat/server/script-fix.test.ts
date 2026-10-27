@@ -23,6 +23,15 @@ describe("reply script fix", () => {
     expect(fixed).not.toMatch(/[\u0900-\u097F]/);
   });
 
+  it("maps stray Bengali letters into Devanagari and the reverse", () => {
+    expect(fixReplyScript("सাদা", "hi")).toBe("सादा");
+    expect(fixReplyScript("सাদা", "hi")).not.toMatch(/[\u0980-\u09FF]/);
+    expect(fixReplyScript("সাदा", "bn")).toBe("সাদা");
+    expect(fixReplyScript("সাदा", "bn")).not.toMatch(/[\u0900-\u097F]/);
+    expect(fixReplyScript("সাদা", "bn")).toBe("সাদা");
+    expect(fixReplyScript("सादा", "hi")).toBe("सादा");
+  });
+
   it("maps a stray traditional character only for simplified Chinese", () => {
     expect(fixReplyScript("製作", "zh", "洗牙")).toBe("制作");
     expect(fixReplyScript("製作", "zh", "製作")).toBe("製作");

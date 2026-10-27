@@ -259,10 +259,41 @@ export function toSimplified(text: string): string {
   return [...text].map((ch) => TRAD_TO_SIMP[ch] || ch).join("");
 }
 
+const DEVA_START = 0x0900;
+const BENG_START = 0x0980;
+const INDIC_BLOCK = 0x80;
+
+/** Bengali and Devanagari share a layout. 0x0980 maps onto 0x0900. */
+function mapIndicBlock(text: string, from: number, to: number): string {
+  let out = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < from || code >= from + INDIC_BLOCK) {
+      out += ch;
+      continue;
+    }
+    const mapped = String.fromCodePoint(code - from + to);
+    out += /\p{L}|\p{M}/u.test(mapped) ? mapped : ch;
+  }
+  return out;
+}
+
+/** Stray Bengali letters inside a Devanagari reply, for example सাদা → सादा. */
+export function bengaliToDevanagari(text: string): string {
+  return mapIndicBlock(text, BENG_START, DEVA_START);
+}
+
+/** Stray Devanagari letters inside a Bengali reply. */
+export function devanagariToBengali(text: string): string {
+  return mapIndicBlock(text, DEVA_START, BENG_START);
+}
+
 /** Fix a finished reply. `visitorText` decides whether a Chinese reply should stay traditional. */
 export function fixReplyScript(text: string, code: string, visitorText = ""): string {
   if (code === "bn-Latn") return transliterateBengali(text);
   if (code === "hi-Latn") return transliterateDevanagari(text);
+  if (code === "hi") return bengaliToDevanagari(text);
+  if (code === "bn") return devanagariToBengali(text);
   if (code === "zh" && !visitorUsesTraditional(visitorText)) return toSimplified(text);
   return text;
 }
@@ -276,7 +307,7 @@ function holdsCluster(ch: string, code: string): boolean {
 /** Streaming helper. Latin text passes through; a trailing consonant waits for a vowel sign. */
 export function createScriptBuffer(code: string, visitorText = "") {
   let hold = "";
-  const active = code === "bn-Latn" || code === "hi-Latn" || (code === "zh" && !visitorUsesTraditional(visitorText));
+  const active = code === "bn-Latn" || code === "hi-Latn" || code === "bn" || code === "hi" || (code === "zh" && !visitorUsesTraditional(visitorText));
   return {
     push(delta: string): string {
       if (!active) return delta;

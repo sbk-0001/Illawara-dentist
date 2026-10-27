@@ -351,28 +351,6 @@ export function languageAfterRepair(requested: string | null | undefined, repair
   return spokenLanguageForTranscript(requested, repaired, hint) || script;
 }
 
-/**
- * Language of this Deepgram result. The script on the current text wins over a tag
- * left over from the previous turn, so Hindi speech does not keep a Bengali note.
- */
-const NOTE_SCRIPT: { code: string; re: RegExp }[] = [
-  { code: "bn", re: /[\u0980-\u09FF]/ },
-  { code: "hi", re: /[\u0900-\u097F]/ },
-  { code: "ar", re: /[\u0600-\u06FF]/ },
-  { code: "ko", re: /[\uAC00-\uD7AF]/ },
-  { code: "ja", re: /[\u3040-\u30FF]/ },
-  { code: "zh", re: /[\u4E00-\u9FFF]/ },
-  { code: "el", re: /[\u0370-\u03FF]/ },
-  { code: "ru", re: /[\u0400-\u04FF]/ },
-  { code: "th", re: /[\u0E00-\u0E7F]/ },
-  { code: "he", re: /[\u0590-\u05FF]/ },
-];
-
-/** One native character is enough for the mic note. It does not decide the reply language. */
-function noteScript(text: string): string {
-  return NOTE_SCRIPT.find((item) => item.re.test(text))?.code ?? "";
-}
-
 function numericConfidence(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -410,57 +388,68 @@ function detectedInterimLanguage(alternative: DeepgramAlternative | undefined): 
   return fromWords || utteranceLanguage(alternative) || "";
 }
 
+const NOTE_SCRIPT_MIN = 3;
+
+function scriptCount(text: string, re: RegExp): number {
+  return text.match(re)?.length ?? 0;
+}
+
+function noteScriptContradicts(code: string, text: string): boolean {
+  const bengali = /[\u0980-\u09FF]/.test(text);
+  const devanagari = /[\u0900-\u097F]/.test(text);
+  if ((code === "hi" || code === "ne" || code === "te") && bengali) return true;
+  if (code === "bn" && devanagari) return true;
+  return false;
+}
+
+/** A non-English note language, once the transcript has at least three characters of that script. */
+function nativeNoteLanguage(text: string): string {
+  const bengali = scriptCount(text, /[\u0980-\u09FF]/g);
+  const devanagari = scriptCount(text, /[\u0900-\u097F]/g);
+  if (bengali >= NOTE_SCRIPT_MIN && devanagari === 0) return "bn";
+  if (devanagari >= NOTE_SCRIPT_MIN && bengali === 0) return "hi";
+  if (bengali > 0 || devanagari > 0) return "";
+  const code = languageFromNativeScript(text);
+  if (!code) return "";
+  const re = NATIVE_SCRIPT[code];
+  if (!re || scriptCount(text, new RegExp(re.source, "g")) < NOTE_SCRIPT_MIN) return "";
+  return code;
+}
+
+function lockNote(streak: MicLanguageStreak | undefined, code: string) {
+  if (!streak) return;
+  streak.code = code;
+  streak.count = NOTE_SCRIPT_MIN;
+}
+
 /**
  * Language for the listening note.
- * Native-script characters can name it immediately. Bengali characters never
- * show Hindi or Telugu. Any other non-English guess waits until the same
- * language appears on two interim results in a row. Deepgram confidence alone
- * does not switch the note.
+ * Romanised Deepgram interims are not trusted. A non-English language is shown
+ * only after three native characters of its script, which locks the utterance,
+ * or after a final result. Bengali characters never show Hindi or Telugu, and
+ * Devanagari characters never show Bengali. Otherwise the widget stays on a
+ * neutral listening line.
  */
 export function interimMicLanguage(
   alternative: DeepgramAlternative | undefined,
   transcript: string,
-  context?: { hint?: string | null; previous?: string | null; seen?: string | null; streak?: MicLanguageStreak },
+  context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak },
 ): string {
   const seen = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
-  const script = languageFromNativeScript(seen) || noteScript(seen);
-  const picker = normalizeSpokenLanguage(context?.hint) || "";
-  const previous = normalizeSpokenLanguage(context?.previous) || "";
-  const fallback = picker || previous;
-  if (/[\u0980-\u09FF]/.test(seen) || (picker === "bn" && (script === "hi" || detectedInterimLanguage(alternative) === "hi") && /[\u0900-\u097F]/.test(seen))) {
-    if (context?.streak) {
-      context.streak.code = "bn";
-      context.streak.count = 2;
-    }
-    return "bn";
+  const locked = context?.streak?.code || "";
+  if (locked && !noteScriptContradicts(locked, seen)) return locked;
+  if (context?.streak && locked) context.streak.code = "";
+  const fromScript = nativeNoteLanguage(seen);
+  if (fromScript) {
+    lockNote(context?.streak, fromScript);
+    return fromScript;
   }
-  if (script) {
-    if (context?.streak) {
-      context.streak.code = script;
-      context.streak.count = 2;
-    }
-    return script;
-  }
+  if (/[\u0980-\u09FF]/.test(seen) || /[\u0900-\u097F]/.test(seen)) return "";
+  if (!context?.final || !seen) return "";
   const detected = detectedInterimLanguage(alternative);
-  if (!detected || detected === "en") {
-    if (context?.streak) {
-      context.streak.code = "";
-      context.streak.count = 0;
-    }
-    return fallback;
-  }
-  if (detected === "hi" || detected === "te") {
-    if (/[\u0980-\u09FF]/.test(seen)) return "bn";
-  }
-  const streak = context?.streak;
-  if (!streak) return fallback;
-  if (streak.code === detected) streak.count += 1;
-  else {
-    streak.code = detected;
-    streak.count = 1;
-  }
-  if (streak.count >= 2) return detected;
-  return fallback;
+  if (!detected || detected === "en" || noteScriptContradicts(detected, seen)) return "";
+  lockNote(context?.streak, detected);
+  return detected;
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
@@ -536,13 +525,21 @@ export function correctTranscript(text: string): string {
   });
 }
 
-/** Mic status once Deepgram has a language, for example "শুনছি · বাংলা". */
+/** Mic status once the utterance language is known, for example "শুনছি · বাংলা". */
 export function micListeningNote(code: string | null | undefined): string {
   const normalized = normalizeSpokenLanguage(code);
   if (!normalized || normalized === "en") return "Listening…";
   const option = languageOption(normalized);
   const verb = LISTENING_VERB[normalized] ?? "Listening";
   return `${verb} · ${option?.label ?? normalized}`;
+}
+
+/** Neutral mic line before the utterance language is known. Uses the session language when there is one. */
+export function micWaitingNote(code: string | null | undefined): string {
+  const normalized = normalizeSpokenLanguage(code);
+  if (!normalized || normalized === "en") return "Listening…";
+  const verb = LISTENING_VERB[normalized] ?? "Listening";
+  return /[….]$/u.test(verb) ? verb : `${verb}…`;
 }
 
 export function formatLiveDrop(input: { code?: number; reason?: string; wasClean?: boolean; fallback?: string }): string {

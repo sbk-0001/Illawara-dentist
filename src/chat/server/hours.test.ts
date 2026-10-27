@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachHoursWording, bareHoursClinic, formatClinicHours, guardBareHoursReply, hoursRangeClause, hoursRelevant, hoursSource, mayBeBareHours, rewriteEnglishHours } from "./hours";
+import { attachHoursWording, bareHoursClinic, ensureEnglishHoursStop, formatClinicHours, guardBareHoursReply, hoursRangeClause, hoursRelevant, hoursSource, mayBeBareHours, rewriteEnglishHours } from "./hours";
 
 const ENGLISH_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const AMPM = /\b(am|pm)\b/i;
@@ -77,6 +77,10 @@ describe("localised opening hours", () => {
     const named = guardBareHoursReply(line, "en", { kind: "one", clinic: "dapto" });
     expect(named.startsWith("Dapto Dentists is open:")).toBe(true);
     expect(named).toContain("Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.");
+    expect(named.trimEnd().endsWith(".")).toBe(true);
+    const copied = "Dapto Dentists is open: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM";
+    expect(ensureEnglishHoursStop(copied).endsWith(".")).toBe(true);
+    expect(guardBareHoursReply(copied, "en", { kind: "one", clinic: "dapto" }).trimEnd().endsWith(".")).toBe(true);
     expect(named.split("Monday–Friday").length - 1).toBe(1);
     expect(named).not.toContain("Dapto Dentists: ");
     expect(guardBareHoursReply("We are open on Saturday.", "en", { kind: "ask" })).toBe("We are open on Saturday.");

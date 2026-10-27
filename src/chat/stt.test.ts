@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -75,29 +75,29 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(languageAfterRepair("bn", "डाप्टो क्लिनिक कब खुलेगा?", "bn")).toBe("bn");
     expect(languageAfterRepair("bn", "डाप्टो क्लिनिक कब खुलेगा?")).toBe("hi");
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "hi" }, { language: "hi" }] }, "\u0921\u093e\u092a\u094d\u091f\u094b \u0915\u094d\u0932\u093f\u0928\u093f\u0915")).toBe("hi");
-    const spanish = { code: "", count: 0 };
-    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?", { streak: spanish })).toBe("");
-    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?", { streak: spanish })).toBe("es");
-    const spanishBare = { code: "", count: 0 };
-    expect(interimMicLanguage({ languages: ["es"] }, "", { streak: spanishBare })).toBe("");
-    expect(interimMicLanguage({ languages: ["es"] }, "", { streak: spanishBare })).toBe("es");
-    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.2 }, { language: "te", confidence: 0.4 }] }, "", { hint: "bn", previous: "bn" })).toBe("bn");
-    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "Dapto clinic", { hint: "bn" })).toBe("bn");
-    expect(interimMicLanguage({ languages: ["te"], words: [{ language: "te" }] }, "", { previous: "bn" })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?")).toBe("");
+    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?", { final: true })).toBe("es");
+    expect(interimMicLanguage({ languages: ["es"] }, "", { final: true })).toBe("");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "teeth whitening", { hint: "bn", previous: "bn" })).toBe("");
+    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "Dapto clinic", { hint: "bn" })).toBe("");
+    expect(interimMicLanguage({ languages: ["te"], words: [{ language: "te" }] }, "", { previous: "bn" })).toBe("");
+    expect(interimMicLanguage({ languages: ["hi"] }, "কল")).toBe("");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "কলি")).toBe("bn");
     expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.95 }] }, "ক্লিনিক", { hint: "bn" })).toBe("bn");
     expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "ক্লিনিক")).toBe("bn");
     expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "আমি Dapto")).toBe("bn");
-    const flicker = { code: "", count: 0 };
-    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "Dapto", { streak: flicker })).toBe("");
-    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "clinic", { streak: flicker })).toBe("");
-    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "Dapto clinic", { streak: flicker })).toBe("te");
-    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "ক্লিনিক", { streak: flicker })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["bn"] }, "\u0926")).toBe("");
+    expect(interimMicLanguage({ languages: ["bn"] }, "\u0926\u093e\u0902\u0924")).toBe("hi");
+    const locked = { code: "", count: 0 };
+    expect(interimMicLanguage(undefined, "কলি", { streak: locked })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["hi"] }, "teeth whitening", { streak: locked, seen: "কলি" })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["bn"] }, "mujhe dard hai")).toBe("");
+    expect(interimMicLanguage({ languages: ["hi"] }, "mujhe dard hai", { final: true })).toBe("hi");
     expect(votesFromAlternative({ language: { language: "es" } })).toEqual(["es"]);
     expect(votesFromAlternative({ words: [{ language: { language: "bn" } }] })).toEqual(["bn"]);
-    const bengaliHeard = { code: "", count: 0 };
-    expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "", { streak: bengaliHeard })).toBe("");
-    expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "", { streak: bengaliHeard })).toBe("bn");
-    expect(interimMicLanguage(undefined, "ক")).toBe("bn");
+    expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "")).toBe("");
+    expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "teeth whitening", { final: true })).toBe("bn");
+    expect(interimMicLanguage(undefined, "ক")).toBe("");
     expect(interimMicLanguage(undefined, "")).toBe("");
     expect(spokenLanguageAtSubmit({ interim: "es", text: "¿A qué hora abre Dapto?" })).toBe("es");
     expect(spokenLanguageAtSubmit({ text: "ডাপ্টো ক্লিনিকের ঠিকানা কি?" })).toBe("bn");
@@ -106,6 +106,10 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(micListeningNote("es")).toContain("Escuchando");
     expect(micListeningNote("bn")).toBe("শুনছি · বাংলা");
     expect(micListeningNote("en")).toBe("Listening…");
+    expect(micWaitingNote("bn")).toBe("শুনছি…");
+    expect(micWaitingNote("en")).toBe("Listening…");
+    expect(micWaitingNote(null)).toBe("Listening…");
+    expect(micWaitingNote("bn")).not.toContain("বাংলা");
     expect(formatLiveDrop({ code: 1006, reason: "abnormal", wasClean: false })).toBe("1006 abnormal unclean");
   });
 

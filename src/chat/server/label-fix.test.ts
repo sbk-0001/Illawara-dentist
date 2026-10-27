@@ -30,6 +30,10 @@ describe("contact label rewrite", () => {
     expect(rewriteContactLabels("ফোন নম্বর\nPhone: 02 4216 9911", "bn")).toBe("ফোন নম্বর\nফোন: 02 4216 9911");
     expect(rewriteContactLabels("Booking: https://bookings.zavy360.com/a", "ar")).toContain("الحجز:");
     expect(rewriteContactLabels("Email: info@shellharbourdentist.com.au", "hi")).toContain("ईमेल:");
+    expect(rewriteContactLabels("Email: info@woononadentists.com.au", "vi")).toContain("Thư điện tử:");
+    expect(rewriteContactLabels("Email: info@woononadentists.com.au", "vi")).not.toContain("Email:");
+    expect(rewriteContactLabels("Hours: Monday", "vi")).toContain("Giờ mở cửa:");
+    expect(rewriteContactLabels("Website: https://woononadentists.com.au", "vi")).toContain("Trang web:");
     expect(rewriteContactLabels("Address: 35 Baan Baan Street", "id")).toContain("Alamat:");
     expect(rewriteContactLabels("Phone: 02 4216 9911", "en")).toBe("Phone: 02 4216 9911");
     expect(rewriteContactLabels("Call the phone: 02 4216 9911", "bn")).toContain("phone:");
