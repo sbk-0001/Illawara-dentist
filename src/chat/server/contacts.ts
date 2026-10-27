@@ -353,11 +353,24 @@ function wordCount(text: string): number {
   return flatReply(text).split(/\s+/).filter(Boolean).length;
 }
 
+/** Latin phrases that are stored as a stem so "menzionato" still matches. */
+function allowsLetterContinuation(phrase: string): boolean {
+  return /(?:menzionat|mencionad)$/i.test(phrase);
+}
+
+function phraseHits(text: string, phrase: string): boolean {
+  const needle = phrase.toLowerCase();
+  if (!/[a-z]/i.test(needle)) return text.includes(needle);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const continuation = allowsLetterContinuation(needle) ? "" : "(?![\\p{L}])";
+  return new RegExp(`(?:^|[^\\p{L}])${escaped}${continuation}`, "iu").test(text);
+}
+
 function matchedNoInfoPhrase(text: string): string | undefined {
   const flat = flatReply(text);
   if (!flat) return undefined;
   const lower = flat.toLowerCase();
-  return NO_INFO.find((phrase) => lower.includes(phrase.toLowerCase()));
+  return NO_INFO.find((phrase) => phraseHits(lower, phrase));
 }
 
 /** A short reply that says the information is missing, in the languages the widget answers. */
@@ -382,9 +395,9 @@ function questionAsksForContact(question: string): boolean {
 }
 
 function replyLooksLikeContact(reply: string): boolean {
-  if (/zavy360\.com/i.test(reply)) return true;
+  if (/zavy\s*360\.com|zavy360\.com/i.test(reply)) return true;
   if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(reply)) return true;
-  const runs = reply.match(/\d[\d\s()-]{8,}\d/g) ?? [];
+  const runs = reply.match(/\d[\d\s().-]{8,}\d/g) ?? [];
   return runs.some((run) => digits(run).length >= 10);
 }
 
@@ -518,6 +531,8 @@ export function chooseContactFooter(input: FooterDecision): FooterKind {
   if (input.statusTag === "N") return replyHasRoute(reply, input) ? "none" : "no-answer";
   if (input.statusTag === "A") {
     if (replyHasRoute(reply, input)) return "none";
+    // "no mencionar" / "puedes reservar" are not "the site does not say" once a phone or booking link is in the answer.
+    if (reply && replyLooksLikeContact(reply)) return "none";
     if (reply && replyClearlyHasNoInfo(reply)) return "no-answer";
     if (questionAsksForContact(question)) return "route";
     return "none";
@@ -639,7 +654,8 @@ export function attachContactFooter<T extends FooterChunk>(
       statusTag: input.replyStatus ? input.replyStatus.tag : undefined,
     });
     const block = kind === "no-answer" ? input.footer : kind === "route" ? input.routeFooter ?? "" : "";
-    if (!block || input.covered(shown)) return;
+    const lead = block.split("\n")[0]?.trim() ?? "";
+    if (!block || input.covered(shown) || (lead.length >= 12 && shown.includes(lead))) return;
     const id = textId ?? "contact-footer";
     const delta = `${shown.trim() ? "\n\n" : ""}${block}`;
     if (!textId) controller.enqueue({ type: "text-start", id } as T);

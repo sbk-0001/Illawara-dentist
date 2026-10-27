@@ -119,7 +119,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const spoken = spokenLanguageForTranscript(heard, transcript, preferredSpeechLanguage()) || "";
     voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop: session.current.liveDrop };
     setInput(transcript);
-    const note = interimMicLanguage(undefined, transcript) || heard;
+    const note = interimMicLanguage(undefined, transcript, { hint: preferredSpeechLanguage(), previous: heard }) || heard;
     setMicNote(note ? micListeningNote(note) : "Listening…");
   }
 
@@ -333,12 +333,15 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           });
           const transcript = alternative?.transcript?.trim() || "";
           if (staleDraft()) return;
-          const heardNow = interimMicLanguage(alternative, transcript);
-          const deepgram = majoritySpokenLanguage(votesFromAlternative(alternative));
-          if (deepgram) session.current.interimLanguage = deepgram;
-          else if (heardNow) session.current.interimLanguage = heardNow;
-          if (heardNow || session.current.interimLanguage) {
-            setMicNote(micListeningNote(heardNow || session.current.interimLanguage));
+          const heardNow = interimMicLanguage(alternative, transcript, {
+            hint: preferredSpeechLanguage(),
+            previous: session.current.spokenLanguage,
+          });
+          if (heardNow) {
+            session.current.interimLanguage = heardNow;
+            setMicNote(micListeningNote(heardNow));
+          } else if (!session.current.interimLanguage) {
+            setMicNote("Listening…");
           }
           if (!transcript) return;
           const hint = preferredSpeechLanguage();

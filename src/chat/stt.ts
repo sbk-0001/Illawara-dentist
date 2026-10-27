@@ -171,7 +171,9 @@ export type DeepgramAlternative = {
   transcript?: string;
   language?: unknown;
   languages?: unknown[];
-  words?: { language?: unknown }[];
+  /** Utterance-level language confidence, when Deepgram sent one. */
+  language_confidence?: number;
+  words?: { language?: unknown; confidence?: number; language_confidence?: number }[];
 };
 
 function languageCode(value: unknown): string | null {
@@ -371,12 +373,71 @@ function noteScript(text: string): string {
   return NOTE_SCRIPT.find((item) => item.re.test(text))?.code ?? "";
 }
 
-export function interimMicLanguage(alternative: DeepgramAlternative | undefined, transcript: string): string {
-  const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
-  const script = languageFromNativeScript(transcript);
-  if (script && script !== heard) return script;
-  if (heard) return heard;
-  return script || noteScript(transcript);
+const MIC_LANGUAGE_CONFIDENCE = 0.8;
+
+function numericConfidence(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function voteConfidence(value: unknown, fallback?: number): number | undefined {
+  const direct = numericConfidence(fallback);
+  if (direct !== undefined) return direct;
+  if (value && typeof value === "object" && "confidence" in value) return numericConfidence((value as { confidence?: unknown }).confidence);
+  return undefined;
+}
+
+/** Word languages only count when Deepgram is confident. An utterance language can stand on its own. */
+function wordLanguageVotes(alternative: DeepgramAlternative | undefined): { code: string; confidence?: number }[] {
+  const votes: { code: string; confidence?: number }[] = [];
+  for (const word of alternative?.words ?? []) {
+    const code = normalizeSpokenLanguage(languageCode(word?.language));
+    if (!code) continue;
+    votes.push({ code, confidence: voteConfidence(word?.language, word?.language_confidence ?? word?.confidence) });
+  }
+  return votes;
+}
+
+function confidentWordLanguage(alternative: DeepgramAlternative | undefined): string | null {
+  const votes = wordLanguageVotes(alternative)
+    .filter((vote) => vote.confidence !== undefined && vote.confidence >= MIC_LANGUAGE_CONFIDENCE)
+    .map((vote) => vote.code);
+  return majoritySpokenLanguage(votes);
+}
+
+function utteranceLanguage(alternative: DeepgramAlternative | undefined): string | null {
+  return (
+    normalizeSpokenLanguage(languageCode(alternative?.language)) ||
+    normalizeSpokenLanguage(languageCode(alternative?.languages?.[0])) ||
+    null
+  );
+}
+
+/**
+ * Language for the listening note.
+ * A native-script character, or a high-confidence word language, can name it.
+ * A low-confidence Hindi or Telugu flicker does not replace the session hint.
+ * The note never moves to a language the hint and the script both reject.
+ */
+export function interimMicLanguage(
+  alternative: DeepgramAlternative | undefined,
+  transcript: string,
+  context?: { hint?: string | null; previous?: string | null },
+): string {
+  const script = languageFromNativeScript(transcript) || noteScript(transcript);
+  const hint = normalizeSpokenLanguage(context?.hint) || normalizeSpokenLanguage(context?.previous) || "";
+  if (hint === "bn" && (script === "hi" || confidentWordLanguage(alternative) === "hi")) return "bn";
+  if (script) return script;
+  const confident = confidentWordLanguage(alternative);
+  if (confident) return hint && confident !== hint ? hint : confident;
+  if (wordLanguageVotes(alternative).length) return hint;
+  const utterance = utteranceLanguage(alternative);
+  if (utterance) {
+    const confidence = numericConfidence(alternative?.language_confidence);
+    if (hint && utterance !== hint && (confidence === undefined || confidence < MIC_LANGUAGE_CONFIDENCE)) return hint;
+    if (hint && utterance !== hint) return hint;
+    return utterance;
+  }
+  return hint;
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;

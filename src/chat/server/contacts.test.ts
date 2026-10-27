@@ -640,6 +640,37 @@ describe("contact footer", () => {
         statusTag: null,
       }),
     ).toBe("no-answer");
+    const spanishBooking =
+      "Puedes reservar en Dapto Dentists. No mencionar otra clínica. Teléfono 02.4261.3131 https://bookings.zavy360.com/booking/shellharbourdentists/locations/a";
+    expect(
+      chooseContactFooter({
+        question: "¿Puedo reservar en Dapto?",
+        sourceCount: 3,
+        topScore: 0.92,
+        replyText: spanishBooking,
+        index,
+        focus: { kind: "one", clinic: "dapto" },
+        statusTag: "A",
+      }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({
+        question: "¿Hacen implantes en Dapto?",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "Puedes preguntar en la clínica. No mencionar un precio fijo.",
+        statusTag: "A",
+      }),
+    ).toBe("none");
+    expect(
+      chooseContactFooter({
+        question: "¿Hacen implantes en Dapto?",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "No se menciona esa información.",
+        statusTag: "A",
+      }),
+    ).toBe("no-answer");
 
     const french = detectLanguage("Faites-vous des traitements de canal à Woonona?");
     const replyStatus = { tag: "A" as const };
@@ -670,6 +701,41 @@ describe("contact footer", () => {
     expect(answeredText).toBe(hours);
     expect(answeredText).not.toContain("Le site ne donne pas");
     expect(answeredText).not.toContain("does not list an answer");
+
+    const spanish = detectLanguage("¿Puedo reservar en Dapto?");
+    const spanishFooter = contactFooter(index, spanish, { kind: "one", clinic: "dapto" });
+    const lead = spanishFooter.split("\n")[0] ?? "";
+    const echoed = await readChunks(
+      attachContactFooter(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: "text-start", id: "t1" });
+            controller.enqueue({
+              type: "text-delta",
+              id: "t1",
+              delta: `Puedes reservar en Dapto Dentists. No mencionar otra clínica. 02.4261.3131\n\n${spanishFooter}`,
+            });
+            controller.enqueue({ type: "text-end", id: "t1" });
+            controller.close();
+          },
+        }),
+        {
+          footer: spanishFooter,
+          routeFooter: contactRouteFooter(index, spanish, { kind: "one", clinic: "dapto" }),
+          sourcesFound: true,
+          sourceCount: 3,
+          topScore: 0.92,
+          question: "¿Puedo reservar en Dapto?",
+          covered: (text) => replyHasContactRoute(text, index),
+          index,
+          focus: { kind: "one", clinic: "dapto" },
+          replyStatus: { tag: "A" },
+        },
+      ),
+    );
+    const echoedText = echoed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(echoedText.split(lead).length - 1).toBe(1);
+    expect(echoedText).not.toContain("Llame o reserve:");
 
     const missed = await readChunks(
       attachContactFooter(

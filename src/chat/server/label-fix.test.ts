@@ -199,4 +199,25 @@ describe("contact label rewrite", () => {
     expect(street).not.toContain("02 4288 0737");
     expect(street).not.toContain("Captain Cook");
   });
+
+  it("turns a tagged Korean phone label into a sentence", async () => {
+    expect(isLabelValueLine("전화: 02 4284 4486", "ko")).toBe(true);
+    expect(isLabelValueLine("전화번호: 02 4288 0737", "ko")).toBe(true);
+    expect(isShortLabelReply("연락처 02 4284 4486", "ko")).toBe(true);
+    expect(isOnlyContactLine("Dapto Dentists 전화 02 4288 0737")).toBe(true);
+
+    const labeled = await readChunks(
+      attachContactLabels(source(["전화: 02 4284 4486"]), { code: "ko", index, replyStatus: { missing: false } }),
+    );
+    const labeledText = labeled.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(labeledText.startsWith("Woonona Dentists의 전화번호는 02 4284 4486입니다.")).toBe(true);
+    expect(labeledText).toContain("전화: 02 4284 4486");
+
+    const bare = await readChunks(
+      attachContactLabels(source(["Dapto Dentists 전화 02 4288 0737"]), { code: "ko", index, replyStatus: { missing: false } }),
+    );
+    const bareText = bare.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(bareText.startsWith("Dapto Dentists의 전화번호는 02 4288 0737입니다.")).toBe(true);
+    expect(bareText).toContain("Dapto Dentists 전화 02 4288 0737");
+  });
 });

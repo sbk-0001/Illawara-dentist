@@ -32,20 +32,31 @@ function normalizeLabel(value: string): string {
 
 function knownLabels(code: string): string[] {
   const labels = directoryLabels(!code || code === "und" ? "en" : code);
-  return [...new Set(["phone", "booking", "email", "address", labels.phone, labels.booking, labels.email, labels.address].map(normalizeLabel))];
+  const extra = code === "ko" ? ["전화번호", "연락처"] : [];
+  return [...new Set(["phone", "booking", "email", "address", labels.phone, labels.booking, labels.email, labels.address, ...extra].map(normalizeLabel))];
 }
 
 /** One short `label: value` line, in English or the reply language. */
 export function isLabelValueLine(line: string, code: string): boolean {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length >= BARE_REPLY_MAX) return false;
+  const labels = knownLabels(code).slice().sort((a, b) => b.length - a.length);
+  const lower = trimmed.toLowerCase();
+  for (const label of labels) {
+    if (label.length < 2 || !lower.startsWith(label)) continue;
+    const rest = trimmed.slice(label.length).replace(/^[\s:：\-–—]+/, "");
+    const contact = /\d[\d\s().-]{8,}\d/.test(rest) || /@/.test(rest) || /https?:|zavy360/i.test(rest);
+    if (!contact) continue;
+    if (/^[a-z]+$/i.test(label) && rest.split(/\s+/).filter(Boolean).length > 4) continue;
+    return true;
+  }
   const match = trimmed.match(/^([^:：\n]{1,32}?)\s*[:：]\s*(\S[\s\S]*)$/);
   if (!match) return false;
   const label = match[1].trim();
   const value = match[2].trim();
   if (!label || !value || label.split(/\s+/).length > 3) return false;
   const known = knownLabels(code).includes(normalizeLabel(label));
-  const contactValue = /\d[\d\s()-]{8,}\d/.test(value) || /@/.test(value) || /https?:|zavy360/i.test(value);
+  const contactValue = /\d[\d\s().-]{8,}\d/.test(value) || /@/.test(value) || /https?:|zavy360/i.test(value);
   if (known) return true;
   return contactValue && label.split(/\s+/).length === 1 && label.length <= 16;
 }
@@ -209,7 +220,11 @@ export function attachContactLabels<T extends LabelChunk>(
       ? ensureAddressReply(hours, input.question, input.code, input.index, input.focus ?? { kind: "ask" })
       : hours;
     if (addressed !== body) return addressed;
-    const bare = isShortLabelReply(body, input.code) || isShortLabelReply(raw, input.code) || (input.replyStatus.missing && isOnlyContactLine(raw));
+    const bare =
+      isShortLabelReply(body, input.code) ||
+      isShortLabelReply(raw, input.code) ||
+      isOnlyContactLine(body) ||
+      isOnlyContactLine(raw);
     if (bare) {
       const preface = bareContactPreface(input.code, raw, input.index);
       if (preface) return `${preface}\n${body}`;

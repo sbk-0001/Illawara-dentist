@@ -72,8 +72,8 @@ export type ChatTimingEvent = {
   langOverride: boolean;
   /** Why the live Deepgram socket closed, when the browser reported it. */
   liveDrop?: string;
-  /** Stage that timed out or produced the wrong script. Absent when nothing stalled. */
-  stalled?: StalledStage;
+  /** Stage that timed out or produced the wrong script. Null when nothing stalled. */
+  stalled: StalledStage | null;
   /** The 2s retrieval cap returned lexical hits. */
   retrievalTimedOut?: boolean;
 };
@@ -194,7 +194,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       transcriptScript: input.transcriptScript ?? "",
       langOverride: input.langOverride === true,
       ...(input.liveDrop ? { liveDrop: input.liveDrop } : {}),
-      ...(stalled ? { stalled } : {}),
+      stalled: stalled ?? null,
       ...(input.retrievalTimedOut ? { retrievalTimedOut: true } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;

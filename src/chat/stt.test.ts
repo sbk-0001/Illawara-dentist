@@ -77,6 +77,11 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "hi" }, { language: "hi" }] }, "डाप्टो क्लिनिक")).toBe("hi");
     expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?")).toBe("es");
     expect(interimMicLanguage({ languages: ["es"] }, "")).toBe("es");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.2 }, { language: "te", confidence: 0.4 }] }, "", { hint: "bn", previous: "bn" })).toBe("bn");
+    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "Dapto clinic", { hint: "bn" })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["te"], words: [{ language: "te" }] }, "", { previous: "bn" })).toBe("bn");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.95 }] }, "ক্লিনিক", { hint: "bn" })).toBe("bn");
+    expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.95 }] }, "")).toBe("te");
     expect(votesFromAlternative({ language: { language: "es" } })).toEqual(["es"]);
     expect(votesFromAlternative({ words: [{ language: { language: "bn" } }] })).toEqual(["bn"]);
     expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "")).toBe("bn");

@@ -159,6 +159,7 @@ describe("first-token timeout", () => {
     expect(parsed.tag_missing).toBe(true);
     expect(parsed.tag_missing_rate).toBeGreaterThan(0);
     expect(parsed.tag_missing_rate).toBeLessThanOrEqual(1);
+    expect(parsed.stalled).toBeNull();
     expect(JSON.stringify(parsed)).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
   });
 
@@ -297,5 +298,47 @@ describe("first-token timeout", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ outcome: "deadline", stalled: "retry", language: "bn" });
     expect(events[0]?.totalMs).toBeLessThan(2_000);
+  });
+
+  it("streams a Bengali reply after the first sentence instead of holding it all", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stream = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 2_000,
+      log: () => undefined,
+      run: async function* () {
+        yield { type: "text-start", id: "bn-1" };
+        yield { type: "text-delta", id: "bn-1", text: "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। " };
+        await gate;
+        yield { type: "text-delta", id: "bn-1", text: "বিস্তারিত জানতে ক্লিনিকে ফোন করুন।" };
+        yield { type: "text-end", id: "bn-1" };
+      },
+    });
+    const reader = stream.getReader();
+    const early = await Promise.race([
+      (async () => {
+        let text = "";
+        while (!text.includes("দাঁত")) {
+          const next = await reader.read();
+          if (next.done) break;
+          if (next.value.type === "text-delta" && next.value.text) text += next.value.text;
+        }
+        return text;
+      })(),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 300)),
+    ]);
+    expect(early).toContain("দাঁত সাদা");
+    expect(early).not.toContain("ফোন করুন");
+    release();
+    let rest = early;
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value.type === "text-delta" && next.value.text) rest += next.value.text;
+    }
+    expect(rest).toContain("ফোন করুন");
   });
 });

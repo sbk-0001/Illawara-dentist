@@ -386,19 +386,45 @@ function expandBareHours(text: string, code: string, focus: ClinicFocus): string
   return body.startsWith(name) ? text : `${name}: ${body}`;
 }
 
+function splitFirstSentence(text: string): { first: string; rest: string } {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^([\s\S]*?[.!?।。？！])(?!\d)([\s\S]*)$/);
+  if (!match) {
+    const lineEnd = trimmed.indexOf("\n");
+    if (lineEnd < 0) return { first: trimmed, rest: "" };
+    return { first: trimmed.slice(0, lineEnd).trim(), rest: trimmed.slice(lineEnd + 1).trim() };
+  }
+  return { first: (match[1] ?? "").trim(), rest: (match[2] ?? "").trim() };
+}
+
+function withHoursLead(body: string, code: string, name: string): string {
+  const lead = hoursLeadIn(code, name);
+  if (body.trim().startsWith(lead)) return body;
+  return `${lead}\n${body.trim()}`;
+}
+
 /**
  * A hours-only reply has to name the clinic and open with a sentence.
  * When the question never named one, name every clinic instead of leaving one schedule anonymous.
  * A line that already names the clinic, in any reply language, still gets a localized lead-in.
+ * If the first sentence is the hours and the clinic is only named afterwards, the lead-in still goes first.
  */
 export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
   const expanded = expandBareHours(text, code, focus);
   const clinics = hoursOnlyClinics(expanded, code);
-  if (!clinics) return expanded === text ? text : expanded;
-  const name = clinics.length === 1 ? clinicName(clinics[0]) : "";
-  const lead = hoursLeadIn(code, name);
-  if (expanded.trim().startsWith(lead)) return expanded;
-  return `${lead}\n${expanded.trim()}`;
+  if (clinics) {
+    const name = clinics.length === 1 ? clinicName(clinics[0]) : "";
+    return withHoursLead(expanded, code, name);
+  }
+  const { first, rest } = splitFirstSentence(text);
+  if (!bareHoursClinic(first, code)) return text;
+  if (focus.kind !== "one") {
+    const listed = clinicIdsForHours(focus).map((id) => `${clinicName(id)}: ${formatClinicHours(id, code)}`).join("\n");
+    return withHoursLead(`${listed}${rest ? `\n${rest}` : ""}`, code, "");
+  }
+  const name = clinicName(focus.clinic);
+  const namedFirst = first.trim().startsWith(name) ? first.trim() : `${name}: ${first.trim()}`;
+  return withHoursLead(`${namedFirst}${rest ? `\n${rest}` : ""}`, code, name);
 }
 
 export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
@@ -415,7 +441,7 @@ export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (cl
   });
   return [
     "LOCALISED OPENING HOURS",
-    "When you state opening hours, quote the matching line below verbatim, including both the opening and the closing time. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
+    "When you state opening hours, start with the clinic name, then quote the matching line below verbatim, including both the opening and the closing time. Do not put the clinic name after the hours. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
     ...lines,
   ].join("\n");
 }

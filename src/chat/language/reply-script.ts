@@ -61,6 +61,9 @@ const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/;
 /** Above this share of non-name Latin letters, the reply is in the wrong script. */
 export const LATIN_SCRIPT_LIMIT = 0.35;
 
+/** Release a native-script reply once this many counted letters, or the first sentence, are in. */
+export const SCRIPT_SAMPLE_LETTERS = 40;
+
 function countPattern(text: string, re: RegExp): number {
   return text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))?.length ?? 0;
 }
@@ -87,13 +90,31 @@ export function replyScriptConflicts(text: string, code: string): boolean {
   return latin / total > LATIN_SCRIPT_LIMIT;
 }
 
+function countedLetters(text: string, code: string): number {
+  const nativeRe = NATIVE_REPLY[code];
+  if (!nativeRe) return 0;
+  const body = countableReply(text);
+  return countPattern(body, LATIN_LETTER) + countPattern(body, nativeRe);
+}
+
+/** A sentence end. A decimal point before a digit is not one. */
+function hasSentenceEnd(text: string): boolean {
+  return /[.!?।。？！](?!\d)/.test(text);
+}
+
 /**
- * A native-script reply is judged when it is finished, so a Bengali opening
- * is not released before later English service words can be measured.
- * Other languages can be shown as they arrive.
+ * Hold a native-script reply only until the first sentence or about 40 counted
+ * letters, then decide. A wrong opening waits for the one regenerate. The rest
+ * of a reply that already matches streams as it arrives.
  */
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) return "release";
-  if (!final) return "wait";
-  return replyScriptConflicts(text, code) ? "conflict" : "release";
+  if (!final && !hasSentenceEnd(text) && countedLetters(text, code) < SCRIPT_SAMPLE_LETTERS) return "wait";
+  return replyScriptConflicts(stripSample(text), code) ? "conflict" : "release";
+}
+
+/** Judge the opening, not a fee sentence that is rewritten after the script check. */
+function stripSample(text: string): string {
+  const end = text.search(/[.!?।。？！](?!\d)/);
+  return end >= 0 ? text.slice(0, end + 1) : text;
 }

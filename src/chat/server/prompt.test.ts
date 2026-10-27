@@ -88,6 +88,8 @@ describe("prompt rules", () => {
     });
     expect(instructions).toMatch(/Translate day names/i);
     expect(instructions).toMatch(/quote the matching line below verbatim/i);
+    expect(instructions).toMatch(/start with the clinic name/i);
+    expect(instructions).toMatch(/do not put the clinic name after the hours/i);
     expect(instructions).toMatch(/دوشنبه تا جمعه/);
     expect(instructions).toContain("8:00 تا 18:00");
     expect(instructions).not.toMatch(/8\.00 AM/);

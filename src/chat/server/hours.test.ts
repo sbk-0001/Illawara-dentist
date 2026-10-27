@@ -91,6 +91,24 @@ describe("localised opening hours", () => {
     expect(guardBareHoursReply("Dapto Dentists周六也营业。", "zh", { kind: "one", clinic: "dapto" })).toBe("Dapto Dentists周六也营业。");
   });
 
+  it("puts the clinic before hours when the model names it only in a later sentence", () => {
+    const english = "Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM. You can contact Dapto Dentists for an appointment.";
+    const guarded = guardBareHoursReply(english, "en", { kind: "one", clinic: "dapto" });
+    expect(guarded.startsWith("Dapto Dentists is open these hours.")).toBe(true);
+    expect(guarded.indexOf("Dapto Dentists is open these hours.")).toBeLessThan(guarded.indexOf("Monday–Friday"));
+    expect(guarded).toContain("You can contact Dapto Dentists");
+
+    const unnamed = guardBareHoursReply(english, "en", { kind: "ask" });
+    expect(unnamed.startsWith("Here are the opening hours.")).toBe(true);
+    expect(unnamed).toContain("Shellharbour Dentists:");
+    expect(unnamed).toContain("Woonona Dentists:");
+
+    const chinese = "周一至周五 上午8:00–下午6:00, 周六 上午8:00–下午4:00。Dapto Dentists 的营业时间就是这样。";
+    const zh = guardBareHoursReply(chinese, "zh", { kind: "one", clinic: "dapto" });
+    expect(zh.startsWith("Dapto Dentists的营业时间如下。")).toBe(true);
+    expect(zh.indexOf("的营业时间如下")).toBeLessThan(zh.indexOf("周一至周五"));
+  });
+
   it("adds the open and close when a Saturday answer only says when Dapto opens", async () => {
     const question = "Does Dapto open on Saturday?";
     const reply = "opens at 8:00 AM";
