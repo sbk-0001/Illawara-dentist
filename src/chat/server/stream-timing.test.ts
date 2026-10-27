@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
 import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
+import { replyScriptConflicts, replyScriptRatio } from "../language/reply-script";
 import { FEE_CAVEAT_EN } from "./system-text";
 
 async function readText(stream: ReadableStream<{ type: string; text?: string }>): Promise<string> {
@@ -160,6 +161,7 @@ describe("first-token timeout", () => {
     expect(parsed.tag_missing_rate).toBeGreaterThan(0);
     expect(parsed.tag_missing_rate).toBeLessThanOrEqual(1);
     expect(parsed.stalled).toBeNull();
+    expect(parsed.scriptRatio).toBeNull();
     expect(JSON.stringify(parsed)).not.toMatch(/AI_GATEWAY|api[_-]?key|prompt/i);
   });
 
@@ -233,7 +235,8 @@ describe("first-token timeout", () => {
       },
     });
     const fallback = await readText(stillEnglish);
-    expect(fallback).toContain("আবার চেষ্টা করুন");
+    expect(fallback).not.toContain("আবার চেষ্টা করুন");
+    expect(fallback).toContain("Teeth whitening");
     expect(fallback).not.toContain(FEE_CAVEAT_EN);
 
     let minorCalls = 0;
@@ -266,9 +269,47 @@ describe("first-token timeout", () => {
       },
     });
     const repaired = await readText(heavy);
-    expect(heavyCalls).toBe(2);
-    expect(repaired).toContain("দাঁত");
-    expect(repaired).not.toContain("teeth whitening");
+    expect(heavyCalls).toBe(1);
+    expect(repaired).toContain("বিস্তারিত");
+
+    const hindi =
+      "Dapto Dentists में urgent dental समस्या है। दाँत में तेज़ दर्द हो रहा है, तो क्लिनिक को फ़ोन करें। Invisalign और appointment के लिए भी कॉल कर सकते हैं।";
+    expect(replyScriptConflicts(hindi, "hi")).toBe(false);
+    expect(replyScriptRatio(hindi, "hi")).toBeGreaterThanOrEqual(0.4);
+    const events: ChatTimingEvent[] = [];
+    let hindiCalls = 0;
+    const hindiStream = createRetryingTextStream({
+      language: "hi",
+      timeoutMs: 500,
+      log: (event) => events.push(event),
+      run: async function* () {
+        hindiCalls += 1;
+        yield { type: "text-delta", text: hindi };
+      },
+    });
+    const hindiText = await readText(hindiStream);
+    expect(hindiCalls).toBe(1);
+    expect(hindiText).toContain("दाँत");
+    expect(hindiText).toContain("urgent");
+    expect(events[0]?.stalled).toBeNull();
+    expect(events[0]?.scriptRatio).toBeGreaterThanOrEqual(0.4);
+
+    const weaker = "Please call the clinic today about urgent dental care and an appointment.";
+    const readable = "Please visit the clinic for urgent dental care today and ask the front desk for help. दाँत";
+    let savedCalls = 0;
+    const saved = createRetryingTextStream({
+      language: "hi",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        savedCalls += 1;
+        yield { type: "text-delta", text: savedCalls === 1 ? readable : weaker };
+      },
+    });
+    const savedText = await readText(saved);
+    expect(savedCalls).toBe(2);
+    expect(savedText).toContain("दाँत");
+    expect(savedText).not.toContain("कृपया फिर कोशिश करें");
   });
 
   it("ends a stalled retry at the overall deadline and logs the stage", async () => {

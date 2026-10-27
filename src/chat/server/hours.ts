@@ -285,8 +285,12 @@ export function formatClinicHours(clinic: ClinicId, code: string): string {
 
 const BARE_HOURS_MAX = 400;
 
+function stripHoursQuotes(text: string): string {
+  return text.replace(/["“”«»„]/g, "");
+}
+
 function normalizeHoursLine(text: string): string {
-  return text
+  return stripHoursQuotes(text)
     .trim()
     .replace(/[.。]+$/u, "")
     .replace(/：/g, ":")
@@ -296,33 +300,33 @@ function normalizeHoursLine(text: string): string {
 }
 
 const HOURS_LEAD: Record<string, (name: string) => string> = {
-  en: (name) => (name ? `${name} is open these hours.` : "Here are the opening hours."),
-  bn: (name) => (name ? `${name}-এর খোলার সময় নিচে দেওয়া হলো।` : "খোলার সময় নিচে দেওয়া হলো।"),
-  "bn-Latn": (name) => (name ? `${name} er kholar somoy niche dewa holo.` : "Kholar somoy niche dewa holo."),
-  hi: (name) => (name ? `${name} का खुलने का समय यह है।` : "खुलने का समय यह है।"),
-  "hi-Latn": (name) => (name ? `${name} ka khulne ka samay yeh hai.` : "Khulne ka samay yeh hai."),
-  zh: (name) => (name ? `${name}的营业时间如下。` : "营业时间如下。"),
-  ja: (name) => (name ? `${name}の診療時間は次のとおりです。` : "診療時間は次のとおりです。"),
-  ko: (name) => (name ? `${name}의 진료 시간은 다음과 같습니다.` : "진료 시간은 다음과 같습니다."),
-  es: (name) => (name ? `${name} abre en este horario.` : "El horario de apertura es el siguiente."),
-  vi: (name) => (name ? `Giờ mở cửa của ${name} như sau.` : "Giờ mở cửa như sau."),
-  ar: (name) => (name ? `ساعات عمل ${name} كالتالي.` : "ساعات العمل كالتالي."),
-  ur: (name) => (name ? `${name} کے اوقات یہ ہیں۔` : "اوقات یہ ہیں۔"),
-  fa: (name) => (name ? `ساعت کاری ${name} این است.` : "ساعت کاری این است."),
-  he: (name) => (name ? `שעות הפתיחה של ${name} הן אלה.` : "שעות הפתיחה הן אלה."),
-  el: (name) => (name ? `Το ${name} είναι ανοιχτό αυτές τις ώρες.` : "Το ωράριο λειτουργίας είναι το εξής."),
-  fr: (name) => (name ? `${name} est ouvert à ces horaires.` : "Voici les horaires d'ouverture."),
-  de: (name) => (name ? `${name} hat diese Öffnungszeiten.` : "Das sind die Öffnungszeiten."),
-  pt: (name) => (name ? `${name} funciona nestes horários.` : "Estes são os horários de funcionamento."),
-  it: (name) => (name ? `${name} è aperto in questi orari.` : "Questi sono gli orari di apertura."),
-  id: (name) => (name ? `Jam buka ${name} adalah sebagai berikut.` : "Jam buka adalah sebagai berikut."),
-  ms: (name) => (name ? `Waktu operasi ${name} adalah seperti berikut.` : "Waktu operasi adalah seperti berikut."),
-  ru: (name) => (name ? `Часы работы ${name} такие.` : "Часы работы такие."),
-  th: (name) => (name ? `เวลาเปิดของ ${name} มีดังนี้` : "เวลาเปิดมีดังนี้"),
-  ne: (name) => (name ? `${name} को खुल्ने समय यस्तो छ।` : "खुल्ने समय यस्तो छ।"),
-  pa: (name) => (name ? `${name} ਦੇ ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।` : "ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।"),
-  ta: (name) => (name ? `${name} திறந்திருக்கும் நேரம் இது.` : "திறந்திருக்கும் நேரம் இது."),
-  te: (name) => (name ? `${name} తెరిచే సమయం ఇది.` : "తెరిచే సమయం ఇది."),
+  en: (name) => (name ? `${name} is open:` : "Here are the opening hours."),
+  bn: (name) => (name ? `${name} খোলা থাকে:` : "খোলার সময় নিচে দেওয়া হলো।"),
+  "bn-Latn": (name) => (name ? `${name} khola thake:` : "Kholar somoy niche dewa holo."),
+  hi: (name) => (name ? `${name} खुला रहता है:` : "खुलने का समय यह है।"),
+  "hi-Latn": (name) => (name ? `${name} khula rehta hai:` : "Khulne ka samay yeh hai."),
+  zh: (name) => (name ? `${name}的营业时间如下：` : "营业时间如下。"),
+  ja: (name) => (name ? `${name}の診療時間は次のとおりです：` : "診療時間は次のとおりです。"),
+  ko: (name) => (name ? `${name}의 진료 시간은 다음과 같습니다:` : "진료 시간은 다음과 같습니다."),
+  es: (name) => (name ? `${name} abre:` : "El horario de apertura es el siguiente."),
+  vi: (name) => (name ? `${name} mở cửa:` : "Giờ mở cửa như sau."),
+  ar: (name) => (name ? `ساعات عمل ${name}:` : "ساعات العمل كالتالي."),
+  ur: (name) => (name ? `${name} کے اوقات:` : "اوقات یہ ہیں۔"),
+  fa: (name) => (name ? `ساعات کاری ${name}:` : "ساعات کاری این است."),
+  he: (name) => (name ? `שעות הפתיחה של ${name}:` : "שעות הפתיחה הן אלה."),
+  el: (name) => (name ? `Το ${name} είναι ανοιχτό:` : "Το ωράριο λειτουργίας είναι το εξής."),
+  fr: (name) => (name ? `${name} est ouvert :` : "Voici les horaires d'ouverture."),
+  de: (name) => (name ? `${name} ist geöffnet:` : "Das sind die Öffnungszeiten."),
+  pt: (name) => (name ? `${name} funciona:` : "Estes são os horários de funcionamento."),
+  it: (name) => (name ? `${name} è aperto:` : "Questi sono gli orari di apertura."),
+  id: (name) => (name ? `${name} buka:` : "Jam buka adalah sebagai berikut."),
+  ms: (name) => (name ? `${name} dibuka:` : "Waktu operasi adalah seperti berikut."),
+  ru: (name) => (name ? `${name} открыта:` : "Часы работы такие."),
+  th: (name) => (name ? `${name} เปิด:` : "เวลาเปิดมีดังนี้"),
+  ne: (name) => (name ? `${name} खुल्छ:` : "खुल्ने समय यस्तो छ।"),
+  pa: (name) => (name ? `${name} ਖੁੱਲ੍ਹਾ ਹੈ:` : "ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।"),
+  ta: (name) => (name ? `${name} திறந்துள்ளது:` : "திறந்திருக்கும் நேரம் இது."),
+  te: (name) => (name ? `${name} తెరిచి ఉంది:` : "తెరిచే సమయం ఇది."),
 };
 
 function hoursLeadIn(code: string, name: string): string {
@@ -374,16 +378,16 @@ export function mayBeBareHours(text: string, code: string): boolean {
   return hoursShapes(code).some((shape) => shape.text === probe || shape.text.startsWith(probe));
 }
 
-function expandBareHours(text: string, code: string, focus: ClinicFocus): string {
-  if (!bareHoursClinic(text, code)) return text;
-  const ids = clinicIdsForHours(focus);
-  if (ids.length > 1 || focus.kind === "ask" || focus.kind === "any") {
-    return ids.map((id) => `${clinicName(id)}: ${formatClinicHours(id, code)}`).join("\n");
-  }
-  const matched = bareHoursClinic(text, code);
-  const name = clinicName(matched ?? ids[0]);
-  const body = text.trim();
-  return body.startsWith(name) ? text : `${name}: ${body}`;
+function hoursSentence(code: string, id: ClinicId): string {
+  const hours = formatClinicHours(id, code).replace(/[.。]+$/u, "").trim();
+  return `${hoursLeadIn(code, clinicName(id))} ${hours}.`;
+}
+
+/** One natural sentence per clinic. Not a `Clinic:` label, and the hours are not quoted. */
+function renderHours(code: string, ids: ClinicId[]): string {
+  const lines = ids.map((id) => hoursSentence(code, id));
+  if (ids.length === 1) return lines[0] ?? "";
+  return `${hoursLeadIn(code, "")}\n${lines.join("\n")}`;
 }
 
 function splitFirstSentence(text: string): { first: string; rest: string } {
@@ -397,34 +401,39 @@ function splitFirstSentence(text: string): { first: string; rest: string } {
   return { first: (match[1] ?? "").trim(), rest: (match[2] ?? "").trim() };
 }
 
-function withHoursLead(body: string, code: string, name: string): string {
-  const lead = hoursLeadIn(code, name);
-  if (body.trim().startsWith(lead)) return body;
-  return `${lead}\n${body.trim()}`;
+function hoursIds(focus: ClinicFocus): ClinicId[] {
+  if (focus.kind === "one") return [focus.clinic];
+  return clinicIdsForHours(focus);
+}
+
+function dropRepeatedHours(rest: string, code: string): string {
+  let pending = rest.trim();
+  let kept = "";
+  while (pending) {
+    const { first, rest: more } = splitFirstSentence(pending);
+    if (!first) break;
+    const hoursLine = bareHoursClinic(first, code) || hoursOnlyClinics(first, code);
+    if (!hoursLine) kept = `${kept} ${first}`.trim();
+    pending = more.trim();
+  }
+  return kept;
 }
 
 /**
- * A hours-only reply has to name the clinic and open with a sentence.
- * When the question never named one, name every clinic instead of leaving one schedule anonymous.
- * A line that already names the clinic, in any reply language, still gets a localized lead-in.
- * If the first sentence is the hours and the clinic is only named afterwards, the lead-in still goes first.
+ * Hours are one short sentence per clinic, then the schedule once.
+ * A `Clinic:` label or quotation marks around the hours are rewritten.
+ * When the question never named a clinic, each clinic gets its own sentence.
  */
 export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
-  const expanded = expandBareHours(text, code, focus);
-  const clinics = hoursOnlyClinics(expanded, code);
-  if (clinics) {
-    const name = clinics.length === 1 ? clinicName(clinics[0]) : "";
-    return withHoursLead(expanded, code, name);
-  }
-  const { first, rest } = splitFirstSentence(text);
-  if (!bareHoursClinic(first, code)) return text;
-  if (focus.kind !== "one") {
-    const listed = clinicIdsForHours(focus).map((id) => `${clinicName(id)}: ${formatClinicHours(id, code)}`).join("\n");
-    return withHoursLead(`${listed}${rest ? `\n${rest}` : ""}`, code, "");
-  }
-  const name = clinicName(focus.clinic);
-  const namedFirst = first.trim().startsWith(name) ? first.trim() : `${name}: ${first.trim()}`;
-  return withHoursLead(`${namedFirst}${rest ? `\n${rest}` : ""}`, code, name);
+  const cleaned = stripHoursQuotes(text).trim();
+  const only = hoursOnlyClinics(cleaned, code);
+  if (only) return renderHours(code, hoursIds(focus));
+  const { first, rest } = splitFirstSentence(cleaned);
+  const matched = bareHoursClinic(first, code) || hoursOnlyClinics(first, code)?.[0] || null;
+  if (!matched) return text;
+  const rendered = renderHours(code, hoursIds(focus));
+  const remainder = dropRepeatedHours(rest, code);
+  return remainder ? `${rendered}\n${remainder}` : rendered;
 }
 
 export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
@@ -436,12 +445,12 @@ export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
 export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string): string {
   const lines = clinicIdsForHours(focus).flatMap((clinic) => {
     const schedule = CLINIC_HOURS[clinic];
-    const row = `${names(clinic)}: ${formatClinicHours(clinic, code)}`;
+    const row = `${hoursLeadIn(code, names(clinic))} ${formatClinicHours(clinic, code)}`;
     return schedule.disagreement ? [row, `Do not quote the conflicting page. ${schedule.disagreement}`] : [row];
   });
   return [
     "LOCALISED OPENING HOURS",
-    "When you state opening hours, start with the clinic name, then quote the matching line below verbatim, including both the opening and the closing time. Do not put the clinic name after the hours. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
+    "When you state opening hours, start with the clinic name in the short sentence below, then quote the matching line below verbatim, including both the opening and the closing time. Do not wrap the hours in quotation marks. Do not write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
     ...lines,
   ].join("\n");
 }

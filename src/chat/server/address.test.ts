@@ -31,7 +31,8 @@ describe("address questions", () => {
     expect(listed).toContain("35 Baan Baan Street");
     expect(listed).toContain("Captain Cook Drive");
     expect(listed).toContain("379 Princes Highway");
-    expect(listed).toContain("ঠিকানা:");
+    expect(listed).toContain("এর ঠিকানা হলো");
+    expect(listed).not.toContain("Woonona Dentists:");
     expect(listed).not.toContain("02 4288 0737");
 
     const recent = ensureAddressReply("02 4288 0737", "কোথায়?", "bn", index, { kind: "one", clinic: "dapto" });
@@ -43,6 +44,13 @@ describe("address questions", () => {
     const kept = ensureAddressReply(sentence, "ঠিকানা কোথায়?", "bn", index, { kind: "one", clinic: "dapto" });
     expect(kept.startsWith(sentence)).toBe(true);
     expect(kept).toContain("35 Baan Baan Street");
+
+    const bare = ensureAddressReply("Woonona Dentists: 379 Princes Highway, Woonona, NSW, 2517", "ঠিকানা কোথায়?", "bn", index, {
+      kind: "one",
+      clinic: "woonona",
+    });
+    expect(bare.startsWith("Woonona Dentists-এর ঠিকানা হলো 379 Princes Highway")).toBe(true);
+    expect(bare).not.toContain("Woonona Dentists:");
 
     const already = ensureAddressReply("ঠিকানা 35 Baan Baan Street, Dapto।", "ঠিকানা কোথায়?", "bn", index, { kind: "one", clinic: "dapto" });
     expect(already).toBe("ঠিকানা 35 Baan Baan Street, Dapto।");

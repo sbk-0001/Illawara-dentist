@@ -272,7 +272,7 @@ export function contactFooter(index: KnowledgeIndex, language: ReplyLanguage, fo
   return [lead, ...lines].filter(Boolean).join("\n");
 }
 
-/** Neutral contact lines. Not the “website has no answer” wording. */
+/** Neutral contact lines. Not the “website has no answer” wording. The asked clinic is first. */
 export function contactRouteFooter(index: KnowledgeIndex, language: ReplyLanguage, focus: ClinicFocus): string {
   const lead = CONTACT_ROUTE[language.code] ?? "Book or call:";
   const lines = orderedClinics(focus).map((id) => clinicContactLine(language.code, index.contacts[id]));
@@ -395,10 +395,10 @@ function questionAsksForContact(question: string): boolean {
 }
 
 function replyLooksLikeContact(reply: string): boolean {
-  if (/zavy\s*360\.com|zavy360\.com/i.test(reply)) return true;
+  if (/zavy\s*360\s*\.?\s*com|zavy360\.com|bookings\.zavy/i.test(reply)) return true;
   if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(reply)) return true;
-  const runs = reply.match(/\d[\d\s().-]{8,}\d/g) ?? [];
-  return runs.some((run) => digits(run).length >= 10);
+  const runs = reply.match(/\d[\d\s().+\-]{6,}\d/g) ?? [];
+  return runs.some((run) => digits(run).length >= 8);
 }
 
 function letterCount(text: string): number {
@@ -465,7 +465,8 @@ function coversClinicContact(reply: string, card: ContactCard): boolean {
   const phones = [card.phone, ...card.otherPhones];
   if (phones.some((phone) => {
     const value = digits(phone);
-    return value.length >= 10 && flat.includes(value);
+    const tail = value.slice(-8);
+    return tail.length >= 8 && flat.includes(tail);
   })) {
     return true;
   }
@@ -655,7 +656,15 @@ export function attachContactFooter<T extends FooterChunk>(
     });
     const block = kind === "no-answer" ? input.footer : kind === "route" ? input.routeFooter ?? "" : "";
     const lead = block.split("\n")[0]?.trim() ?? "";
-    if (!block || input.covered(shown) || (lead.length >= 12 && shown.includes(lead))) return;
+    const alreadyRouted =
+      kind === "route" &&
+      replyHasRoute(shown, {
+        question: input.question,
+        sourceCount: input.sourceCount ?? (input.sourcesFound ? 1 : 0),
+        index: input.index,
+        focus: input.focus,
+      });
+    if (!block || input.covered(shown) || alreadyRouted || (lead.length >= 12 && shown.includes(lead))) return;
     const id = textId ?? "contact-footer";
     const delta = `${shown.trim() ? "\n\n" : ""}${block}`;
     if (!textId) controller.enqueue({ type: "text-start", id } as T);

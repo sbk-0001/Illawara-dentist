@@ -373,8 +373,6 @@ function noteScript(text: string): string {
   return NOTE_SCRIPT.find((item) => item.re.test(text))?.code ?? "";
 }
 
-const MIC_LANGUAGE_CONFIDENCE = 0.8;
-
 function numericConfidence(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -397,13 +395,6 @@ function wordLanguageVotes(alternative: DeepgramAlternative | undefined): { code
   return votes;
 }
 
-function confidentWordLanguage(alternative: DeepgramAlternative | undefined): string | null {
-  const votes = wordLanguageVotes(alternative)
-    .filter((vote) => vote.confidence !== undefined && vote.confidence >= MIC_LANGUAGE_CONFIDENCE)
-    .map((vote) => vote.code);
-  return majoritySpokenLanguage(votes);
-}
-
 function utteranceLanguage(alternative: DeepgramAlternative | undefined): string | null {
   return (
     normalizeSpokenLanguage(languageCode(alternative?.language)) ||
@@ -412,32 +403,64 @@ function utteranceLanguage(alternative: DeepgramAlternative | undefined): string
   );
 }
 
+export type MicLanguageStreak = { code: string; count: number };
+
+function detectedInterimLanguage(alternative: DeepgramAlternative | undefined): string {
+  const fromWords = majoritySpokenLanguage(wordLanguageVotes(alternative).map((vote) => vote.code));
+  return fromWords || utteranceLanguage(alternative) || "";
+}
+
 /**
  * Language for the listening note.
- * A native-script character, or a high-confidence word language, can name it.
- * A low-confidence Hindi or Telugu flicker does not replace the session hint.
- * The note never moves to a language the hint and the script both reject.
+ * Native-script characters can name it immediately. Bengali characters never
+ * show Hindi or Telugu. Any other non-English guess waits until the same
+ * language appears on two interim results in a row. Deepgram confidence alone
+ * does not switch the note.
  */
 export function interimMicLanguage(
   alternative: DeepgramAlternative | undefined,
   transcript: string,
-  context?: { hint?: string | null; previous?: string | null },
+  context?: { hint?: string | null; previous?: string | null; seen?: string | null; streak?: MicLanguageStreak },
 ): string {
-  const script = languageFromNativeScript(transcript) || noteScript(transcript);
-  const hint = normalizeSpokenLanguage(context?.hint) || normalizeSpokenLanguage(context?.previous) || "";
-  if (hint === "bn" && (script === "hi" || confidentWordLanguage(alternative) === "hi")) return "bn";
-  if (script) return script;
-  const confident = confidentWordLanguage(alternative);
-  if (confident) return hint && confident !== hint ? hint : confident;
-  if (wordLanguageVotes(alternative).length) return hint;
-  const utterance = utteranceLanguage(alternative);
-  if (utterance) {
-    const confidence = numericConfidence(alternative?.language_confidence);
-    if (hint && utterance !== hint && (confidence === undefined || confidence < MIC_LANGUAGE_CONFIDENCE)) return hint;
-    if (hint && utterance !== hint) return hint;
-    return utterance;
+  const seen = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
+  const script = languageFromNativeScript(seen) || noteScript(seen);
+  const picker = normalizeSpokenLanguage(context?.hint) || "";
+  const previous = normalizeSpokenLanguage(context?.previous) || "";
+  const fallback = picker || previous;
+  if (/[\u0980-\u09FF]/.test(seen) || (picker === "bn" && (script === "hi" || detectedInterimLanguage(alternative) === "hi") && /[\u0900-\u097F]/.test(seen))) {
+    if (context?.streak) {
+      context.streak.code = "bn";
+      context.streak.count = 2;
+    }
+    return "bn";
   }
-  return hint;
+  if (script) {
+    if (context?.streak) {
+      context.streak.code = script;
+      context.streak.count = 2;
+    }
+    return script;
+  }
+  const detected = detectedInterimLanguage(alternative);
+  if (!detected || detected === "en") {
+    if (context?.streak) {
+      context.streak.code = "";
+      context.streak.count = 0;
+    }
+    return fallback;
+  }
+  if (detected === "hi" || detected === "te") {
+    if (/[\u0980-\u09FF]/.test(seen)) return "bn";
+  }
+  const streak = context?.streak;
+  if (!streak) return fallback;
+  if (streak.code === detected) streak.count += 1;
+  else {
+    streak.code = detected;
+    streak.count = 1;
+  }
+  if (streak.count >= 2) return detected;
+  return fallback;
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;

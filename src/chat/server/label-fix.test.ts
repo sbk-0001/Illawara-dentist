@@ -139,9 +139,10 @@ describe("contact label rewrite", () => {
     );
     const text = unnamed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(text.startsWith("Here are the opening hours.")).toBe(true);
-    expect(text).toContain("Dapto Dentists: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM");
-    expect(text).toContain("Shellharbour Dentists:");
-    expect(text).toContain("Woonona Dentists:");
+    expect(text).toContain("Dapto Dentists is open: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM");
+    expect(text).toContain("Shellharbour Dentists is open:");
+    expect(text).toContain("Woonona Dentists is open:");
+    expect(isShortLabelReply(text, "en")).toBe(false);
     expect(text.startsWith("Monday")).toBe(false);
 
     const named = await readChunks(
@@ -153,8 +154,8 @@ describe("contact label rewrite", () => {
       }),
     );
     const dapto = named.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(dapto.startsWith("Dapto Dentists is open these hours.")).toBe(true);
-    expect(dapto).toContain("Dapto Dentists:");
+    expect(dapto.startsWith("Dapto Dentists is open:")).toBe(true);
+    expect(dapto).not.toContain("Dapto Dentists: ");
     expect(dapto).toContain("Saturday 8:00 AM–4:00 PM.");
     expect(dapto).not.toContain("Shellharbour");
 
@@ -178,7 +179,7 @@ describe("contact label rewrite", () => {
       }),
     );
     const zh = chinese.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(zh.startsWith("Dapto Dentists的营业时间如下。")).toBe(true);
+    expect(zh.startsWith("Dapto Dentists的营业时间如下：")).toBe(true);
     expect(zh).toContain("上午8:00–下午6:00");
     expect(zh).toContain("下午4:00");
   });
@@ -195,7 +196,7 @@ describe("contact label rewrite", () => {
     );
     const street = replaced.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(street).toContain("35 Baan Baan Street");
-    expect(street).toContain("ঠিকানা:");
+    expect(street).toContain("এর ঠিকানা হলো");
     expect(street).not.toContain("02 4288 0737");
     expect(street).not.toContain("Captain Cook");
   });

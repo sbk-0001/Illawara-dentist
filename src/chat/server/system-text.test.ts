@@ -19,7 +19,14 @@ describe("localized system text", () => {
     expect(replyScriptConflicts("হ্যাঁ, Dapto Dentists-এ দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।", "bn")).toBe(false);
     expect(
       replyScriptConflicts("পেজে teeth whitening এবং professional teeth whitening সম্পর্কে বলা আছে। আরও বিস্তারিত নেই।", "bn"),
-    ).toBe(true);
+    ).toBe(false);
+    expect(replyScriptConflicts("Please call the clinic for an urgent dental appointment today.", "hi")).toBe(true);
+    expect(
+      replyScriptConflicts(
+        "Dapto Dentists में urgent dental समस्या है। दाँत में तेज़ दर्द हो रहा है, तो क्लिनिक को फ़ोन करें।",
+        "hi",
+      ),
+    ).toBe(false);
   });
 
   it("localizes a fee sentence split across deltas and gives a Bengali try-again line", () => {

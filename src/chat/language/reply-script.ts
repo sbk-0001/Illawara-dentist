@@ -58,8 +58,22 @@ const PROPER_LATIN =
 
 const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/;
 
-/** Above this share of non-name Latin letters, the reply is in the wrong script. */
-export const LATIN_SCRIPT_LIMIT = 0.35;
+/**
+ * English words a native-script reply may keep. Hindi and the other Indic
+ * replies use these as loanwords; they are not a wrong-script answer.
+ */
+const LOAN_LATIN =
+  /\b(?:dental|dentist|dentists|implant|implants|appointment|appointments|emergency|emergencies|invisalign|check-?ups?|urgent|whitening|crown|crowns|filling|fillings|veneer|veneers|denture|dentures|braces|aligner|aligners|orthodontic|orthodontics|sedation|extraction|extractions|wisdom|cleaning|cleanings|canal|toothache|cosmetic)\b/gi;
+
+/**
+ * Regenerate only when the target script is a clear minority of the counted
+ * letters. A Hindi reply that is mostly Devanagari, plus clinic names and
+ * loanwords, is left as written.
+ */
+export const NATIVE_SCRIPT_FLOOR = 0.4;
+
+/** @deprecated Use NATIVE_SCRIPT_FLOOR. Kept so older callers still import. */
+export const LATIN_SCRIPT_LIMIT = 1 - NATIVE_SCRIPT_FLOOR;
 
 /** Release a native-script reply once this many counted letters, or the first sentence, are in. */
 export const SCRIPT_SAMPLE_LETTERS = 40;
@@ -72,22 +86,39 @@ function countableReply(text: string): string {
   return text
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, " ")
-    .replace(new RegExp(PROPER_LATIN.source, PROPER_LATIN.flags), " ");
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, " ")
+    .replace(new RegExp(PROPER_LATIN.source, PROPER_LATIN.flags), " ")
+    .replace(new RegExp(LOAN_LATIN.source, LOAN_LATIN.flags), " ");
 }
 
+export type ScriptMeasure = { ratio: number | null; conflicts: boolean };
+
 /**
- * The finished text is in the wrong script for a native-script reply.
- * Proper nouns are ignored. A minor mix under 35% Latin letters is allowed.
+ * Share of counted letters that are in the target script, after names, URLs,
+ * emails, phones and loanwords are removed. Null when there is nothing to judge.
+ * A conflict is a target script below 40%, not a handful of English loanwords.
  */
-export function replyScriptConflicts(text: string, code: string): boolean {
+export function measureReplyScript(text: string, code: string): ScriptMeasure {
   const nativeRe = NATIVE_REPLY[code];
-  if (!nativeRe) return false;
+  if (!nativeRe) return { ratio: null, conflicts: false };
   const body = countableReply(text);
   const latin = countPattern(body, LATIN_LETTER);
   const native = countPattern(body, nativeRe);
   const total = latin + native;
-  if (total < 16) return false;
-  return latin / total > LATIN_SCRIPT_LIMIT;
+  if (total < 16) return { ratio: null, conflicts: false };
+  const ratio = native / total;
+  return { ratio, conflicts: ratio < NATIVE_SCRIPT_FLOOR };
+}
+
+/** The finished text is in the wrong script when the target script is under 40%. */
+export function replyScriptConflicts(text: string, code: string): boolean {
+  return measureReplyScript(text, code).conflicts;
+}
+
+/** Target-script share used for the timing log. Null when the reply was not judged. */
+export function replyScriptRatio(text: string, code: string): number | null {
+  const ratio = measureReplyScript(text, code).ratio;
+  return ratio === null ? null : Math.round(ratio * 1000) / 1000;
 }
 
 function countedLetters(text: string, code: string): number {
@@ -104,13 +135,16 @@ function hasSentenceEnd(text: string): boolean {
 
 /**
  * Hold a native-script reply only until the first sentence or about 40 counted
- * letters, then decide. A wrong opening waits for the one regenerate. The rest
- * of a reply that already matches streams as it arrives.
+ * letters. An opening that is clearly in the target script streams the rest.
+ * An opening that looks like the wrong script waits for the finished reply, and
+ * only that finished reply can ask for the one regenerate.
  */
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) return "release";
   if (!final && !hasSentenceEnd(text) && countedLetters(text, code) < SCRIPT_SAMPLE_LETTERS) return "wait";
-  return replyScriptConflicts(stripSample(text), code) ? "conflict" : "release";
+  const judged = final ? text : stripSample(text);
+  if (!measureReplyScript(judged, code).conflicts) return "release";
+  return final ? "conflict" : "wait";
 }
 
 /** Judge the opening, not a fee sentence that is rewritten after the script check. */

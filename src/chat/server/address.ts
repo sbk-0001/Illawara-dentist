@@ -43,12 +43,66 @@ function phoneOnly(text: string): boolean {
   });
 }
 
+const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string> = {
+  bn: (name, address) => `${name}-এর ঠিকানা হলো ${address}।`,
+  "bn-Latn": (name, address) => `${name} er thikana holo ${address}.`,
+  hi: (name, address) => `${name} का पता ${address} है।`,
+  "hi-Latn": (name, address) => `${name} ka pata ${address} hai.`,
+  zh: (name, address) => `${name}的地址是 ${address}。`,
+  es: (name, address) => `La dirección de ${name} es ${address}.`,
+  ar: (name, address) => `عنوان ${name} هو ${address}.`,
+  fa: (name, address) => `آدرس ${name} ${address} است.`,
+  ur: (name, address) => `${name} کا پتہ ${address} ہے۔`,
+  ko: (name, address) => `${name}의 주소는 ${address}입니다.`,
+  vi: (name, address) => `Địa chỉ của ${name} là ${address}.`,
+  fr: (name, address) => `L'adresse de ${name} est ${address}.`,
+  de: (name, address) => `Die Adresse von ${name} ist ${address}.`,
+  pt: (name, address) => `O endereço de ${name} é ${address}.`,
+  it: (name, address) => `L'indirizzo di ${name} è ${address}.`,
+  el: (name, address) => `Η διεύθυνση του ${name} είναι ${address}.`,
+  ja: (name, address) => `${name}の住所は ${address} です。`,
+  ru: (name, address) => `Адрес ${name}: ${address}.`,
+  th: (name, address) => `ที่อยู่ของ ${name} คือ ${address}`,
+  ne: (name, address) => `${name} को ठेगाना ${address} हो।`,
+};
+
+const NATIVE_ADDRESS: Record<string, RegExp> = {
+  bn: /[\u0980-\u09FF]/,
+  hi: /[\u0900-\u097F]/,
+  ne: /[\u0900-\u097F]/,
+  ar: /[\u0600-\u06FF]/,
+  ur: /[\u0600-\u06FF]/,
+  fa: /[\u0600-\u06FF]/,
+  he: /[\u0590-\u05FF]/,
+  zh: /[\u4E00-\u9FFF]/,
+  ja: /[\u3040-\u30FF\u4E00-\u9FFF]/,
+  ko: /[\uAC00-\uD7AF]/,
+  el: /[\u0370-\u03FF]/,
+  ru: /[\u0400-\u04FF]/,
+  th: /[\u0E00-\u0E7F]/,
+  pa: /[\u0A00-\u0A7F]/,
+  ta: /[\u0B80-\u0BFF]/,
+  te: /[\u0C00-\u0C7F]/,
+};
+
+function addressSentence(code: string, name: string, address: string): string {
+  const write = ADDRESS_SENTENCE[code];
+  if (write) return write(name, address);
+  const label = directoryLabels(code).address.replace(/[:：]\s*$/u, "");
+  return `${name}: ${label} ${address}.`;
+}
+
+function needsNativeAddress(reply: string, code: string): boolean {
+  const native = NATIVE_ADDRESS[code];
+  if (!native) return false;
+  return !native.test(reply);
+}
+
 function addressBlock(index: KnowledgeIndex, code: string, ids: ClinicId[]): string {
-  const label = directoryLabels(code).address;
   return ids
     .map((id) => {
       const card = index.contacts[id];
-      return card?.address ? `${card.name}: ${label} ${card.address}` : "";
+      return card?.address ? addressSentence(code, card.name, card.address) : "";
     })
     .filter(Boolean)
     .join("\n");
@@ -71,9 +125,13 @@ export function ensureAddressReply(
     const address = index.contacts[id]?.address;
     return !address || !hasStreet(reply, address);
   });
-  if (!missing.length) return reply;
-  const block = addressBlock(index, code, missing);
+  if (!missing.length) {
+    if (!needsNativeAddress(reply, code)) return reply;
+    const spoken = addressBlock(index, code, ids);
+    return spoken || reply;
+  }
+  const block = addressBlock(index, code, missing.length === ids.length || needsNativeAddress(reply, code) ? ids : missing);
   if (!block) return reply;
-  if (!reply.trim() || phoneOnly(reply)) return block;
+  if (!reply.trim() || phoneOnly(reply) || needsNativeAddress(reply, code)) return block;
   return `${reply.trim()}\n${block}`;
 }

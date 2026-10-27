@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, interimMicLanguage, majoritySpokenLanguage, micListeningNote, spokenLanguageAtSubmit, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording, type MicAudioQueue } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -66,10 +66,11 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     langVotes: string[];
     spokenLanguage: string;
     interimLanguage: string;
+    noteStreak: MicLanguageStreak;
     liveDrop: string;
     ignoreClose: boolean;
     generation: number;
-  }>({ chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: 0 });
+  }>({ chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", noteStreak: { code: "", count: 0 }, liveDrop: "", ignoreClose: false, generation: 0 });
   const voiceRequest = useRef<VoiceDraft | null>(null);
   const draftGeneration = useRef(0);
 
@@ -107,7 +108,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     current.socket?.close();
     if (current.recorder && current.recorder.state !== "inactive") current.recorder.stop();
     current.stream?.getTracks().forEach((track) => track.stop());
-    session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
+    session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", noteStreak: { code: "", count: 0 }, liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
   }
 
   function staleDraft(): boolean {
@@ -145,7 +146,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       const finish = () => {
         const blob = new Blob(current.chunks, { type: current.chunks[0]?.type || "audio/webm" });
         current.stream?.getTracks().forEach((track) => track.stop());
-        session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
+        session.current = { chunks: [], audio: createMicAudioQueue(), finals: "", langVotes: [], spokenLanguage: "", interimLanguage: "", noteStreak: { code: "", count: 0 }, liveDrop: "", ignoreClose: false, generation: draftGeneration.current };
         resolve({ blob, hadSocket, finals, spokenLanguage, liveDrop });
       };
       if (!recorder || recorder.state === "inactive") {
@@ -264,6 +265,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     session.current.langVotes = [];
     session.current.spokenLanguage = "";
     session.current.interimLanguage = "";
+    session.current.noteStreak = { code: "", count: 0 };
     session.current.liveDrop = "";
     session.current.ignoreClose = false;
     session.current.generation = draftGeneration.current;
@@ -336,6 +338,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const heardNow = interimMicLanguage(alternative, transcript, {
             hint: preferredSpeechLanguage(),
             previous: session.current.spokenLanguage,
+            seen: `${session.current.finals} ${transcript}`,
+            streak: session.current.noteStreak,
           });
           if (heardNow) {
             session.current.interimLanguage = heardNow;

@@ -640,6 +640,21 @@ describe("contact footer", () => {
         statusTag: null,
       }),
     ).toBe("no-answer");
+    const bookingLanguage = detectLanguage("¿Puedo reservar en Dapto?");
+    const bookingRoute = contactRouteFooter(index, bookingLanguage, { kind: "one", clinic: "dapto" });
+    expect(bookingRoute.startsWith("Llame o reserve:")).toBe(true);
+    expect(bookingRoute.indexOf("02 4288 0737")).toBeLessThan(bookingRoute.indexOf("02 4284 4486"));
+    expect(
+      chooseContactFooter({
+        question: "¿Puedo reservar en Dapto?",
+        sourceCount: 3,
+        topScore: 0.92,
+        replyText: "Puedes reservar en Dapto Dentists llamando al 4288 0737.",
+        index,
+        focus: { kind: "one", clinic: "dapto" },
+        statusTag: "A",
+      }),
+    ).toBe("none");
     const spanishBooking =
       "Puedes reservar en Dapto Dentists. No mencionar otra clínica. Teléfono 02.4261.3131 https://bookings.zavy360.com/booking/shellharbourdentists/locations/a";
     expect(

@@ -1,4 +1,4 @@
-import { replyScriptGate } from "../language/reply-script";
+import { replyScriptGate, replyScriptRatio } from "../language/reply-script";
 import { CHAT_MODEL } from "./prompt";
 import { drainStatusTag, type StatusTag } from "./status-tag";
 import { createSystemTextFilter, stripFeeCaveat, tryAgainMessage } from "./system-text";
@@ -74,6 +74,11 @@ export type ChatTimingEvent = {
   liveDrop?: string;
   /** Stage that timed out or produced the wrong script. Null when nothing stalled. */
   stalled: StalledStage | null;
+  /**
+   * Share of counted letters in the target script for the reply that was shown.
+   * Null when that reply was not judged. Logged even when nothing stalled.
+   */
+  scriptRatio: number | null;
   /** The 2s retrieval cap returned lexical hits. */
   retrievalTimedOut?: boolean;
 };
@@ -150,6 +155,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   let dropBreak = false;
   let stalled: StalledStage | undefined;
   let released = false;
+  let scriptRatio: number | null = null;
+  let heldScript: { text: string; ratio: number | null } | null = null;
 
   const noteTag = (tag: StatusTag | null, missing: boolean) => {
     tagDecided = true;
@@ -195,6 +202,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       langOverride: input.langOverride === true,
       ...(input.liveDrop ? { liveDrop: input.liveDrop } : {}),
       stalled: stalled ?? null,
+      scriptRatio,
       ...(input.retrievalTimedOut ? { retrievalTimedOut: true } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
@@ -241,6 +249,17 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         if (!textOpen || !activeTextId) return;
         controller.enqueue({ type: "text-end", id: activeTextId } as T);
         textOpen = false;
+      };
+      const publishSaved = (text: string) => {
+        const filter = createSystemTextFilter(input.language);
+        const visible = `${filter.push(text)}${filter.flush()}`;
+        if (!visible) return;
+        const id = nextId();
+        controller.enqueue({ type: "text-start", id } as T);
+        controller.enqueue({ type: "text-delta", id, text: visible } as T);
+        controller.enqueue({ type: "text-end", id } as T);
+        if (ttftMs === null) ttftMs = Date.now() - origin;
+        released = true;
       };
       const emitFallback = (stage: StalledStage) => {
         stalled = stage;
@@ -356,6 +375,10 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           }
           if (!ended) closeText();
         };
+        const rememberRatio = (text: string) => {
+          const ratio = replyScriptRatio(stripFeeCaveat(text), input.language);
+          if (ratio !== null) scriptRatio = ratio;
+        };
         try {
           for (;;) {
             const pending = iterator.next();
@@ -365,12 +388,17 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               : await Promise.race([pending, timeoutPromise, deadlinePromise]);
             if (step.done) {
               held += takeText("", true);
-              const gate = replyScriptGate(stripFeeCaveat(held), input.language, true);
+              const judged = stripFeeCaveat(held);
+              const gate = replyScriptGate(judged, input.language, true);
               if (gate === "conflict") {
+                const ratio = replyScriptRatio(judged, input.language);
+                heldScript = { text: held, ratio };
+                scriptRatio = ratio;
                 await stopIterator(iterator, timer);
                 return "script";
               }
               if (held) {
+                rememberRatio(held);
                 show(held);
                 held = "";
               }
@@ -397,11 +425,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               }
               held += visible;
               const gate = replyScriptGate(held, input.language, false);
-              if (gate === "conflict") {
-                await stopIterator(iterator, timer);
-                return "script";
-              }
               if (gate === "release") {
+                rememberRatio(held);
                 show(held);
                 held = "";
               }
@@ -448,9 +473,23 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           if (result === "script" && !scriptRetried) {
             scriptRetried = true;
             stalled = "script";
+            const firstDraft = heldScript;
+            heldScript = null;
             resetTag();
             const again = await consume(true);
+            const secondDraft = heldScript as { text: string; ratio: number | null } | null;
+            const firstRatio = firstDraft?.ratio ?? -1;
+            const secondRatio = secondDraft?.ratio ?? -1;
+            const chosen = again === "script" && secondDraft && secondRatio > firstRatio ? secondDraft : firstDraft;
             if (again === "ok") {
+              clearDeadline();
+              finish("done");
+              controller.close();
+              return;
+            }
+            if (chosen?.text) {
+              scriptRatio = chosen.ratio;
+              publishSaved(chosen.text);
               clearDeadline();
               finish("done");
               controller.close();
