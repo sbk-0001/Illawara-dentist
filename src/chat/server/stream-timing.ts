@@ -56,6 +56,15 @@ export type ChatTimingEvent = {
   tag_missing: boolean;
   /** Share of replies in this process that opened without a status tag. */
   tag_missing_rate: number;
+  /** Deepgram's language for a voice turn, after the allowlist. Null for typed text. */
+  spokenLanguage: string | null;
+  inputMode: "voice" | "text";
+  /** Script of the visitor's text before any spoken-language override. */
+  transcriptScript: string;
+  /** True when a voice language replaced an English, Latin, or unknown text detection. */
+  langOverride: boolean;
+  /** Why the live Deepgram socket closed, when the browser reported it. */
+  liveDrop?: string;
 };
 
 const tagStats = { seen: 0, missing: 0 };
@@ -96,6 +105,11 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   startedAt?: number;
   /** Logged as-is. Measured by the caller around retrieval. */
   retrievalMs?: number;
+  spokenLanguage?: string | null;
+  inputMode?: "voice" | "text";
+  transcriptScript?: string;
+  langOverride?: boolean;
+  liveDrop?: string;
   onStatus?: (status: { tag: StatusTag | null; missing: boolean }) => void;
 }): ReadableStream<T> {
   const log = input.log ?? ((event: ChatTimingEvent) => console.log(JSON.stringify(event)));
@@ -150,6 +164,11 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       retrievalMs,
       tag_missing: tagMissing,
       tag_missing_rate: noteTagMissing(tagMissing),
+      spokenLanguage: input.spokenLanguage ?? null,
+      inputMode: input.inputMode === "voice" ? "voice" : "text",
+      transcriptScript: input.transcriptScript ?? "",
+      langOverride: input.langOverride === true,
+      ...(input.liveDrop ? { liveDrop: input.liveDrop } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
     if (error) line.error = error;

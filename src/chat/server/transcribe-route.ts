@@ -1,24 +1,37 @@
-import { correctTranscript, deepgramListenUrl } from "../stt";
+import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, majoritySpokenLanguage, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
+import { repairNativeTranscript } from "./transcript-repair";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
+type DeepgramWord = { language?: string };
 type DeepgramListen = {
   results?: {
     channels?: {
-      alternatives?: { transcript?: string; languages?: string[] }[];
+      alternatives?: (DeepgramAlternative & { words?: DeepgramWord[] })[];
       detected_language?: string;
     }[];
   };
 };
+
+function cleanLiveDrop(value: FormDataEntryValue | null): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.replace(/[\r\n\t]+/g, " ").trim().slice(0, 120);
+  return cleaned || undefined;
+}
+
+function logTranscribe(line: Record<string, unknown>): void {
+  console.log(JSON.stringify({ event: "transcribe", ...line }));
+}
 
 export async function POST(request: Request): Promise<Response> {
   const blocked = guardRequest(request, "transcribe", 8);
   if (blocked) return withCors(request, blocked);
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) {
+    logTranscribe({ outcome: "error", error: "not_configured" });
     return withCors(request, Response.json({ error: "DEEPGRAM_API_KEY is not configured." }, { status: 503 }));
   }
 
@@ -26,41 +39,82 @@ export async function POST(request: Request): Promise<Response> {
   try {
     form = await request.formData();
   } catch {
+    logTranscribe({ outcome: "error", error: "expected_audio" });
     return withCors(request, Response.json({ error: "Expected an audio upload." }, { status: 400 }));
   }
+  const liveDrop = cleanLiveDrop(form.get("liveDrop"));
   const audio = form.get("audio");
   if (!(audio instanceof File)) {
+    logTranscribe({ outcome: "error", error: "missing_audio", ...(liveDrop ? { liveDrop } : {}) });
     return withCors(request, Response.json({ error: "Attach an audio file in the audio field." }, { status: 400 }));
   }
   if (audio.size <= 0 || audio.size > MAX_BYTES) {
+    logTranscribe({ outcome: "error", error: "audio_size", ...(liveDrop ? { liveDrop } : {}) });
     return withCors(request, Response.json({ error: "Audio must be under 8 MB." }, { status: 400 }));
   }
 
+  const hint = typeof form.get("languageHint") === "string" ? String(form.get("languageHint")) : "";
+  const hints = deepgramLanguageHints(hint);
   const bytes = await audio.arrayBuffer();
   let upstream: Response;
   try {
-    upstream = await fetch(
-      deepgramListenUrl("prerecorded"),
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${key}`,
-          "Content-Type": audio.type || "audio/webm",
-        },
-        body: bytes,
+    upstream = await fetch(deepgramListenUrl("prerecorded", hint), {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${key}`,
+        "Content-Type": audio.type || "audio/webm",
       },
-    );
-  } catch {
+      body: bytes,
+    });
+  } catch (error) {
+    logTranscribe({
+      outcome: "error",
+      error: error instanceof Error ? error.name : "Error",
+      ...(liveDrop ? { liveDrop } : {}),
+    });
     return withCors(request, Response.json({ error: "Could not reach Deepgram." }, { status: 502 }));
   }
   if (!upstream.ok) {
+    logTranscribe({ outcome: "error", error: "upstream", status: upstream.status, ...(liveDrop ? { liveDrop } : {}) });
     return withCors(request, Response.json({ error: "Transcription failed." }, { status: 502 }));
   }
   const payload = (await upstream.json()) as DeepgramListen;
   const alternative = payload.results?.channels?.[0]?.alternatives?.[0];
-  const transcript = correctTranscript(alternative?.transcript?.trim() || "");
-  const language = alternative?.languages?.[0] || payload.results?.channels?.[0]?.detected_language || "";
-  return withCors(request, Response.json({ transcript, language }));
+  let transcript = correctTranscript(alternative?.transcript?.trim() || "");
+  const detected =
+    majoritySpokenLanguage(votesFromAlternative(alternative)) ||
+    alternative?.languages?.[0] ||
+    payload.results?.channels?.[0]?.detected_language ||
+    "";
+  let repaired = false;
+  if (transcript && transcriptNeedsRepair(detected, transcript) && process.env.AI_GATEWAY_API_KEY) {
+    const next = await repairNativeTranscript({
+      audio: new Uint8Array(bytes),
+      language: detected,
+    });
+    if (next) {
+      transcript = correctTranscript(next);
+      repaired = true;
+    } else {
+      logTranscribe({
+        outcome: "repair_skipped",
+        language: detected,
+        ...(liveDrop ? { liveDrop } : {}),
+      });
+    }
+  }
+  if (!transcript) {
+    logTranscribe({ outcome: "error", error: "empty", language: detected, ...(liveDrop ? { liveDrop } : {}) });
+    return withCors(request, Response.json({ error: "Transcription failed." }, { status: 502 }));
+  }
+  logTranscribe({
+    outcome: "ok",
+    language: detected,
+    repaired,
+    hints,
+    ...(liveDrop ? { liveDrop } : {}),
+  });
+  return withCors(request, Response.json({ transcript, language: detected }));
 }
 
 export function OPTIONS(request: Request): Response {

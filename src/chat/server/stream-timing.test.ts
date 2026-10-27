@@ -150,6 +150,10 @@ describe("first-token timeout", () => {
     });
     expect(parsed.ttftMs).toEqual(expect.any(Number));
     expect(parsed.retrievalMs).toBe(0);
+    expect(parsed.spokenLanguage).toBeNull();
+    expect(parsed.inputMode).toBe("text");
+    expect(parsed.transcriptScript).toBe("");
+    expect(parsed.langOverride).toBe(false);
     expect(parsed.tag_missing).toBe(true);
     expect(parsed.tag_missing_rate).toBeGreaterThan(0);
     expect(parsed.tag_missing_rate).toBeLessThanOrEqual(1);

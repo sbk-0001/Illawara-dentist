@@ -8,7 +8,9 @@ import {
 import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
-import { hasLetters, resolveReplyLanguage } from "../language/detect";
+import { hasLetters, detectLanguage, resolveReplyLanguage } from "../language/detect";
+import { normalizeSpokenLanguage } from "../stt";
+import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
@@ -30,7 +32,21 @@ export type ClinicUIMessage = UIMessage<ChatMetadata>;
 const bodySchema = z.object({
   messages: z.array(z.record(z.string(), z.unknown())).min(1).max(24),
   language: z.string().max(32).optional(),
+  inputMode: z.enum(["voice", "text"]).optional(),
+  spokenLanguage: z.string().max(32).optional(),
+  liveDrop: z.string().max(160).optional(),
 });
+
+function cleanLiveDrop(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value.replace(/[\r\n\t]+/g, " ").trim().slice(0, 120);
+  return cleaned || undefined;
+}
+
+export type VoiceTurn = {
+  inputMode?: "voice" | "text";
+  spokenLanguage?: string;
+};
 
 export function messageText(message: { parts?: unknown; content?: unknown }): string {
   if (Array.isArray(message.parts)) {
@@ -61,11 +77,30 @@ export function retrievalQuery(latest: string, prior: string[]): string {
   return names.length ? `${names.join(" ")} ${latest}`.trim() : latest;
 }
 
-export function prepareTurn(messages: { role?: string; parts?: unknown; content?: unknown }[], language: string | undefined, index: KnowledgeIndex) {
+export function prepareTurn(
+  messages: { role?: string; parts?: unknown; content?: unknown }[],
+  language: string | undefined,
+  index: KnowledgeIndex,
+  voice?: VoiceTurn,
+) {
   const turns = userTexts(messages);
   const text = (turns[turns.length - 1] || "").slice(0, 4000);
   const query = retrievalQuery(text, turns.slice(0, -1)).slice(0, 4000);
-  const reply: ReplyLanguage = resolveReplyLanguage(text, language);
+  const textDetection = detectLanguage(text);
+  let reply: ReplyLanguage = resolveReplyLanguage(text, language);
+  const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
+  const spokenLanguage = inputMode === "voice" ? normalizeSpokenLanguage(voice?.spokenLanguage) : null;
+  const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
+  const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
+  let langOverride = false;
+  if (inputMode === "voice" && spokenLanguage && spokenLanguage !== "en" && !pickerLocked && softText) {
+    const option = languageOption(spokenLanguage);
+    if (option) {
+      const forced = { ...replyFromOption(option, "detected" as const, false), confidence: "high" as const };
+      langOverride = forced.code !== reply.code;
+      reply = forced;
+    }
+  }
   const focus = clinicFocus(clinicContextText(turns));
   const severe = isSevereEmergency(text);
   const letterless = !hasLetters(text);
@@ -80,6 +115,10 @@ export function prepareTurn(messages: { role?: string; parts?: unknown; content?
     chunks,
     sources,
     topicText: topicShareText(turns, focus),
+    inputMode,
+    spokenLanguage,
+    transcriptScript: textDetection.script,
+    langOverride,
     instructions: buildInstructions({ index, language: reply, focus, severe, question: text, chunks: sources.length ? chunks : [] }),
   };
 }
@@ -117,7 +156,11 @@ export async function POST(request: Request): Promise<Response> {
   const messages = parsed.data.messages as unknown as ClinicUIMessage[];
   const startedAt = Date.now();
   const index = getKnowledgeIndex();
-  const lexical = prepareTurn(messages, parsed.data.language, index);
+  const liveDrop = cleanLiveDrop(parsed.data.liveDrop);
+  const lexical = prepareTurn(messages, parsed.data.language, index, {
+    inputMode: parsed.data.inputMode,
+    spokenLanguage: parsed.data.spokenLanguage,
+  });
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }
@@ -144,6 +187,11 @@ export async function POST(request: Request): Promise<Response> {
     language: lexical.reply.code,
     startedAt,
     retrievalMs,
+    spokenLanguage: lexical.spokenLanguage,
+    inputMode: lexical.inputMode,
+    transcriptScript: lexical.transcriptScript,
+    langOverride: lexical.langOverride,
+    liveDrop,
     log: scheduleRequestTimingLog(),
     onStatus: (status) => {
       replyStatus.tag = status.tag;
