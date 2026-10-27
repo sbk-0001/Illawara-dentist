@@ -17,5 +17,18 @@ export function splitIsolatedEmbeds(text: string): TextPart[] {
   }
   if (last < text.length) parts.push({ kind: "text", value: text.slice(last) });
   if (!parts.length) parts.push({ kind: "text", value: text });
+  return separateEmbeds(parts);
+}
+
+/** Keep a space between RTL words and an isolated phone, email or URL. */
+function separateEmbeds(parts: TextPart[]): TextPart[] {
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part || part.kind !== "isolate") continue;
+    const prev = parts[i - 1];
+    if (prev?.kind === "text" && prev.value && !/\s$/u.test(prev.value)) prev.value += " ";
+    const next = parts[i + 1];
+    if (next?.kind === "text" && next.value && !/^\s/u.test(next.value)) next.value = ` ${next.value}`;
+  }
   return parts;
 }

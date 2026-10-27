@@ -11,6 +11,7 @@ import { resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
+import { attachContactFooter, contactFooter, replyHasContactRoute, shouldAppendContactFooter } from "./contacts";
 import { guardRequest, withCors } from "./guard";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions, CHAT_MODEL } from "./prompt";
@@ -108,16 +109,16 @@ export async function POST(request: Request): Promise<Response> {
     sources,
   } satisfies ChatMetadata;
 
-  return withCors(
-    request,
-    createUIMessageStreamResponse({
-      stream: toUIMessageStream({
-        stream: result.stream,
-        sendReasoning: false,
-        messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
-      }),
-    }),
-  );
+  const uiStream = toUIMessageStream({
+    stream: result.stream,
+    sendReasoning: false,
+    messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
+  });
+  const stream = shouldAppendContactFooter(lexical.text, sources.length)
+    ? attachContactFooter(uiStream, contactFooter(index, lexical.reply, lexical.focus), (text) => replyHasContactRoute(text, index))
+    : uiStream;
+
+  return withCors(request, createUIMessageStreamResponse({ stream }));
 }
 
 export function OPTIONS(request: Request): Response {

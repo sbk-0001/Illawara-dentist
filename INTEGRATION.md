@@ -78,3 +78,7 @@ Without `AI_GATEWAY_API_KEY` the script prints `EVAL_STATUS=skipped` and exits 0
 ## Model
 
 Chat uses `openai/gpt-5.4-mini` through the AI Gateway (`src/chat/server/prompt.ts`). It is tagged fast on the gateway and is built for high-volume chat, which keeps time to first token down while still following the script instructions. Retrieval is a union of word hits and the nearest precomputed chunk embeddings (`google/text-multilingual-embedding-002`), then a rerank. Lexical search still answers when those vectors and the gateway key are absent. The chat route itself returns 503 until the key is set.
+
+The microphone uses Deepgram Nova-3 with `language=multi`. Keyterm prompting (`keyterm`, not Nova-2 `keywords`) is sent for Dapto, Woonona, Shellharbour, Illawarra, Invisalign, Barrack Heights and Zavy. Deepgram documents that keyterms work on Nova-3 multilingual, so language detection stays on.
+
+When retrieval has no answer, or the question is off-topic, the server appends the three clinic phones and Zavy booking links in the visitor's language. That block is not left to the model.

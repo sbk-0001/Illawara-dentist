@@ -1,3 +1,4 @@
+import { deepgramListenUrl } from "../stt";
 import { guardRequest, withCors } from "./guard";
 
 export const runtime = "nodejs";
@@ -39,7 +40,7 @@ export async function POST(request: Request): Promise<Response> {
   let upstream: Response;
   try {
     upstream = await fetch(
-      "https://api.deepgram.com/v1/listen?model=nova-3&language=multi&smart_format=true&punctuate=true",
+      deepgramListenUrl("prerecorded"),
       {
         method: "POST",
         headers: {

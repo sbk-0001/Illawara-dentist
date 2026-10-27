@@ -34,7 +34,20 @@ describe("detectLanguage", () => {
     const detected = detectLanguage("asdfgh qwerty zxcvbn plmokn");
     expect(detected.fallback).toBe(true);
     expect(detected.code).toBe("en");
+    expect(detectLanguage("42 99 100").fallback).toBe(true);
     expect(detectLanguage("What are your Saturday hours in Dapto?").code).toBe("en");
+  });
+
+  it("detects a Spanish root-canal question and mirrors other real Latin text", () => {
+    expect(detectLanguage("Hacen tratamientos de conducto en Woonona?")).toMatchObject({ code: "es", fallback: false });
+    expect(detectLanguage("Fanno trattamenti canalari a Woonona?")).toMatchObject({ code: "it", fallback: false });
+    expect(detectLanguage("Fazem tratamento de canal em Woonona?")).toMatchObject({ code: "pt", fallback: false });
+    expect(detectLanguage("Faites-vous des traitements de canal à Woonona?")).toMatchObject({ code: "fr", fallback: false });
+    expect(detectLanguage("Machen Sie Wurzelbehandlungen in Woonona?")).toMatchObject({ code: "de", fallback: false });
+    expect(detectLanguage("Phong kham nha khoa o Woonona bao nhieu?")).toMatchObject({ code: "vi", fallback: false });
+    const mirrored = detectLanguage("Quosta mendera florita belano");
+    expect(mirrored.code).toBe("und");
+    expect(mirrored.fallback).toBe(false);
   });
 
   it("uses only the latest turn, so a language switch is not stuck on the first one", () => {

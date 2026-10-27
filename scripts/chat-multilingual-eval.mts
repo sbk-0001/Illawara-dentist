@@ -9,6 +9,7 @@
 import { streamText } from "ai";
 import { EVAL_CASES } from "../src/chat/eval/cases.ts";
 import { replyMatchesLanguage } from "../src/chat/language/reply-script.ts";
+import { ensureContactFooter, shouldAppendContactFooter } from "../src/chat/server/contacts.ts";
 import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
@@ -40,13 +41,14 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const started = performance.now();
   const turn = prepareTurn(messages, "auto", index);
   const chunks = await hybridRetrieve(index, turn.text, turn.chunks);
+  const sourced = sourcesFromChunks(chunks);
   const instructions = buildInstructions({
     index,
     language: turn.reply,
     focus: turn.focus,
     severe: turn.severe,
     question: turn.text,
-    chunks: sourcesFromChunks(chunks).length ? chunks : [],
+    chunks: sourced.length ? chunks : [],
   });
   const result = streamText({
     model: CHAT_MODEL,
@@ -61,7 +63,11 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     if (!ttftMs) ttftMs = performance.now() - started;
     reply += part;
   }
-  return { reply: reply.trim(), ttftMs, totalMs: performance.now() - started, detected: turn.reply.code };
+  const finished = reply.trim();
+  const withContacts = shouldAppendContactFooter(turn.text, sourced.length)
+    ? ensureContactFooter(finished, index, turn.reply, turn.focus)
+    : finished;
+  return { reply: withContacts, ttftMs, totalMs: performance.now() - started, detected: turn.reply.code };
 }
 
 async function main() {

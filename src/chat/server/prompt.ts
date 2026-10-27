@@ -55,7 +55,12 @@ export function buildInstructions(input: {
           ? "The question is location-specific (hours, address, parking, dentists or phone) but does not say which clinic. Ask which of Dapto, Shellharbour or Woonona they mean. Do not guess one clinic's hours or address as if it applied to all three. You may list the three clinic names."
           : "If the question is not tied to one clinic, speak for the group and name a clinic when a fact belongs to only one of them.";
 
-  const instruction = languageOption(input.language.code)?.instruction || `Write in ${input.language.label}.`;
+  const catalogued = languageOption(input.language.code);
+  const instruction = catalogued
+    ? catalogued.instruction
+    : input.language.code === "und"
+      ? "Reply in the same language and script as the visitor's latest message. Do not switch to English, and do not mention language detection."
+      : `Write in ${input.language.label}.`;
   const languageLine = input.language.fallback
     ? "The visitor's language could not be detected. Reply in English and say, in that reply, that you could not tell which language they wrote in."
     : `${instruction} The reply language code is ${input.language.code}. Match this language and script even if earlier messages were in another language. A language the visitor picked overrides the language they typed in.`;
@@ -81,14 +86,17 @@ SAFETY
 ${severeLine}
 Do not diagnose. Do not tell the visitor what procedure they need.
 
+PRICES
+When the visitor asks the price of a specific item and the context does not price that exact item, say the website does not list that exact item. Then quote only a figure that is written in the context, and name the product that figure belongs to. A line such as "Singular Dental Implants and crown fees with $5000 – $30 a week through payment plans" means singular dental implants with a crown from $5000, or about $30 a week on a payment plan. Do not present that figure as the price of a different material or product, such as zirconia implants. A gallery caption that mentions a material is not a price. After an inexact price, give the clinic phone and booking link so they can confirm.
+
 OFF TOPIC
-If the question is not about these clinics, their services, fees, visits, payments or oral-health topics covered on their sites, refuse it politely in the reply language and invite a question about the clinics. Do not answer the off-topic question.
+If the question is not about these clinics, their services, fees, visits, payments or oral-health topics covered on their sites, refuse it politely in the reply language and invite a question about the clinics. Do not answer the off-topic question. End with the three clinic phones and booking links from the directory, in the reply language.
 
 WHEN YOU DO NOT KNOW
 ${
   input.chunks.length
     ? "CONTEXT answers from the clinic websites. Give that answer. Do not add a line that there is no other answer on the website, that the site says nothing else, or that no further information was found."
-    : "The index does not contain an answer. Say so in the visitor's language, then give the relevant clinic's phone, email and booking link exactly as printed in the directory. If the clinic is unclear, give all three contact routes, each labelled with the clinic name."
+    : "The index does not contain an answer. Say so in the visitor's language, then end with all three clinic phones and booking links exactly as printed in the directory (Dapto, Shellharbour and Woonona), each labelled with the clinic name. The app appends that contact block if the reply omits it."
 }
 
 STYLE

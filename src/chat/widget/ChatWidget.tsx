@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
+import { deepgramListenUrl } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import styles from "./ChatWidget.module.css";
 
@@ -185,7 +186,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       const token = (await tokenResponse.json()) as { access_token?: string };
       if (!token.access_token) throw new Error("token");
       const socket = new WebSocket(
-        "wss://api.deepgram.com/v1/listen?model=nova-3&language=multi&smart_format=true&interim_results=true&punctuate=true&endpointing=400",
+        deepgramListenUrl("stream"),
         ["bearer", token.access_token],
       );
       session.current.socket = socket;

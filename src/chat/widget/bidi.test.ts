@@ -13,4 +13,21 @@ describe("bidi isolates", () => {
     expect(parts[0]).toMatchObject({ kind: "text" });
     expect(parts.some((part) => part.kind === "text" && part.value.includes("اتصلوا"))).toBe(true);
   });
+
+  it("puts a space between surrounding text and an isolated phone, email or url", () => {
+    const parts = splitIsolatedEmbeds("اتصلوا على02 4216 9911أو info@shellharbourdentist.com.auثم https://bookings.zavy360.com/booking/x");
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (!part || part.kind !== "isolate") continue;
+      const prev = parts[i - 1];
+      const next = parts[i + 1];
+      if (prev?.kind === "text") expect(prev.value.endsWith(" "), part.value).toBe(true);
+      if (next?.kind === "text") expect(next.value.startsWith(" "), part.value).toBe(true);
+    }
+    expect(parts.filter((part) => part.kind === "isolate").map((part) => part.value)).toEqual([
+      "02 4216 9911",
+      "info@shellharbourdentist.com.au",
+      "https://bookings.zavy360.com/booking/x",
+    ]);
+  });
 });

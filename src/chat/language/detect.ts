@@ -27,13 +27,19 @@ const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "kotha", 
 const BANGLISH_WEAK = ["chai", "chan", "ashen", "asbo", "ajke", "kalke", "taka", "khula", "khola", "hobe", "keno", "kene", "ki", "er", "ar", "ache", "din"];
 const HINGLISH_STRONG = ["kya", "kaise", "mujhe", "chahiye", "kitna", "kitne", "kitni", "aapka", "kahan", "nahi", "nahin", "daant", "dard", "baje", "khulti", "khulta", "shaniwar", "samay"];
 const HINGLISH_WEAK = ["hai", "hain", "kal", "aaj", "mera", "meri", "aap", "karo", "karna", "wala", "wali", "baat"];
-const ENGLISH = ["what", "when", "where", "hours", "hour", "saturday", "sunday", "monday", "friday", "appointment", "clinic", "fee", "fees", "much", "open", "opening", "pain", "tooth", "broken", "emergency", "payment", "health", "fund", "please", "your", "the", "are", "how", "cost", "price", "book", "booking", "address", "parking", "dentist", "which", "does", "do", "can", "need", "have", "who", "won"];
-const SPANISH = ["horario", "sabado", "sábado", "clinica", "clínica", "cita", "duele", "diente", "cuanto", "cuánto", "cuesta", "donde", "dónde", "precio", "abierto", "cual", "cuál", "ustedes", "hola", "revision", "revisión", "limpieza", "noche", "perros", "quien", "quién", "gano", "ganó", "copa", "mundo", "roto"];
-const ITALIAN = ["orari", "orario", "sabato", "clinica", "appuntamento", "dente", "dolore", "quanto", "dove", "aperto", "quali", "sono", "gli", "della", "del", "costa", "chi", "vinto", "coppa", "mondo", "rotto", "notte", "cani", "tenete", "durante"];
-const FRENCH = ["horaires", "samedi", "clinique", "rendez", "dent", "douleur", "combien", "ouvert", "vous", "est"];
-const GERMAN = ["öffnungszeiten", "zahnarzt", "samstag", "termin", "zahn", "schmerzen", "wie", "nicht", "ich", "uhr", "geöffnet"];
-const PORTUGUESE = ["horário", "horario", "sábado", "sabado", "clínica", "clinica", "consulta", "dente", "quanto", "onde", "aberto", "vocês", "voces"];
-const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy"];
+const ENGLISH = ["what", "when", "where", "hours", "hour", "saturday", "sunday", "monday", "friday", "appointment", "clinic", "fee", "fees", "much", "open", "opening", "pain", "tooth", "broken", "emergency", "payment", "health", "fund", "please", "your", "the", "are", "how", "cost", "price", "book", "booking", "address", "parking", "dentist", "which", "does", "do", "can", "need", "have", "who", "won", "dental", "implant", "implants", "clean", "offer", "about", "crown", "zirconia", "treatment", "root", "canal", "check"];
+const SPANISH = ["horario", "horarios", "sabado", "sábado", "clinica", "clínica", "cita", "duele", "diente", "cuanto", "cuánto", "cuesta", "donde", "dónde", "precio", "abierto", "cual", "cuál", "ustedes", "hola", "revision", "revisión", "limpieza", "noche", "perros", "quien", "quién", "gano", "ganó", "copa", "mundo", "roto", "hacen", "tienen", "tratamiento", "tratamientos", "conducto", "dentista", "implantes", "niños", "ninos", "puedo", "reservar", "teléfono", "telefono", "abierta"];
+const SPANISH_FUNCTION = ["para", "los", "las"];
+const ITALIAN = ["orari", "orario", "sabato", "clinica", "appuntamento", "dente", "dolore", "quanto", "dove", "aperto", "quali", "sono", "gli", "della", "del", "costa", "chi", "vinto", "coppa", "mondo", "rotto", "notte", "cani", "tenete", "durante", "fanno", "hanno", "trattamento", "trattamenti", "condotto", "canale", "dentista", "impianti", "bambini", "posso", "prenotare", "telefono", "radice", "sbiancamento", "corona"];
+const ITALIAN_FUNCTION = ["per", "che", "una", "con"];
+const FRENCH = ["horaires", "samedi", "clinique", "rendez", "dent", "douleur", "combien", "ouvert", "vous", "est", "font", "ont", "faites", "traitement", "traitements", "canal", "dentiste", "implants", "enfants", "peux", "reserver", "réserver", "telephone", "téléphone", "couronne", "blanchiment", "ou", "où"];
+const FRENCH_FUNCTION = ["pour", "les"];
+const GERMAN = ["öffnungszeiten", "offnungszeiten", "zahnarzt", "zahnärztin", "samstag", "termin", "zahn", "schmerzen", "wie", "nicht", "ich", "uhr", "geöffnet", "geoeffnet", "machen", "haben", "behandlung", "behandlungen", "wurzel", "wurzelbehandlung", "implantate", "kinder", "kann", "telefon", "wo", "wieviel", "kosten"];
+const GERMAN_FUNCTION = ["für", "fur", "die", "der", "das"];
+const PORTUGUESE = ["horário", "horario", "horários", "horarios", "sábado", "sabado", "clínica", "clinica", "consulta", "dente", "quanto", "onde", "aberto", "vocês", "voces", "fazem", "tem", "têm", "tratamento", "tratamentos", "canal", "dentista", "implantes", "crianças", "criancas", "posso", "reservar", "telefone", "aberta"];
+const PORTUGUESE_FUNCTION = ["para", "os", "as"];
+const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy", "nha", "khoa", "phi", "nieng", "niềng", "trang", "trắng", "thoai", "thoại", "lich", "lịch", "dat", "đặt", "chua", "chữa", "implant", "bacsi", "nhakhoa"];
+const VIETNAMESE_FUNCTION = ["bac", "si"];
 
 const ARABIC_WORDS = ["ما", "هي", "ساعات", "العمل", "عيادة", "السبت", "ألم", "سن", "رسوم", "موعد", "كم"];
 const URDU_WORDS = ["کیا", "ہے", "ہیں", "کلینک", "بجے", "کھلتا", "ہفتہ", "درد", "دانت", "کتنے", "میں"];
@@ -71,6 +77,30 @@ function scoreWords(tokens: string[], words: string[], weight = 1): number {
 function englishReply(fallback: boolean, confidence: "high" | "low"): Detection {
   const option = languageOption("en")!;
   return { ...replyFromOption(option, fallback ? "fallback" : "detected", fallback), confidence };
+}
+
+/** Latin text that is real language, but not one we can name. The model mirrors the visitor. */
+function mirrorReply(confidence: "high" | "low"): Detection {
+  return {
+    code: "und",
+    label: "the visitor's language",
+    script: "Latin",
+    dir: "ltr",
+    fallback: false,
+    source: "detected",
+    confidence,
+  };
+}
+
+function isUnidentifiableLatin(text: string, tokens: string[]): boolean {
+  const letters = text.replace(/[^A-Za-z\u00C0-\u024F]/g, "");
+  if (letters.length < 2) return true;
+  const long = tokens.filter((token) => token.length >= 3);
+  const wordlike = long.filter((token) => {
+    const vowels = token.match(/[aeiouàáâãäåæèéêëìíîïòóôõöùúûüýÿ]/gi)?.length ?? 0;
+    return vowels / token.length >= 0.25;
+  });
+  return wordlike.length < 2;
 }
 
 function fromCode(code: string, confidence: "high" | "low"): Detection {
@@ -114,13 +144,13 @@ function latinFamily(text: string, tokens: string[]): Detection {
   if (tokens.length <= 18 && /\bki\s*\?\s*$/i.test(text.trim())) banglish += 4;
   const hinglish = scoreWords(tokens, HINGLISH_STRONG, 2) + scoreWords(tokens, HINGLISH_WEAK, 1);
   const english = scoreWords(tokens, ENGLISH, 1);
-  const spanish = scoreWords(tokens, SPANISH, 2);
-  const italian = scoreWords(tokens, ITALIAN, 2);
-  const french = scoreWords(tokens, FRENCH, 2);
-  const german = scoreWords(tokens, GERMAN, 2);
-  const portuguese = scoreWords(tokens, PORTUGUESE, 2);
+  const spanish = scoreWords(tokens, SPANISH, 2) + scoreWords(tokens, SPANISH_FUNCTION, 1);
+  const italian = scoreWords(tokens, ITALIAN, 2) + scoreWords(tokens, ITALIAN_FUNCTION, 1);
+  const french = scoreWords(tokens, FRENCH, 2) + scoreWords(tokens, FRENCH_FUNCTION, 1);
+  const german = scoreWords(tokens, GERMAN, 2) + scoreWords(tokens, GERMAN_FUNCTION, 1);
+  const portuguese = scoreWords(tokens, PORTUGUESE, 2) + scoreWords(tokens, PORTUGUESE_FUNCTION, 1);
   const vietnameseDiacritics = /[ăơưđắằẳẵặấầẩẫậếềểễệốồổỗộớờởỡợứừửữựạẹịọụỵảẽỉỏủỷỹ]/i.test(text) ? 3 : 0;
-  const vietnamese = scoreWords(tokens, VIETNAMESE, 2) + vietnameseDiacritics;
+  const vietnamese = scoreWords(tokens, VIETNAMESE, 2) + scoreWords(tokens, VIETNAMESE_FUNCTION, 1) + vietnameseDiacritics;
 
   const ranked: { code: string; score: number }[] = [
     { code: "bn-Latn", score: banglish },
@@ -137,10 +167,8 @@ function latinFamily(text: string, tokens: string[]): Detection {
   const best = ranked[0];
   const second = ranked[1];
   if (!best || best.score < 2) {
-    const letters = text.replace(/[^A-Za-z\u00C0-\u024F]/g, "");
-    if (letters.length >= 8) return englishReply(true, "low");
-    if (english >= 1) return englishReply(false, "low");
-    return englishReply(true, "low");
+    if (isUnidentifiableLatin(text, tokens)) return englishReply(true, "low");
+    return mirrorReply("low");
   }
   if (best.code === "en") return englishReply(false, best.score >= 2 ? "high" : "low");
   if (best.code === "bn-Latn" && banglish >= english && banglish >= hinglish) return fromCode("bn-Latn", "high");

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { detectLanguage } from "../language/detect";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions } from "./prompt";
 import { prepareTurn } from "./chat-route";
@@ -42,6 +43,37 @@ describe("prompt rules", () => {
     expect(turn.chunks.length).toBeGreaterThan(0);
     expect(turn.instructions).toMatch(/no other answer on the website/i);
     expect(turn.instructions).not.toContain("NO RELEVANT PAGES");
+  });
+
+  it("does not force English when a Latin question is real but unnamed", () => {
+    const detected = detectLanguage("Quosta mendera florita belano");
+    const instructions = buildInstructions({
+      index,
+      language: detected,
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "Quosta mendera florita belano",
+    });
+    expect(detected.fallback).toBe(false);
+    expect(instructions).not.toMatch(/could not be detected/i);
+    expect(instructions).toMatch(/same language and script as the visitor's latest message/i);
+  });
+
+  it("quotes an inexact published fee instead of assigning it to the asked item", () => {
+    const instructions = buildInstructions({
+      index,
+      language: { code: "en", label: "English", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "How much are zirconia implants?",
+    });
+    expect(instructions).toMatch(/does not list that exact item/i);
+    expect(instructions).toMatch(/from \$5000/i);
+    expect(instructions).toMatch(/\$30 a week/i);
+    expect(instructions).toMatch(/zirconia/i);
+    expect(instructions).toMatch(/phone and booking link/i);
   });
 
   it("says the language could not be detected for gibberish", () => {
