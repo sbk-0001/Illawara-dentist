@@ -1,4 +1,5 @@
-import type { ClinicFocus } from "../intent";
+import { mentionedClinics, type ClinicFocus } from "../intent";
+import { clinicName } from "../retrieval/search";
 import type { ClinicId } from "../types";
 
 /**
@@ -280,6 +281,49 @@ export function formatClinicHours(clinic: ClinicId, code: string): string {
   const line = partsLine.join(comma);
   const after = schedule.notes.some((note) => note.kind === "after-hours") ? (AFTER_HOURS[code] ?? AFTER_HOURS.en) : "";
   return after ? `${line}. ${after}` : line;
+}
+
+const BARE_HOURS_MAX = 400;
+
+function normalizeHoursLine(text: string): string {
+  return text.trim().replace(/[.。]+$/u, "").replace(/\s+/g, " ").trim();
+}
+
+/** The reply is exactly one clinic's hours line and does not already name a clinic. */
+export function bareHoursClinic(text: string, code: string): ClinicId | null {
+  const trimmed = normalizeHoursLine(text);
+  if (!trimmed || mentionedClinics(text).length > 0) return null;
+  const hits = (["dapto", "shellharbour", "woonona"] as const).filter((id) => normalizeHoursLine(formatClinicHours(id, code)) === trimmed);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** True while the text so far is still only a known hours line, so the name can be added at the end. */
+export function mayBeBareHours(text: string, code: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > BARE_HOURS_MAX) return false;
+  if (mentionedClinics(trimmed).length > 0) return false;
+  const probe = normalizeHoursLine(trimmed);
+  if (!probe) return false;
+  return (["dapto", "shellharbour", "woonona"] as const).some((id) => {
+    const line = normalizeHoursLine(formatClinicHours(id, code));
+    return line === probe || line.startsWith(probe);
+  });
+}
+
+/**
+ * A hours-only reply has to name the clinic.
+ * When the question never named one, name every clinic instead of leaving one schedule anonymous.
+ */
+export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
+  if (!bareHoursClinic(text, code)) return text;
+  const ids = clinicIdsForHours(focus);
+  if (ids.length > 1 || focus.kind === "ask" || focus.kind === "any") {
+    return ids.map((id) => `${clinicName(id)}: ${formatClinicHours(id, code)}`).join("\n");
+  }
+  const matched = bareHoursClinic(text, code);
+  const name = clinicName(matched ?? ids[0]);
+  const body = text.trim();
+  return body.startsWith(name) ? text : `${name}: ${body}`;
 }
 
 export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {

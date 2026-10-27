@@ -53,4 +53,32 @@ describe("spoken language on a voice turn", () => {
     expect(rejected.spokenLanguage).toBeNull();
     expect(rejected.langOverride).toBe(false);
   });
+
+  it("derives Bengali from mixed script even when Deepgram said English or Indonesian", () => {
+    const mixed = prepareTurn([{ role: "user", content: "Woonona kliniker চিkanaki." }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "id",
+    });
+    expect(mixed.spokenLanguage).toBe("bn");
+    expect(mixed.reply.code).toBe("bn");
+    expect(mixed.reply.script).toBe("Bengali");
+    expect(mixed.instructions).toContain("Write in Bengali, using Bengali script.");
+
+    const address = prepareTurn([{ role: "user", content: ".Unona clinic at ঠিকানা কি?" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "en",
+    });
+    expect(address.spokenLanguage).toBe("bn");
+    expect(address.reply.code).toBe("bn");
+  });
+
+  it("does not send a Han transcript as English", () => {
+    const turn = prepareTurn([{ role: "user", content: "伍诺纳诊所几点开门" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "en",
+    });
+    expect(turn.spokenLanguage).toBe("zh");
+    expect(turn.reply.code).toBe("zh");
+    expect(turn.reply.code).not.toBe("en");
+  });
 });

@@ -9,7 +9,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { hasLetters, detectLanguage, resolveReplyLanguage } from "../language/detect";
-import { normalizeSpokenLanguage } from "../stt";
+import { spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
@@ -89,7 +89,7 @@ export function prepareTurn(
   const textDetection = detectLanguage(text);
   let reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
-  const spokenLanguage = inputMode === "voice" ? normalizeSpokenLanguage(voice?.spokenLanguage) : null;
+  const spokenLanguage = inputMode === "voice" ? spokenLanguageForTranscript(voice?.spokenLanguage, text) : null;
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
   let langOverride = false;
@@ -227,7 +227,7 @@ export async function POST(request: Request): Promise<Response> {
       lexical.reply.code,
       hoursRelevant(lexical.text, chunks),
     ),
-    { code: lexical.reply.code, index, replyStatus },
+    { code: lexical.reply.code, index, replyStatus, focus: lexical.focus },
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),

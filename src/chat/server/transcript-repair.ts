@@ -1,5 +1,5 @@
 import { transcribe } from "ai";
-import { normalizeSpokenLanguage, requiresNativeScript, transcriptNeedsRepair } from "../stt";
+import { hasNativeScript, normalizeSpokenLanguage, requiresNativeScript } from "../stt";
 
 /**
  * Second pass when Nova-3 names a non-Latin language but returns Latin text.
@@ -18,7 +18,7 @@ type RepairCall = (input: {
   providerOptions: { openai: { language: string } };
 }) => Promise<{ text?: string }>;
 
-/** Use the repaired text only when it actually contains the spoken script. Timeout and errors keep the original. */
+/** Use the repaired text only when it contains the spoken script. A Latin clinic name may remain. Timeout and errors keep the original. */
 export async function repairNativeTranscript(input: {
   audio: Uint8Array;
   language: string;
@@ -37,7 +37,7 @@ export async function repairNativeTranscript(input: {
       providerOptions: { openai: { language } },
     });
     const text = result.text?.trim() || "";
-    if (!text || transcriptNeedsRepair(language, text)) return null;
+    if (!text || !hasNativeScript(language, text)) return null;
     return text;
   } catch {
     return null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, keytermsForHints, majoritySpokenLanguage, micListeningNote, normalizeSpokenLanguage, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
+import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, keytermsForHints, majoritySpokenLanguage, micListeningNote, normalizeSpokenLanguage, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -31,7 +31,13 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(terms).toContain("ডাপ্টো");
     expect(terms).toContain("উনোনা");
     expect(terms).toContain("শেলহারবার");
+    expect(terms).toContain("ঠিকানা");
+    expect(terms).toContain("অ্যাপয়েন্টমেন্ট");
     expect(terms).not.toContain("Dapto");
+    const chinese = new URL(deepgramListenUrl("prerecorded", "zh").replace(/^wss:/, "https:")).searchParams.getAll("keyterm");
+    expect(chinese).toContain("种植牙");
+    expect(chinese).toContain("隐适美");
+    expect(chinese).not.toContain("Dapto");
     expect(terms).not.toContain("Woonona");
     expect(deepgramListenUrl("prerecorded", "hi")).toContain("language_hint=hi");
     expect(new URL(deepgramListenUrl("prerecorded", "hi")).searchParams.getAll("keyterm")).toContain("वूनोना");
@@ -51,7 +57,17 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(majoritySpokenLanguage(votesFromAlternative({ languages: ["bn", "en"] }))).toBe("bn");
     expect(transcriptNeedsRepair("bn", "Dapto clinic Saturday kokhon khola thake?")).toBe(true);
     expect(transcriptNeedsRepair("bn", "ডাপ্টো ক্লিনিক শনিবার কখন খোলা থাকে?")).toBe(false);
+    expect(transcriptNeedsRepair("bn", ".Unona clinic at ঠিকানা কি?")).toBe(true);
+    expect(transcriptNeedsRepair("bn", "Woonona kliniker চিkanaki.")).toBe(true);
+    expect(transcriptNeedsRepair("zh", "伍诺纳诊所 Dapto")).toBe(true);
     expect(transcriptNeedsRepair("en", "What time does Dapto open?")).toBe(false);
+    expect(spokenLanguageForTranscript("en", ".Unona clinic at ঠিকানা কি?")).toBe("bn");
+    expect(spokenLanguageForTranscript("id", "Woonona kliniker চিkanaki.")).toBe("bn");
+    expect(spokenLanguageForTranscript("en", "伍诺纳诊所几点开门")).toBe("zh");
+    expect(spokenLanguageForTranscript("id", "伍诺纳诊所几点开门")).toBe("zh");
+    expect(spokenLanguageForTranscript("bn", ".Unona clinic at ঠিকানা কি?")).toBe("bn");
+    expect(spokenLanguageForTranscript("en", "What time does Dapto open?")).toBe("en");
+    expect(spokenLanguageForTranscript("hi", "डाप्टो क्लिनिक कब खुलेगा?")).toBe("hi");
     expect(micListeningNote("bn")).toBe("শুনছি · বাংলা");
     expect(micListeningNote("en")).toBe("Listening…");
     expect(formatLiveDrop({ code: 1006, reason: "abnormal", wasClean: false })).toBe("1006 abnormal unclean");
@@ -66,5 +82,11 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(correctTranscript("Buona sera")).toBe("Buona sera");
     expect(correctTranscript("Buona")).toBe("Buona");
     expect(correctTranscript("Buona sera at the clinic")).toBe("Buona sera at the clinic");
+    expect(correctTranscript("ডাক্তার ক্লিনিক কখন খোলা?")).toBe("Dapto কখন খোলা?");
+    expect(correctTranscript("ডাক্তার ক্লিনিকের ঠিকানা কি?")).toBe("Dapto ঠিকানা কি?");
+    expect(correctTranscript("আমি ডাক্তার ক্লিনিকে যাব")).toBe("আমি ডাক্তার ক্লিনিকে যাব");
+    expect(correctTranscript("饥食美矫正多少钱")).toBe("隐适美矫正多少钱");
+    expect(correctTranscript("我想做饥食美种植")).toBe("我想做种植牙种植");
+    expect(correctTranscript("饥食美多少钱")).toBe("饥食美多少钱");
   });
 });

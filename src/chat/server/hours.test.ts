@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClinicHours, hoursRelevant, hoursSource, rewriteEnglishHours } from "./hours";
+import { bareHoursClinic, formatClinicHours, guardBareHoursReply, hoursRelevant, hoursSource, mayBeBareHours, rewriteEnglishHours } from "./hours";
 
 const ENGLISH_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const AMPM = /\b(am|pm)\b/i;
@@ -61,6 +61,19 @@ describe("localised opening hours", () => {
     expect(rewriteEnglishHours("Monday থেকে Friday, 8.00 AM", "bn")).toBe("সোমবার থেকে শুক্রবার, সকাল 8:00");
     expect(rewriteEnglishHours("Monday 8:00 AM", "en")).toBe("Monday 8:00 AM");
     expect(rewriteEnglishHours("Shonibar 8am", "bn-Latn")).toBe("Shonibar 8am");
+  });
+
+  it("names the clinic on a hours-only line, and names every clinic when the question did not", () => {
+    const line = "Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.";
+    expect(bareHoursClinic(line, "en")).toBe("dapto");
+    expect(mayBeBareHours("Monday–Friday 8:00 AM–6:00", "en")).toBe(true);
+    expect(mayBeBareHours("Dapto is open Monday–Friday 8:00 AM–6:00 PM.", "en")).toBe(false);
+    const unnamed = guardBareHoursReply(line, "en", { kind: "ask" });
+    expect(unnamed).toContain("Dapto Dentists:");
+    expect(unnamed).toContain("Shellharbour Dentists:");
+    expect(unnamed).toContain("Woonona Dentists:");
+    expect(guardBareHoursReply(line, "en", { kind: "one", clinic: "dapto" }).startsWith("Dapto Dentists:")).toBe(true);
+    expect(guardBareHoursReply("We are open on Saturday.", "en", { kind: "ask" })).toBe("We are open on Saturday.");
   });
 
   it("treats an hours question or an hours chunk as relevant", () => {

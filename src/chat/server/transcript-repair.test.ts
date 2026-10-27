@@ -15,6 +15,13 @@ describe("native-script transcript repair", () => {
     });
     expect(text).toContain("ডাপ্টো");
     expect(seen).toEqual({ model: TRANSCRIPT_REPAIR_MODEL, language: "bn", maxRetries: 0 });
+
+    const mixed = await repairNativeTranscript({
+      audio: new Uint8Array([4, 5, 6]),
+      language: "bn",
+      transcribe: async () => ({ text: "Woonona ক্লিনিকের ঠিকানা কি?" }),
+    });
+    expect(mixed).toBe("Woonona ক্লিনিকের ঠিকানা কি?");
   });
 
   it("keeps the original when the repair is still Latin or misses the deadline", async () => {

@@ -131,4 +131,40 @@ describe("contact label rewrite", () => {
     releaseEnd();
     await reader.cancel();
   });
+
+  it("names every clinic when an hours-only reply does not say which clinic", async () => {
+    const line = "Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.";
+    const unnamed = await readChunks(
+      attachContactLabels(source([line]), { code: "en", index, replyStatus: { missing: false }, focus: { kind: "ask" } }),
+    );
+    const text = unnamed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("Dapto Dentists: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM");
+    expect(text).toContain("Shellharbour Dentists:");
+    expect(text).toContain("Woonona Dentists:");
+    expect(text.startsWith("Monday")).toBe(false);
+
+    const named = await readChunks(
+      attachContactLabels(source(["Monday–Fri", "day 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM."]), {
+        code: "en",
+        index,
+        replyStatus: { missing: false },
+        focus: { kind: "one", clinic: "dapto" },
+      }),
+    );
+    const dapto = named.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(dapto.startsWith("Dapto Dentists:")).toBe(true);
+    expect(dapto).toContain("Saturday 8:00 AM–4:00 PM.");
+    expect(dapto).not.toContain("Shellharbour");
+
+    const sentence = await readChunks(
+      attachContactLabels(source(["Dapto is open Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM."]), {
+        code: "en",
+        index,
+        replyStatus: { missing: false },
+        focus: { kind: "ask" },
+      }),
+    );
+    const prose = sentence.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(prose).toBe("Dapto is open Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.");
+  });
 });

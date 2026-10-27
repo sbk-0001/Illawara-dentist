@@ -1,4 +1,4 @@
-import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, majoritySpokenLanguage, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { correctTranscript, deepgramLanguageHints, deepgramListenUrl, majoritySpokenLanguage, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
 import { repairNativeTranscript } from "./transcript-repair";
 
@@ -81,11 +81,12 @@ export async function POST(request: Request): Promise<Response> {
   const payload = (await upstream.json()) as DeepgramListen;
   const alternative = payload.results?.channels?.[0]?.alternatives?.[0];
   let transcript = correctTranscript(alternative?.transcript?.trim() || "");
-  const detected =
+  const heard =
     majoritySpokenLanguage(votesFromAlternative(alternative)) ||
     alternative?.languages?.[0] ||
     payload.results?.channels?.[0]?.detected_language ||
     "";
+  const detected = spokenLanguageForTranscript(heard, transcript) || heard;
   let repaired = false;
   if (transcript && transcriptNeedsRepair(detected, transcript) && process.env.AI_GATEWAY_API_KEY) {
     const next = await repairNativeTranscript({

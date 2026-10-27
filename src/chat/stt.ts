@@ -12,16 +12,33 @@ import { languageOption } from "./language/catalog";
  * Repeat `language_hint`. Hints bias detection; they do not restrict it.
  * An unknown hint is HTTP 400 and, on the live socket, a rejected handshake.
  */
-export const STT_KEYTERMS = ["Dapto", "Woonona", "Shellharbour", "Illawarra", "Invisalign", "Barrack Heights", "Zavy"] as const;
+export const STT_KEYTERMS = [
+  "Dapto",
+  "Woonona",
+  "Shellharbour",
+  "Illawarra",
+  "Invisalign",
+  "Barrack Heights",
+  "Zavy",
+  "ঠিকানা",
+  "অ্যাপয়েন্টমেন্ট",
+  "ডাপ্টো",
+  "ড্যাপ্টো",
+  "উনোনা",
+  "শেলহারবার",
+  "ব্যারাক হাইটস",
+  "种植牙",
+  "隐适美",
+] as const;
 
-/** Native-script clinic names. Used instead of the Latin list when a non-English hint is set. */
+/** Native-script clinic names and the query words Nova-3 most often mishears. Latin names are omitted. */
 const NATIVE_KEYTERMS: Record<string, readonly string[]> = {
-  bn: ["ডাপ্টো", "ড্যাপ্টো", "উনোনা", "শেলহারবার", "ব্যারাক হাইটস"],
+  bn: ["ডাপ্টো", "ড্যাপ্টো", "উনোনা", "শেলহারবার", "ব্যারাক হাইটস", "ঠিকানা", "অ্যাপয়েন্টমেন্ট"],
   hi: ["डाप्टो", "वूनोना", "शेलहारबर", "बैरक हाइट्स"],
   ar: ["دابتو", "وونونا", "شيلهاربر"],
   ur: ["ڈاپٹو", "وونونا", "شیلہاربر"],
   fa: ["داپتو", "وونونا", "شلهاربر"],
-  zh: ["达普托", "伍诺纳", "谢尔港"],
+  zh: ["达普托", "伍诺纳", "谢尔港", "种植牙", "隐适美"],
   ko: ["닥토", "울로나", "셸하버"],
   ne: ["डाप्टो", "वूनोना"],
   el: ["ντάπτο"],
@@ -193,21 +210,120 @@ export function requiresNativeScript(code: string | null | undefined): boolean {
   return Boolean(normalized && normalized !== "en" && NATIVE_SCRIPT[normalized]);
 }
 
+export function hasNativeScript(code: string | null | undefined, text: string): boolean {
+  const normalized = normalizeSpokenLanguage(code);
+  if (!normalized) return false;
+  return Boolean(NATIVE_SCRIPT[normalized]?.test(text));
+}
+
+const SCRIPT_COUNTS: { code: string; family: string; re: RegExp }[] = [
+  { code: "bn", family: "bn", re: /[\u0980-\u09FF]/g },
+  { code: "hi", family: "deva", re: /[\u0900-\u097F]/g },
+  { code: "ar", family: "arab", re: /[\u0600-\u06FF]/g },
+  { code: "ko", family: "ko", re: /[\uAC00-\uD7AF]/g },
+  { code: "ja", family: "cjk", re: /[\u3040-\u30FF]/g },
+  { code: "zh", family: "cjk", re: /[\u4E00-\u9FFF]/g },
+  { code: "el", family: "el", re: /[\u0370-\u03FF]/g },
+  { code: "ru", family: "ru", re: /[\u0400-\u04FF]/g },
+  { code: "th", family: "th", re: /[\u0E00-\u0E7F]/g },
+  { code: "he", family: "he", re: /[\u0590-\u05FF]/g },
+  { code: "pa", family: "pa", re: /[\u0A00-\u0A7F]/g },
+  { code: "ta", family: "ta", re: /[\u0B80-\u0BFF]/g },
+  { code: "te", family: "te", re: /[\u0C00-\u0C7F]/g },
+  { code: "gu", family: "gu", re: /[\u0A80-\u0AFF]/g },
+];
+
+function scriptFamily(code: string): string {
+  if (code === "hi" || code === "ne" || code === "mr") return "deva";
+  if (code === "ar" || code === "ur" || code === "fa") return "arab";
+  if (code === "zh" || code === "ja") return "cjk";
+  return code;
+}
+
+function countScript(text: string, re: RegExp): number {
+  return text.match(re)?.length ?? 0;
+}
+
+/** Language of the dominant non-Latin script, when at least two of those characters are present. */
+export function languageFromNativeScript(text: string): string | null {
+  const counted = SCRIPT_COUNTS.map((item) => ({ ...item, count: countScript(text, item.re) }))
+    .filter((item) => item.count >= 2)
+    .sort((a, b) => b.count - a.count);
+  const best = counted[0];
+  if (!best) return null;
+  const second = counted[1];
+  if (second && second.count === best.count && second.family !== best.family) return null;
+  const kana = counted.find((item) => item.code === "ja")?.count ?? 0;
+  if ((best.code === "zh" || best.code === "ja") && kana >= 2) return "ja";
+  if (best.code === "ar") {
+    const urdu = countScript(text, /[ٹڈڑںے]/g);
+    const persian = countScript(text, /[پچژگ]/g);
+    if (persian >= 2 && persian > urdu) return "fa";
+    if (urdu >= 2 && urdu > persian) return "ur";
+    return "ar";
+  }
+  if (best.code === "hi" && /हुन्छ|खुल्छ|तपाईं/.test(text)) return "ne";
+  return best.code;
+}
+
+/**
+ * Do not keep an English or Indonesian Deepgram tag once the transcript contains
+ * Bengali, Devanagari, Arabic, Han, or another non-Latin script.
+ */
+export function spokenLanguageForTranscript(heard: string | null | undefined, text: string): string | null {
+  const normalized = normalizeSpokenLanguage(heard);
+  const fromScript = languageFromNativeScript(text);
+  if (!fromScript) return normalized;
+  if (!normalized || normalized === "en" || normalized === "id") return fromScript;
+  if (scriptFamily(normalized) === scriptFamily(fromScript)) return normalized;
+  if (!requiresNativeScript(normalized)) return fromScript;
+  return fromScript;
+}
+
+const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
+
+/** A native language still written in Latin, or mixed with Latin, needs the second pass. */
 export function transcriptNeedsRepair(code: string | null | undefined, text: string): boolean {
   const normalized = normalizeSpokenLanguage(code);
   if (!normalized || !requiresNativeScript(normalized)) return false;
-  return !NATIVE_SCRIPT[normalized]?.test(text);
+  if (!NATIVE_SCRIPT[normalized]?.test(text)) return true;
+  return LATIN_LETTERS.test(text);
 }
 
 const CLINIC_CONTEXT =
   /clinic|dentist|dental|invisalign|tooth|teeth|appointment|implant|dokter|doktor|gigi|klinik|عيادة|طبيب|أسنان|کلینک|دانت|क्लिनिक|दांत|ডেন্ট|দাঁত|치과|치아|诊所|牙医|牙齿|phòng khám|nha khoa|οδοντ/i;
+
+/** Hours or place words. "ডাক্তার" itself is doctor, so it is not a cue. */
+const HOURS_OR_LOCATION =
+  /hour|hours|opening|open|close|address|where|location|saturday|ঠিকানা|কোথায়|খোলা|কখন|সময়|শনিবার|khola|kokhon|thikana|kothay|地址|哪里|哪儿|几点|营业|开门/i;
+
+const IMPLANT_CONTEXT = /种植|植牙|种牙|implant/i;
+const ALIGNER_CONTEXT = /矫正|隐形|牙套|隐适|invisalign|aligner/i;
+
+/**
+ * "ডাক্তার ক্লিনিক" was Dapto in an Indian Bengali hours/address question.
+ * Leave it alone when the visitor is talking about a doctor.
+ */
+function correctDoctorClinic(text: string): string {
+  if (!text.includes("ডাক্তার ক্লিনিক") || !HOURS_OR_LOCATION.test(text)) return text;
+  return text.replace(/ডাক্তার ক্লিনিক(?:ের|ে)?/g, "Dapto");
+}
+
+/** "饥食美" is 种植牙 or 隐适美 only when the rest of the utterance says which. */
+function correctJiShiMei(text: string): string {
+  if (!text.includes("饥食美")) return text;
+  const implant = IMPLANT_CONTEXT.test(text);
+  const aligner = ALIGNER_CONTEXT.test(text);
+  if (implant === aligner) return text;
+  return text.replaceAll("饥食美", implant ? "种植牙" : "隐适美");
+}
 
 /**
  * Map known Nova-3 mishearings of local and brand names.
  * "Buona" becomes Woonona only beside a clinic or dentist word, and not in "Buona sera".
  */
 export function correctTranscript(text: string): string {
-  const replaced = text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو");
+  const replaced = correctJiShiMei(correctDoctorClinic(text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو")));
   return replaced.replace(/\bBuona\b/gi, (match, offset: number, whole: string) => {
     const after = whole.slice(offset + match.length, offset + match.length + 12);
     if (/^\s+(?:sera|notte|giornata|giorno|serata)\b/i.test(after)) return match;

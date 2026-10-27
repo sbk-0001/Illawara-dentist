@@ -1,5 +1,7 @@
+import type { ClinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
 import { directoryLabels } from "./contacts";
+import { guardBareHoursReply, mayBeBareHours } from "./hours";
 
 const ENGLISH_LABEL = "(?:phone|booking|email|address)";
 const LINE_LABEL = new RegExp(`^(${ENGLISH_LABEL})\\s*[:：]\\s*(\\S.*)$`, "i");
@@ -166,6 +168,7 @@ export function attachContactLabels<T extends LabelChunk>(
     code: string;
     index: KnowledgeIndex;
     replyStatus: { missing: boolean };
+    focus?: ClinicFocus;
   },
 ): ReadableStream<T> {
   let textId: string | undefined;
@@ -199,6 +202,8 @@ export function attachContactLabels<T extends LabelChunk>(
     held = "";
     if (!raw) return "";
     const body = rewriteContactLabels(raw, input.code);
+    const hours = guardBareHoursReply(body, input.code, input.focus);
+    if (hours !== body) return hours;
     const bare = isShortLabelReply(body, input.code) || isShortLabelReply(raw, input.code) || (input.replyStatus.missing && isOnlyContactLine(raw));
     if (bare) {
       const preface = bareContactPreface(input.code, raw, input.index);
@@ -225,8 +230,9 @@ export function attachContactLabels<T extends LabelChunk>(
         }
         if (!passed) {
           held += chunk.delta;
-          const pending = mayBeShortLabelReply(held, input.code) || (input.replyStatus.missing && mayBeOnlyContact(held));
-          if (pending && held.length < 80) return;
+          const hoursPending = mayBeBareHours(held, input.code);
+          const pending = mayBeShortLabelReply(held, input.code) || (input.replyStatus.missing && mayBeOnlyContact(held)) || hoursPending;
+          if (pending && held.length < (hoursPending ? 400 : 80)) return;
           passed = true;
           const visible = releaseHeld();
           if (visible) controller.enqueue({ ...chunk, delta: visible });
