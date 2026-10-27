@@ -3,7 +3,9 @@ import path from "node:path";
 
 /**
  * Browser checks do not call the language model or Deepgram.
- * getUserMedia, /api/chat/stt-token and /api/chat/transcribe are mocked.
+ * getUserMedia, MediaRecorder, /api/chat/stt-token and /api/chat/transcribe are mocked.
+ * Headless Chromium does not encode the oscillator stream into a WebM blob, so the
+ * mic test uses a fake MediaRecorder that emits one audio chunk when recording stops.
  * The Arabic thread on /?fixture=arabic is a static preview built from the
  * crawled Shellharbour contact card, not a model completion.
  */
@@ -47,16 +49,25 @@ test("Arabic picker and fixture use RTL", async ({ page }) => {
 
 test("mic button moves through listening and transcribing when speech APIs are mocked", async ({ page }) => {
   await page.addInitScript(() => {
-    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    void original;
-    navigator.mediaDevices.getUserMedia = async () => {
-      const context = new AudioContext();
-      const destination = context.createMediaStreamDestination();
-      const oscillator = context.createOscillator();
-      oscillator.connect(destination);
-      oscillator.start();
-      return destination.stream;
-    };
+    navigator.mediaDevices.getUserMedia = async () => new MediaStream();
+    class FakeRecorder extends EventTarget {
+      state = "inactive";
+      static isTypeSupported() {
+        return true;
+      }
+      start() {
+        this.state = "recording";
+      }
+      requestData() {
+        this.dispatchEvent(new BlobEvent("dataavailable", { data: new Blob([new Uint8Array(16)], { type: "audio/webm" }) }));
+      }
+      stop() {
+        if (this.state !== "inactive") this.requestData();
+        this.state = "inactive";
+        this.dispatchEvent(new Event("stop"));
+      }
+    }
+    window.MediaRecorder = FakeRecorder as unknown as typeof MediaRecorder;
   });
   await page.route("**/api/chat/stt-token", (route) =>
     route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "mocked" }) }),

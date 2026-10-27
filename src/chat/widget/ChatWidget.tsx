@@ -101,6 +101,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         return;
       }
       recorder.addEventListener("stop", finish, { once: true });
+      if (recorder.state === "recording") recorder.requestData();
       recorder.stop();
     });
   }
