@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
+import { splitIsolatedEmbeds } from "./bidi";
 import styles from "./ChatWidget.module.css";
 
 export type ClinicUIMessage = UIMessage<ChatMetadata>;
@@ -20,6 +21,18 @@ type ChatWidgetProps = {
 
 function textOf(message: ClinicUIMessage): string {
   return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("").trim();
+}
+
+function MessageText({ text }: { text: string }) {
+  return splitIsolatedEmbeds(text).map((part, index) =>
+    part.kind === "isolate" ? (
+      <bdi key={index} dir="ltr" className={styles.isolate}>
+        {part.value}
+      </bdi>
+    ) : (
+      <span key={index}>{part.value}</span>
+    ),
+  );
 }
 
 function ensureFonts() {
@@ -259,7 +272,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
               const messageDir = message.role === "user" ? detectLanguage(text).dir : message.metadata?.dir || dir;
               return (
                 <article key={message.id} className={`${styles.bubble} ${message.role === "user" ? styles.user : styles.assistant}`} dir={messageDir}>
-                  {text}
+                  <MessageText text={text} />
                   {message.role === "assistant" && message.metadata?.sources?.length ? (
                     <div className={styles.sources}>
                       {message.metadata.sources.map((source) => (

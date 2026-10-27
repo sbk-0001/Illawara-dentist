@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { clinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
-import { searchIndex, sourcesFromChunks } from "./search";
+import { fuseRetrieval, searchByVectors, searchIndex, sourcesFromChunks } from "./search";
+import type { KnowledgeChunk } from "../types";
 
 const index = JSON.parse(readFileSync(path.join(process.cwd(), "src/chat/data/knowledge-index.json"), "utf8")) as KnowledgeIndex;
 
@@ -65,6 +66,47 @@ describe("retrieval", () => {
       expect(hit.title).not.toMatch(/^[a-z0-9-]+$/);
       expect(hit.url.startsWith("https://")).toBe(true);
     }
+  });
+
+  it("retrieves implants, Invisalign and children's dentistry for non-Latin questions", () => {
+    const implants = searchIndex(index, "هل تقدمون زراعة الأسنان؟", 6);
+    expect(implants.some((hit) => /implant/i.test(`${hit.title} ${hit.heading}`))).toBe(true);
+    const aligners = searchIndex(index, "你们提供隐适美矫正吗？", 6);
+    expect(aligners.some((hit) => /invisalign/i.test(`${hit.title} ${hit.heading} ${hit.text}`))).toBe(true);
+    const kids = searchIndex(index, "Κάνετε παιδοδοντιατρική για παιδιά;", 6);
+    expect(kids.some((hit) => /kid|child|paediatr/i.test(`${hit.title} ${hit.heading}`))).toBe(true);
+  });
+
+  it("keeps an embedding hit that shares no words with the question", () => {
+    const chunks: KnowledgeChunk[] = [
+      {
+        id: "fees",
+        clinic: "dapto",
+        url: "https://daptodentists.com.au/our-fees",
+        title: "Our Fees",
+        heading: "Fees",
+        text: "Check-up and clean fees at Dapto are listed on this page for new patients today.",
+      },
+      {
+        id: "implants",
+        clinic: "shellharbour",
+        url: "https://shellharbourdentist.com.au/dental-implants/",
+        title: "Dental Implants",
+        heading: "Implants",
+        text: "Dental implants replace a missing tooth and are offered at the Shellharbour clinic.",
+      },
+    ];
+    const tiny: KnowledgeIndex = { ...fixture, chunkCount: 2, chunks };
+    const semantic = searchByVectors(tiny, "هل تقدمون زراعة الأسنان؟", [0, 1], new Float32Array([1, 0, 0, 1]), 2, 2);
+    expect(semantic[0]?.id).toBe("implants");
+    const fused = fuseRetrieval([], semantic, 4);
+    expect(fused.map((hit) => hit.id)).toContain("implants");
+    const union = fuseRetrieval(
+      [{ ...chunks[0], score: 3 }],
+      semantic,
+      4,
+    );
+    expect(union.map((hit) => hit.id).sort()).toEqual(["fees", "implants"]);
   });
 
   it("finds fee or payment context for Dapto", () => {

@@ -23,8 +23,8 @@ const SCRIPT_TESTS: { script: string; code: string; re: RegExp }[] = [
   { script: "Latin", code: "en", re: /[A-Za-z\u00C0-\u024F]/g },
 ];
 
-const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "tumi", "apni", "apnar", "bhalo", "hocche", "daktar", "dakter", "byatha", "bytha", "ekhon", "korbo", "koto", "shonibar", "thaken", "pabo", "daat", "dant", "kobe", "amar", "valo"];
-const BANGLISH_WEAK = ["chai", "chan", "ashen", "asbo", "ajke", "kalke", "taka", "khula", "khola", "hobe", "keno", "kene"];
+const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "kotha", "kivabe", "nombor", "bolben", "tumi", "apni", "apnar", "bhalo", "hocche", "daktar", "dakter", "byatha", "bytha", "ekhon", "korbo", "koto", "shonibar", "thaken", "pabo", "daat", "dant", "kobe", "amar", "valo"];
+const BANGLISH_WEAK = ["chai", "chan", "ashen", "asbo", "ajke", "kalke", "taka", "khula", "khola", "hobe", "keno", "kene", "ki", "er", "ar", "ache", "din"];
 const HINGLISH_STRONG = ["kya", "kaise", "mujhe", "chahiye", "kitna", "kitne", "kitni", "aapka", "kahan", "nahi", "nahin", "daant", "dard", "baje", "khulti", "khulta", "shaniwar", "samay"];
 const HINGLISH_WEAK = ["hai", "hain", "kal", "aaj", "mera", "meri", "aap", "karo", "karna", "wala", "wali", "baat"];
 const ENGLISH = ["what", "when", "where", "hours", "hour", "saturday", "sunday", "monday", "friday", "appointment", "clinic", "fee", "fees", "much", "open", "opening", "pain", "tooth", "broken", "emergency", "payment", "health", "fund", "please", "your", "the", "are", "how", "cost", "price", "book", "booking", "address", "parking", "dentist", "which", "does", "do", "can", "need", "have", "who", "won"];
@@ -110,7 +110,8 @@ function devanagariFamily(tokens: string[]): Detection {
 function latinFamily(text: string, tokens: string[]): Detection {
   const joined = tokens.join(" ");
   if (tokens.length === 1 && GREETINGS.has(tokens[0] || "")) return englishReply(false, "high");
-  const banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
+  let banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
+  if (tokens.length <= 18 && /\bki\s*\?\s*$/i.test(text.trim())) banglish += 4;
   const hinglish = scoreWords(tokens, HINGLISH_STRONG, 2) + scoreWords(tokens, HINGLISH_WEAK, 1);
   const english = scoreWords(tokens, ENGLISH, 1);
   const spanish = scoreWords(tokens, SPANISH, 2);

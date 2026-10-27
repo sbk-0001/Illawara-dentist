@@ -8,11 +8,15 @@ export const CHAT_MODEL = "openai/gpt-5.4-mini";
 export const CHAT_MODEL_REASON =
   "openai/gpt-5.4-mini is tagged fast on the AI Gateway and is built for high-volume chat, which keeps time-to-first-token down for a public widget while still following multilingual script instructions.";
 
-function contactBlock(card: ContactCard): string {
+function wantsAlternatePhones(question: string | undefined): boolean {
+  return /other (?:phone|number)s?|alternative (?:phone|number)s?|another (?:phone|number)|second (?:phone|number)|all (?:the )?(?:phone )?numbers|\balternatives\b/i.test(question || "");
+}
+
+function contactBlock(card: ContactCard, showAlternatives: boolean): string {
   return [
     `${card.name} (${card.clinic})`,
     `Phone: ${card.phone}`,
-    card.otherPhones.length ? `Other published phones: ${card.otherPhones.join(", ")}` : "",
+    showAlternatives && card.otherPhones.length ? `Other published phones: ${card.otherPhones.join(", ")}` : "",
     `Email: ${card.email}`,
     `Booking: ${card.bookingUrl}`,
     card.address ? `Address: ${card.address}` : "",
@@ -29,8 +33,10 @@ export function buildInstructions(input: {
   focus: ClinicFocus;
   severe: boolean;
   chunks: ScoredChunk[];
+  question?: string;
 }): string {
-  const directory = Object.values(input.index.contacts).map(contactBlock).join("\n\n");
+  const showAlternatives = wantsAlternatePhones(input.question);
+  const directory = Object.values(input.index.contacts).map((card) => contactBlock(card, showAlternatives)).join("\n\n");
   const context = input.chunks.length
     ? input.chunks
         .map(
@@ -66,6 +72,7 @@ Text only. Do not offer to speak the answer aloud.
 
 FACTS
 Use only the CONTACT DIRECTORY and CONTEXT below. Never invent prices, dentists, hours, services, health-fund arrangements, CDBS rules or clinic policies. If a number, name or time is not written in the directory or context, do not say it. Do not repeat a phone number from a design mock-up; only phones printed in the directory or context are real.
+For Shellharbour Dentists, give only the main phone printed as Phone. Do not mention any other Shellharbour number unless the visitor asked for an alternative number.
 
 CLINIC
 ${clinicLine}
@@ -78,7 +85,11 @@ OFF TOPIC
 If the question is not about these clinics, their services, fees, visits, payments or oral-health topics covered on their sites, refuse it politely in the reply language and invite a question about the clinics. Do not answer the off-topic question.
 
 WHEN YOU DO NOT KNOW
-Say that the clinic websites you can read do not have that answer. Then give the relevant clinic's phone, email and booking link exactly as printed in the directory. If the clinic is unclear, give all three contact routes, each labelled with the clinic name.
+${
+  input.chunks.length
+    ? "CONTEXT answers from the clinic websites. Give that answer. Do not add a line that there is no other answer on the website, that the site says nothing else, or that no further information was found."
+    : "The index does not contain an answer. Say so in the visitor's language, then give the relevant clinic's phone, email and booking link exactly as printed in the directory. If the clinic is unclear, give all three contact routes, each labelled with the clinic name."
+}
 
 STYLE
 Short, calm sentences. No markdown headings. Do not invent source links. The app shows source chips separately. You may repeat a booking link from the directory when giving the contact route.

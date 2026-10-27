@@ -61,12 +61,19 @@ function bm25(query: string[], doc: string[], df: Map<string, number>, avg: numb
 }
 
 const EXPANSIONS: { re: RegExp; terms: string }[] = [
-  { re: /fee|fees|cost|price|payment|fund|hicaps|afterpay|খরচ|ফি|फीस|शुल्क|费用|phí|비용|κόστ|costa|cuesta|cuánto|cuanto|dam|kitna|kitni/i, terms: "fees payment cost price" },
+  { re: /fee|fees|cost|price|payment|fund|hicaps|afterpay|খরচ|ফি|फीस|शुल्क|费用|phí|비용|κόστ|costa|cuesta|cuánto|cuanto|dam|kitna|kitni|معائنہ|معاینه|فحص|تنظيف|जांच|सफाई|检查|洗牙|洁牙|revisión|limpieza|khám|스케일링|검진|έλεγχος|καθαρισμ|controllo|pulizia|চেকআপ|পরিষ্কার/i, terms: "fees payment cost price check-up clean" },
   { re: /hour|hours|saturday|sunday|open|opening|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở|ώρα|orari|sabato|horario|sábado|shonibar|khula|khola|baje/i, terms: "hours opening Saturday" },
   { re: /emergency|pain|broken|tooth|swelling|ব্যথা|দাঁত|दर्द|दांत|牙疼|牙齿|đau|răng|δόντι|πονά|dente|diente|daat|daant|byatha|dard/i, terms: "emergency toothache appointment" },
+  { re: /implant|ইমপ্লান্ট|زراعة|زرعات|इम्प्लांट|प्रत्यारोपण|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants" },
+  { re: /invisalign|aligner|ইনভিজালাইন|অ্যালাইনার|إنفزلاين|تقويم شفاف|इनविज़लाइन|एलाइनर|隐适美|隐形矫正|隐形牙套|alineador|انویزلائن|اینویزالاین|niềng trong suốt|인비절라인|투명교정|ευθυγραμμ|allineator/i, terms: "invisalign aligners" },
+  { re: /child|children|kids|paediatric|pediatric|শিশু|বাচ্চা|أطفال|الأطفال|बच्चों|बच्चे|儿童|小孩|niños|infantil|بچوں|کودکان|اطفال|trẻ em|어린이|소아|παιδοδοντ|παιδικ|παιδιά|bambini|pedodonzia/i, terms: "children kids dentistry" },
+  { re: /whiten|সাদা করা|تبييض|व्हाइटनिंग|美白|blanqueamiento|سفید|بلیچینگ|tẩy trắng|미백|λεύκανση|sbiancamento/i, terms: "teeth whitening" },
+  { re: /crown|veneer|ক্রাউন|ভিনিয়ার|تيجان|قشور|فينير|क्राउन|विनियर|牙冠|贴面|carilla|کراؤن|وینیر|روکش|ونیر|mão răng|mặt dán|크라운|베니어|στεφάνη|faccetta/i, terms: "crowns veneers" },
+  { re: /root canal|endodont|রুট ক্যানাল|علاج العصب|قناة الجذر|रूट कैनाल|根管|endodoncia|روٹ کینال|عصب‌کشی|درمان ریشه|điều trị tủy|신경치료|απονεύρωση|devitalizz|canale radicolare/i, terms: "root canal" },
+  { re: /sedation|sleep dentistry|সেডেশন|تخدير|تنويم|बेहोशी|镇静|sedación|بے ہوشی|بیهوشی|آرام‌بخش|gây mê|an thần|진정|καταστολή|sedazione/i, terms: "sedation sleep dentistry" },
 ];
 
-function expandQuery(query: string): string {
+export function expandQuery(query: string): string {
   const extras: string[] = [];
   for (const clinic of mentionedClinics(query)) extras.push(clinicName(clinic));
   for (const item of EXPANSIONS) {
@@ -108,6 +115,67 @@ export function searchIndex(index: KnowledgeIndex, query: string, limit = 6): Sc
   if (querySize >= 2 && overlap < 2) return [];
   const floor = top[0].score * 0.28;
   return top.filter((item) => item.score >= floor);
+}
+
+/** Drop weak neighbours. Multilingual vectors for related pages usually sit above this. */
+export const SEMANTIC_FLOOR = 0.33;
+
+function cosineSlice(query: ArrayLike<number>, matrix: ArrayLike<number>, offset: number, dimensions: number): number {
+  let dot = 0;
+  let left = 0;
+  let right = 0;
+  for (let i = 0; i < dimensions; i += 1) {
+    const a = query[i] || 0;
+    const b = matrix[offset + i] || 0;
+    dot += a * b;
+    left += a * a;
+    right += b * b;
+  }
+  if (left <= 0 || right <= 0) return 0;
+  return dot / (Math.sqrt(left) * Math.sqrt(right));
+}
+
+export function searchByVectors(
+  index: KnowledgeIndex,
+  query: string,
+  queryVector: ArrayLike<number>,
+  matrix: ArrayLike<number>,
+  dimensions: number,
+  limit = 8,
+): ScoredChunk[] {
+  if (!dimensions || queryVector.length < dimensions) return [];
+  const rows = Math.min(index.chunks.length, Math.floor(matrix.length / dimensions));
+  const focus = clinicFocus(query);
+  const scored: ScoredChunk[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    const chunk = index.chunks[row];
+    if (!chunk) continue;
+    let score = cosineSlice(queryVector, matrix, row * dimensions, dimensions);
+    if (score < SEMANTIC_FLOOR) continue;
+    if (focus.kind === "one") score *= chunk.clinic === focus.clinic ? 1.15 : 0.8;
+    if (focus.kind === "many") score *= focus.clinics.includes(chunk.clinic) ? 1.08 : 0.9;
+    scored.push({ ...chunk, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+/** Union of lexical hits and embedding hits. A page found by either path stays in the list. */
+export function fuseRetrieval(wordHits: ScoredChunk[], semanticHits: ScoredChunk[], limit = 6): ScoredChunk[] {
+  const lexicalMax = Math.max(...wordHits.map((hit) => hit.score), 1);
+  const semanticMax = Math.max(...semanticHits.map((hit) => hit.score), 1e-6);
+  const byId = new Map<string, ScoredChunk>();
+  for (const hit of wordHits) byId.set(hit.id, { ...hit, score: hit.score / lexicalMax });
+  for (const hit of semanticHits) {
+    const semantic = hit.score / semanticMax;
+    const existing = byId.get(hit.id);
+    if (!existing) {
+      byId.set(hit.id, { ...hit, score: semantic });
+      continue;
+    }
+    existing.score = existing.score * 0.45 + semantic * 0.55;
+  }
+  return [...byId.values()].sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
 export function sourcesFromChunks(chunks: ScoredChunk[]): SourceChip[] {

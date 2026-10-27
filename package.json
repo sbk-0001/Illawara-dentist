@@ -5,7 +5,8 @@
   "description": "Standalone multilingual website chat widget for Illawarra Dentists.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/embed-index.mjs && next build",
+    "embed": "node scripts/embed-index.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",

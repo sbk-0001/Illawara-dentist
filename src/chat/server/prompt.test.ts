@@ -28,6 +28,22 @@ describe("prompt rules", () => {
     expect(turn.instructions).toContain("call 000");
   });
 
+  it("gives Shellharbour's main number unless an alternative is requested", () => {
+    const normal = prepareTurn([{ role: "user", content: "What is the phone number for Shellharbour?" }], "en", index);
+    expect(normal.instructions).toContain("02 4216 9911");
+    expect(normal.instructions).not.toContain("02 4062 8706");
+    expect(normal.instructions).toMatch(/main phone/i);
+    const alternate = prepareTurn([{ role: "user", content: "Is there an alternative phone number for Shellharbour?" }], "en", index);
+    expect(alternate.instructions).toContain("02 4062 8706");
+  });
+
+  it("does not ask for a no-other-answer line when pages matched", () => {
+    const turn = prepareTurn([{ role: "user", content: "Do you offer dental implants?" }], "en", index);
+    expect(turn.chunks.length).toBeGreaterThan(0);
+    expect(turn.instructions).toMatch(/no other answer on the website/i);
+    expect(turn.instructions).not.toContain("NO RELEVANT PAGES");
+  });
+
   it("says the language could not be detected for gibberish", () => {
     const instructions = buildInstructions({
       index,

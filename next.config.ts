@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   devIndicators: false,
   outputFileTracingIncludes: {
-    "/api/chat": ["./src/chat/data/knowledge-index.json"],
+    "/api/chat": ["./src/chat/data/**/*"],
   },
 };
 

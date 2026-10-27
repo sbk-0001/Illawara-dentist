@@ -22,6 +22,8 @@ describe("detectLanguage", () => {
   it("keeps Banglish and Hinglish in Latin script", () => {
     expect(detectLanguage("amar daat e byatha, Dapto te appointment kobe pabo?")).toMatchObject({ code: "bn-Latn", script: "Latin" });
     expect(detectLanguage("mujhe Dapto me kal appointment chahiye, fees kitni hai?")).toMatchObject({ code: "hi-Latn", script: "Latin" });
+    expect(detectLanguage("Woonona clinic er address ar phone number ki?")).toMatchObject({ code: "bn-Latn", script: "Latin" });
+    expect(detectLanguage("What is the clinic address?")).toMatchObject({ code: "en" });
   });
 
   it("follows a mixed message by its dominant script", () => {

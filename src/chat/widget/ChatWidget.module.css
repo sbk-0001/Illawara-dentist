@@ -117,6 +117,11 @@
   gap: 12px;
 }
 
+.isolate {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
 .welcome {
   margin: 8px 4px;
   color: #33424a;

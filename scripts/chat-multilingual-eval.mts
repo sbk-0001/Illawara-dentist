@@ -13,7 +13,7 @@ import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
 import { buildInstructions, CHAT_MODEL } from "../src/chat/server/prompt.ts";
-import { rerankWithEmbeddings } from "../src/chat/retrieval/embeddings.ts";
+import { hybridRetrieve } from "../src/chat/retrieval/embeddings.ts";
 import { sourcesFromChunks } from "../src/chat/retrieval/search.ts";
 
 type Row = {
@@ -39,12 +39,13 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const messages = [{ role: "user" as const, parts: [{ type: "text", text: prompt }] }];
   const started = performance.now();
   const turn = prepareTurn(messages, "auto", index);
-  const chunks = turn.sources.length ? await rerankWithEmbeddings(turn.text, turn.chunks) : [];
+  const chunks = await hybridRetrieve(index, turn.text, turn.chunks);
   const instructions = buildInstructions({
     index,
     language: turn.reply,
     focus: turn.focus,
     severe: turn.severe,
+    question: turn.text,
     chunks: sourcesFromChunks(chunks).length ? chunks : [],
   });
   const result = streamText({

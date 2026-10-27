@@ -8,14 +8,14 @@ import {
 import { z } from "zod";
 import { clinicFocus, isSevereEmergency } from "../intent";
 import { resolveReplyLanguage } from "../language/detect";
-import { rerankWithEmbeddings } from "../retrieval/embeddings";
+import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
 import { guardRequest, withCors } from "./guard";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions, CHAT_MODEL } from "./prompt";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 export const runtime = "nodejs";
 
 export type ClinicUIMessage = UIMessage<ChatMetadata>;
@@ -54,7 +54,7 @@ export function prepareTurn(messages: { role?: string; parts?: unknown; content?
     severe,
     chunks,
     sources,
-    instructions: buildInstructions({ index, language: reply, focus, severe, chunks: sources.length ? chunks : [] }),
+    instructions: buildInstructions({ index, language: reply, focus, severe, question: text, chunks: sources.length ? chunks : [] }),
   };
 }
 
@@ -82,13 +82,14 @@ export async function POST(request: Request): Promise<Response> {
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }
-  const chunks = lexical.sources.length ? await rerankWithEmbeddings(lexical.text, lexical.chunks) : [];
+  const chunks = await hybridRetrieve(index, lexical.text, lexical.chunks);
   const sources = sourcesFromChunks(chunks);
   const instructions = buildInstructions({
     index,
     language: lexical.reply,
     focus: lexical.focus,
     severe: lexical.severe,
+    question: lexical.text,
     chunks: sources.length ? chunks : [],
   });
 

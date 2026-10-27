@@ -15,7 +15,7 @@ This folder is the whole widget. The demo page at `/` is only a placeholder so t
 ```ts
 const nextConfig = {
   outputFileTracingIncludes: {
-    "/api/chat": ["./src/chat/data/knowledge-index.json"],
+    "/api/chat": ["./src/chat/data/**/*"],
   },
 };
 ```
@@ -65,6 +65,8 @@ npm run index
 
 That rewrites `src/chat/data/knowledge-index.json` from the three public clinic sites. Commit the JSON. No API key is used.
 
+`npm run build` and `npm run embed` then embed every chunk with `google/text-multilingual-embedding-002` when `AI_GATEWAY_API_KEY` is set, and write `knowledge-embeddings.bin` next to the index. Commit that file when you generate it. Without the key the embed step skips and the server builds the same vectors on the first chat request, then keeps them in memory for that instance.
+
 ## Check answers once keys exist
 
 ```bash
@@ -75,4 +77,4 @@ Without `AI_GATEWAY_API_KEY` the script prints `EVAL_STATUS=skipped` and exits 0
 
 ## Model
 
-Chat uses `openai/gpt-5.4-mini` through the AI Gateway (`src/chat/server/prompt.ts`). It is tagged fast on the gateway and is built for high-volume chat, which keeps time to first token down while still following the script instructions. Embeddings, used only to rerank lexical hits, are `google/text-multilingual-embedding-002`. Lexical search still answers when the gateway key is absent; the chat route itself returns 503 until the key is set.
+Chat uses `openai/gpt-5.4-mini` through the AI Gateway (`src/chat/server/prompt.ts`). It is tagged fast on the gateway and is built for high-volume chat, which keeps time to first token down while still following the script instructions. Retrieval is a union of word hits and the nearest precomputed chunk embeddings (`google/text-multilingual-embedding-002`), then a rerank. Lexical search still answers when those vectors and the gateway key are absent. The chat route itself returns 503 until the key is set.
