@@ -189,6 +189,11 @@ function latinFamily(text: string, tokens: string[]): Detection {
   return englishReply(true, "low");
 }
 
+/** True when the text contains a letter in any script. Digits and punctuation alone are not a language. */
+export function hasLetters(text: string): boolean {
+  return /\p{L}/u.test(text);
+}
+
 export function detectLanguage(text: string): Detection {
   const input = text.trim();
   if (!input) return englishReply(true, "low");

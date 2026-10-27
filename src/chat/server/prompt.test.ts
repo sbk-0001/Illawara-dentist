@@ -76,6 +76,21 @@ describe("prompt rules", () => {
     expect(instructions).toMatch(/phone and booking link/i);
   });
 
+  it("tells every language to translate hours and keep names", () => {
+    const instructions = buildInstructions({
+      index,
+      language: { code: "fa", label: "فارسی", script: "Arabic", dir: "rtl", fallback: false, source: "detected" },
+      focus: { kind: "one", clinic: "woonona" },
+      severe: false,
+      chunks: [],
+      question: "ساعات کاری وونونا چیست؟",
+    });
+    expect(instructions).toMatch(/Translate day names/i);
+    expect(instructions).toMatch(/Monday – Friday 8\.00 AM – 6\.00 PM/);
+    expect(instructions).toMatch(/Latin letters only/);
+    expect(instructions).toMatch(/proper names verbatim/i);
+  });
+
   it("tells Persian replies to keep Western digits", () => {
     const instructions = buildInstructions({
       index,

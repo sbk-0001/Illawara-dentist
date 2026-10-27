@@ -1,4 +1,5 @@
 import { clinicContextText, mentionsServiceArea, type ClinicFocus } from "../intent";
+import { hasLetters } from "../language/detect";
 import { expandQuery } from "../retrieval/search";
 import type { ClinicId, KnowledgeIndex, ReplyLanguage } from "../types";
 
@@ -119,6 +120,7 @@ export type FooterDecision = {
  */
 export function shouldAppendContactFooter(input: FooterDecision): boolean {
   if (!input.question.trim() && !input.modelSaidNoAnswer) return false;
+  if (input.question.trim() && !hasLetters(input.question)) return true;
   if (input.modelSaidNoAnswer) return true;
   if (GREETING.test(input.question.trim())) return false;
   const top = input.topScore ?? (input.sourceCount > 0 ? 1 : 0);

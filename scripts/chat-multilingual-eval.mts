@@ -15,7 +15,9 @@ import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
 import { buildInstructions, CHAT_MODEL } from "../src/chat/server/prompt.ts";
 import { hybridRetrieve } from "../src/chat/retrieval/embeddings.ts";
+import { hasLetters } from "../src/chat/language/detect.ts";
 import { sourcesFromChunks } from "../src/chat/retrieval/search.ts";
+import { fixReplyScript } from "../src/chat/server/script-fix.ts";
 
 type Row = {
   id: string;
@@ -40,9 +42,10 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const messages = [{ role: "user" as const, parts: [{ type: "text", text: prompt }] }];
   const started = performance.now();
   const turn = prepareTurn(messages, "auto", index);
-  const chunks = await hybridRetrieve(index, turn.query, turn.chunks);
+  const letterless = !hasLetters(turn.text);
+  const chunks = letterless ? [] : await hybridRetrieve(index, turn.query, turn.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const answered = retrievalHasAnswer(chunks.length, topScore);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
   const sourced = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -65,7 +68,7 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     if (!ttftMs) ttftMs = performance.now() - started;
     reply += part;
   }
-  const finished = reply.trim();
+  const finished = fixReplyScript(reply.trim(), turn.reply.code, turn.text);
   const saidNo = modelSignalsNoAnswer(finished);
   const visible = stripNoAnswerSentinel(finished);
   const withContacts = shouldAppendContactFooter({

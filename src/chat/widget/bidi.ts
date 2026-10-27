@@ -28,7 +28,7 @@ function separateEmbeds(parts: TextPart[]): TextPart[] {
     const prev = parts[i - 1];
     if (prev?.kind === "text" && prev.value && !/\s$/u.test(prev.value)) prev.value += " ";
     const next = parts[i + 1];
-    if (next?.kind === "text" && next.value && !/^\s/u.test(next.value)) next.value = ` ${next.value}`;
+    if (next?.kind === "text" && next.value && !/^\s/u.test(next.value) && !/^[\p{P}]/u.test(next.value)) next.value = ` ${next.value}`;
   }
   return parts;
 }

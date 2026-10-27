@@ -7,7 +7,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
-import { resolveReplyLanguage } from "../language/detect";
+import { hasLetters, resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
@@ -15,6 +15,7 @@ import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasA
 import { guardRequest, withCors } from "./guard";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions, CHAT_MODEL } from "./prompt";
+import { attachScriptFix } from "./script-fix";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -62,7 +63,8 @@ export function prepareTurn(messages: { role?: string; parts?: unknown; content?
   const reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const focus = clinicFocus(clinicContextText(turns));
   const severe = isSevereEmergency(text);
-  const chunks = query ? searchIndex(index, query, 8).slice(0, 6) : [];
+  const letterless = !hasLetters(text);
+  const chunks = !letterless && query ? searchIndex(index, query, 8).slice(0, 6) : [];
   const sources = chunks.length && (chunks[0]?.score ?? 0) >= 1 ? sourcesFromChunks(chunks) : [];
   return {
     text,
@@ -100,9 +102,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }
-  const chunks = await hybridRetrieve(index, lexical.query, lexical.chunks);
+  const letterless = !hasLetters(lexical.text);
+  const chunks = letterless ? [] : await hybridRetrieve(index, lexical.query, lexical.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const answered = retrievalHasAnswer(chunks.length, topScore);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
   const sources = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -128,11 +131,15 @@ export async function POST(request: Request): Promise<Response> {
     sources,
   } satisfies ChatMetadata;
 
-  const uiStream = toUIMessageStream({
-    stream: result.stream,
-    sendReasoning: false,
-    messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
-  });
+  const uiStream = attachScriptFix(
+    toUIMessageStream({
+      stream: result.stream,
+      sendReasoning: false,
+      messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
+    }),
+    lexical.reply.code,
+    lexical.text,
+  );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),
     sourcesFound: answered,

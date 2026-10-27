@@ -30,4 +30,10 @@ describe("bidi isolates", () => {
       "https://bookings.zavy360.com/booking/x",
     ]);
   });
+
+  it("does not insert a space when the next character is punctuation", () => {
+    const parts = splitIsolatedEmbeds("اتصلوا على 02 4216 9911.");
+    const phone = parts.findIndex((part) => part.kind === "isolate");
+    expect(parts[phone + 1]).toEqual({ kind: "text", value: "." });
+  });
 });

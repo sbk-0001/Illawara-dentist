@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectLanguage } from "../language/detect";
+import { detectLanguage, hasLetters } from "../language/detect";
 import { mentionedClinics } from "../intent";
 import {
   attachContactFooter,
@@ -59,6 +59,17 @@ describe("contact footer", () => {
       shouldAppendContactFooter({ question: "وما هو رقم الهاتف؟", sourceCount: 2, topScore: 0.9, modelSaidNoAnswer: true }),
     ).toBe(true);
     expect(shouldAppendContactFooter({ question: "hello", sourceCount: 0, topScore: 0 })).toBe(false);
+    expect(hasLetters("12345 ???")).toBe(false);
+    expect(shouldAppendContactFooter({ question: "12345 ???", sourceCount: 4, topScore: 1.2 })).toBe(true);
+  });
+
+  it("treats a letterless message as English fallback with no retrieved pages", () => {
+    const turn = prepareTurn([{ role: "user", content: "12345 ???" }], "auto", index);
+    expect(turn.reply).toMatchObject({ code: "en", fallback: true });
+    expect(turn.sources).toEqual([]);
+    expect(turn.chunks).toEqual([]);
+    expect(turn.instructions).toMatch(/could not be detected/i);
+    expect(turn.instructions).toContain("NO RELEVANT PAGES");
   });
 
   it("keeps a follow-up phone question on the clinic named earlier", () => {

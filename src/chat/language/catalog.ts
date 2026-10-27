@@ -18,7 +18,7 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
     label: "Banglish",
     script: "Latin",
     dir: "ltr",
-    instruction: "Write in romanised Bengali (Banglish), the same Latin-script register as the visitor. Do not switch to Bengali script.",
+    instruction: "Write in romanised Bengali (Banglish), using Latin letters only. Do not use Bengali script at all, not even one character. Match the visitor's Latin-script register.",
   },
   { code: "hi", label: "हिन्दी", script: "Devanagari", dir: "ltr", instruction: "Write in Hindi, using Devanagari script." },
   {
@@ -26,7 +26,7 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
     label: "Hinglish",
     script: "Latin",
     dir: "ltr",
-    instruction: "Write in romanised Hindi (Hinglish), the same Latin-script register as the visitor. Do not switch to Devanagari.",
+    instruction: "Write in romanised Hindi (Hinglish), using Latin letters only. Do not use Devanagari at all, not even one character. Match the visitor's Latin-script register.",
   },
   { code: "ne", label: "नेपाली", script: "Devanagari", dir: "ltr", instruction: "Write in Nepali, using Devanagari script." },
   { code: "zh", label: "中文", script: "Han", dir: "ltr", instruction: "Write in Chinese, using the same simplified or traditional characters as the visitor." },
