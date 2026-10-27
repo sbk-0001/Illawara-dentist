@@ -1,5 +1,6 @@
 import { ChatWidget, type ClinicUIMessage } from "@/chat";
 import { getKnowledgeIndex } from "@/chat/server/index-store";
+import { formatClinicHours } from "@/chat/server/hours";
 import styles from "./page.module.css";
 
 function arabicFixture(): ClinicUIMessage[] {
@@ -7,7 +8,7 @@ function arabicFixture(): ClinicUIMessage[] {
   const clinic = index.contacts.shellharbour;
   const source = index.pages.find((page) => page.clinic === "shellharbour" && /contact/i.test(page.title))
     || index.pages.find((page) => page.clinic === "shellharbour");
-  const hours = clinic.hours || "the hours published on the Shellharbour Dentists website";
+  const hours = formatClinicHours(clinic.clinic, "ar");
   return [
     {
       id: "fixture-user",

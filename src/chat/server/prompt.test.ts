@@ -86,7 +86,11 @@ describe("prompt rules", () => {
       question: "ساعات کاری وونونا چیست؟",
     });
     expect(instructions).toMatch(/Translate day names/i);
-    expect(instructions).toMatch(/Monday – Friday 8\.00 AM – 6\.00 PM/);
+    expect(instructions).toMatch(/quote the matching line below verbatim/i);
+    expect(instructions).toMatch(/دوشنبه تا جمعه/);
+    expect(instructions).toContain("8:00 تا 18:00");
+    expect(instructions).not.toMatch(/8\.00 AM/);
+    expect(instructions).not.toMatch(/Monday – Friday/);
     expect(instructions).toMatch(/Latin letters only/);
     expect(instructions).toMatch(/proper names verbatim/i);
   });
@@ -118,6 +122,19 @@ describe("prompt rules", () => {
     const found = prepareTurn([{ role: "user", content: "Do you offer dental implants?" }], "en", index);
     expect(found.sources.length).toBeGreaterThan(0);
     expect(found.instructions).toMatch(/Do not write \[\[NO_ANSWER\]\]/);
+  });
+
+  it("does not require a verbatim hours line when the question is not about hours", () => {
+    const instructions = buildInstructions({
+      index,
+      language: { code: "en", label: "English", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "Do you offer dental implants?",
+    });
+    expect(instructions).not.toMatch(/quote the matching line verbatim/i);
+    expect(instructions).toContain("Monday–Friday 8:00 AM–6:00 PM");
   });
 
   it("says the language could not be detected for gibberish", () => {

@@ -11,11 +11,13 @@ import { hasLetters, resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
-import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer } from "./contacts";
+import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer, sharesClinicOrService } from "./contacts";
 import { guardRequest, withCors } from "./guard";
+import { attachHoursWording, hoursRelevant } from "./hours";
 import { getKnowledgeIndex } from "./index-store";
-import { buildInstructions, CHAT_MODEL } from "./prompt";
+import { buildInstructions } from "./prompt";
 import { attachScriptFix } from "./script-fix";
+import { chatGenerationSettings, createRetryingTextStream } from "./stream-timing";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -105,7 +107,8 @@ export async function POST(request: Request): Promise<Response> {
   const letterless = !hasLetters(lexical.text);
   const chunks = letterless ? [] : await hybridRetrieve(index, lexical.query, lexical.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
+  const shares = sharesClinicOrService(lexical.query, chunks);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore) && shares;
   const sources = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -115,13 +118,17 @@ export async function POST(request: Request): Promise<Response> {
     question: lexical.text,
     chunks: sources.length ? chunks : [],
   });
+  const modelMessages = await convertToModelMessages(messages);
 
-  const result = streamText({
-    model: CHAT_MODEL,
-    instructions,
-    messages: await convertToModelMessages(messages),
-    temperature: 0.2,
-    maxRetries: 1,
+  const textStream = createRetryingTextStream({
+    language: lexical.reply.code,
+    run: (attempt, signal) =>
+      streamText({
+        ...chatGenerationSettings(attempt),
+        instructions,
+        messages: modelMessages,
+        abortSignal: signal,
+      }).stream,
   });
 
   const metadata = {
@@ -131,20 +138,25 @@ export async function POST(request: Request): Promise<Response> {
     sources,
   } satisfies ChatMetadata;
 
-  const uiStream = attachScriptFix(
-    toUIMessageStream({
-      stream: result.stream,
-      sendReasoning: false,
-      messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
-    }),
+  const uiStream = attachHoursWording(
+    attachScriptFix(
+      toUIMessageStream({
+        stream: textStream,
+        sendReasoning: false,
+        messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
+      }),
+      lexical.reply.code,
+      lexical.text,
+    ),
     lexical.reply.code,
-    lexical.text,
+    hoursRelevant(lexical.text, chunks),
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),
     sourcesFound: answered,
     question: lexical.text,
     covered: (text) => replyHasContactRoute(text, index),
+    sharesTopic: shares,
   });
 
   return withCors(request, createUIMessageStreamResponse({ stream }));

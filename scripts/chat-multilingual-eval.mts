@@ -9,15 +9,17 @@
 import { streamText } from "ai";
 import { EVAL_CASES } from "../src/chat/eval/cases.ts";
 import { replyMatchesLanguage } from "../src/chat/language/reply-script.ts";
-import { ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, shouldAppendContactFooter, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
+import { ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, sharesClinicOrService, shouldAppendContactFooter, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
 import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
-import { buildInstructions, CHAT_MODEL } from "../src/chat/server/prompt.ts";
+import { buildInstructions } from "../src/chat/server/prompt.ts";
 import { hybridRetrieve } from "../src/chat/retrieval/embeddings.ts";
 import { hasLetters } from "../src/chat/language/detect.ts";
 import { sourcesFromChunks } from "../src/chat/retrieval/search.ts";
 import { fixReplyScript } from "../src/chat/server/script-fix.ts";
+import { hoursRelevant, rewriteEnglishHours } from "../src/chat/server/hours.ts";
+import { chatGenerationSettings, createRetryingTextStream } from "../src/chat/server/stream-timing.ts";
 
 type Row = {
   id: string;
@@ -45,7 +47,8 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const letterless = !hasLetters(turn.text);
   const chunks = letterless ? [] : await hybridRetrieve(index, turn.query, turn.chunks);
   const topScore = chunks[0]?.score ?? 0;
-  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore);
+  const shares = sharesClinicOrService(turn.query, chunks);
+  const answered = !letterless && retrievalHasAnswer(chunks.length, topScore) && shares;
   const sourced = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
@@ -55,20 +58,29 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     question: turn.text,
     chunks: sourced.length ? chunks : [],
   });
-  const result = streamText({
-    model: CHAT_MODEL,
-    instructions,
-    prompt,
-    temperature: 0.2,
-    maxRetries: 1,
+  const stream = createRetryingTextStream({
+    language: turn.reply.code,
+    run: (attempt, signal) =>
+      streamText({
+        ...chatGenerationSettings(attempt),
+        instructions,
+        prompt,
+        abortSignal: signal,
+      }).stream,
   });
+  const reader = stream.getReader();
   let reply = "";
   let ttftMs = 0;
-  for await (const part of result.textStream) {
-    if (!ttftMs) ttftMs = performance.now() - started;
-    reply += part;
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    if (next.value.type === "text-delta" && next.value.text) {
+      if (!ttftMs) ttftMs = performance.now() - started;
+      reply += next.value.text;
+    }
   }
-  const finished = fixReplyScript(reply.trim(), turn.reply.code, turn.text);
+  const scripted = fixReplyScript(reply.trim(), turn.reply.code, turn.text);
+  const finished = hoursRelevant(turn.text, chunks) ? rewriteEnglishHours(scripted, turn.reply.code) : scripted;
   const saidNo = modelSignalsNoAnswer(finished);
   const visible = stripNoAnswerSentinel(finished);
   const withContacts = shouldAppendContactFooter({
@@ -76,6 +88,8 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     sourceCount: sourced.length,
     topScore,
     modelSaidNoAnswer: saidNo,
+    replyText: visible,
+    sharesTopic: shares,
   })
     ? ensureContactFooter(visible, index, turn.reply, turn.focus)
     : visible;

@@ -80,4 +80,9 @@ describe("grounding", () => {
     const result = checkGrounding("Shellharbour is open Saturday at 11am.", index, "hours", "shellharbour");
     expect(result.ok).toBe(false);
   });
+
+  it("accepts a 24-hour clock time when the page publishes the same time in AM/PM", () => {
+    const result = checkGrounding("Woonona is open until 18:00.", index, "hours", "woonona");
+    expect(result.ok).toBe(true);
+  });
 });

@@ -117,9 +117,16 @@
   gap: 12px;
 }
 
-.isolate {
+.isolatePhone {
   unicode-bidi: isolate;
   direction: ltr;
+  white-space: nowrap;
+}
+
+.isolateUrl {
+  unicode-bidi: isolate;
+  direction: ltr;
+  overflow-wrap: anywhere;
 }
 
 .welcome {

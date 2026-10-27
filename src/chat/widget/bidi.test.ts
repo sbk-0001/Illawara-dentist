@@ -36,4 +36,10 @@ describe("bidi isolates", () => {
     const phone = parts.findIndex((part) => part.kind === "isolate");
     expect(parts[phone + 1]).toEqual({ kind: "text", value: "." });
   });
+
+  it("marks phones and emails as nowrap isolates and urls as wrappable", () => {
+    const parts = splitIsolatedEmbeds("اتصلوا على 02 4216 9911 أو info@shellharbourdentist.com.au عبر https://bookings.zavy360.com/booking/x");
+    const isolates = parts.filter((part) => part.kind === "isolate");
+    expect(isolates.map((part) => part.embed)).toEqual(["phone", "email", "url"]);
+  });
 });

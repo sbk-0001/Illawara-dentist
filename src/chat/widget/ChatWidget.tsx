@@ -27,7 +27,7 @@ function textOf(message: ClinicUIMessage): string {
 function MessageText({ text }: { text: string }) {
   return splitIsolatedEmbeds(text).map((part, index) =>
     part.kind === "isolate" ? (
-      <bdi key={index} dir="ltr" className={styles.isolate}>
+      <bdi key={index} dir="ltr" className={part.embed === "url" ? styles.isolateUrl : styles.isolatePhone}>
         {part.value}
       </bdi>
     ) : (

@@ -1,0 +1,368 @@
+import type { ClinicFocus } from "../intent";
+import type { ClinicId } from "../types";
+
+/**
+ * Opening hours taken only from indexed pages. Times are 24-hour. Sunday is not
+ * stated on the pages below, so it is not filled in.
+ *
+ * Dapto — https://daptodentists.com.au/ (chunk dapto-home-0):
+ * "open Monday to Friday from 8:00 AM to 6:00 PM and Saturday from 8:00 AM to 4:00 PM."
+ * The contact card's visible header agrees: "Mon–Fri 8am–6pm Saturday 8am–4pm".
+ *
+ * Shellharbour — contact-card header (visible text on priority pages /, contact, our-fees, about):
+ * "Monday – Friday 8.00 AM – 5.00 PM Saturday Appointment only".
+ * Body copy agrees, for example https://shellharbourdentist.com.au/dentist-shell-cove/ :
+ * "Monday to Friday, 8:00 AM to 5:00 PM, with Saturday appointments available by prior arrangement."
+ * The same sentence is repeated on the suburb pages. https://shellharbourdentist.com.au/new-patient-offer/
+ * prints the same Monday–Friday 8:00 am–5:00 pm and Saturday by appointment, but a different phone
+ * (02 4214 4372). Clock times match, so that phone is not used. JSON-LD Mon–Sun 09:00–17:00 is not
+ * in the index; the crawler keeps the visible header.
+ *
+ * Woonona — https://woononadentists.com.au/ (heading Clinic Hours):
+ * "Mon – Fri : 8:00 AM – 6:00 PM Saturday : 8:00 AM – 5:00 PM After hours treatment available everyday with prior appointment."
+ * https://woononadentists.com.au/contact-us/ agrees:
+ * "Mon – Fri: 8am – 6 pm Saturday: 8am – 5 pm Emergency bookings available outside the above by appointment."
+ * The contact-card header agrees: "Monday – Friday 8.00 AM – 6.00 PM Saturday 8 AM – 5 PM".
+ * DISAGREE: https://woononadentists.com.au/new-patient-offer/ says
+ * "Monday - Friday 8:00 am – 5:00 pm Saturday By Appointment" and phone 02 4214 4469.
+ * Homepage and contact page are the schedule used here.
+ */
+
+type Day = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+type Span = { days: Day[]; open: string; close: string };
+
+type Note = { kind: "appointment"; days: Day[] } | { kind: "after-hours" };
+
+type Schedule = {
+  spans: Span[];
+  notes: Note[];
+  sources: string[];
+  /** English caution for the model. Not part of the quoted hours line. */
+  disagreement?: string;
+};
+
+const DAY_ORDER: Day[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+const CLINIC_HOURS: Record<ClinicId, Schedule> = {
+  dapto: {
+    spans: [
+      { days: ["mon", "tue", "wed", "thu", "fri"], open: "08:00", close: "18:00" },
+      { days: ["sat"], open: "08:00", close: "16:00" },
+    ],
+    notes: [],
+    sources: ["https://daptodentists.com.au/"],
+  },
+  shellharbour: {
+    spans: [{ days: ["mon", "tue", "wed", "thu", "fri"], open: "08:00", close: "17:00" }],
+    notes: [{ kind: "appointment", days: ["sat"] }],
+    sources: ["https://shellharbourdentist.com.au/dentist-shell-cove/"],
+  },
+  woonona: {
+    spans: [
+      { days: ["mon", "tue", "wed", "thu", "fri"], open: "08:00", close: "18:00" },
+      { days: ["sat"], open: "08:00", close: "17:00" },
+    ],
+    notes: [{ kind: "after-hours" }],
+    sources: ["https://woononadentists.com.au/", "https://woononadentists.com.au/contact-us/"],
+    disagreement:
+      "https://woononadentists.com.au/new-patient-offer/ states a 17:00 weekday close and appointment-only Saturday, plus phone 02 4214 4469. That disagrees with the homepage and contact page. Quote only the line above.",
+  },
+};
+
+const DAY_NAMES: Record<string, string[]> = {
+  en: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  bn: ["সোমবার", "মঙ্গলবার", "বুধবার", "বৃহস্পতিবার", "শুক্রবার", "শনিবার", "রবিবার"],
+  "bn-Latn": ["Shombar", "Mongolbar", "Budhbar", "Brihoshpotibar", "Shukrobar", "Shonibar", "Robibar"],
+  hi: ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार"],
+  "hi-Latn": ["Somvaar", "Mangalvaar", "Budhvaar", "Guruvaar", "Shukravaar", "Shanivaar", "Ravivaar"],
+  ar: ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"],
+  ur: ["پیر", "منگل", "بدھ", "جمعرات", "جمعہ", "ہفتہ", "اتوار"],
+  fa: ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"],
+  zh: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+  es: ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"],
+  fr: ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"],
+  pt: ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"],
+  it: ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"],
+  de: ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
+  vi: ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"],
+  ko: ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"],
+  el: ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"],
+  id: ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"],
+  ms: ["Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu", "Ahad"],
+  tl: ["Lunes", "Martes", "Miyerkules", "Huwebes", "Biyernes", "Sabado", "Linggo"],
+  ja: ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"],
+  ru: ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"],
+  tr: ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"],
+};
+
+const APPOINTMENT: Record<string, string> = {
+  en: "by appointment",
+  bn: "অ্যাপয়েন্টমেন্টে",
+  "bn-Latn": "appointment e",
+  hi: "अपॉइंटमेंट पर",
+  "hi-Latn": "appointment par",
+  ar: "بموعد مسبق",
+  ur: "اپائنٹمنٹ پر",
+  fa: "با وقت قبلی",
+  zh: "需预约",
+  es: "con cita",
+  fr: "sur rendez-vous",
+  pt: "com marcação",
+  it: "su appuntamento",
+  de: "nach Vereinbarung",
+  vi: "theo lịch hẹn",
+  ko: "예약제",
+  el: "κατόπιν ραντεβού",
+  id: "dengan janji",
+  ms: "dengan temujanji",
+  tl: "sa appointment",
+  ja: "要予約",
+  ru: "по записи",
+  tr: "randevu ile",
+};
+
+/** Same fact as the Woonona homepage ("every day with prior appointment") and contact page. */
+const AFTER_HOURS: Record<string, string> = {
+  en: "After-hours treatment is available every day with a prior appointment",
+  bn: "এই সময়ের বাইরেও প্রতিদিন আগের অ্যাপয়েন্টমেন্টে চিকিৎসা পাওয়া যায়",
+  "bn-Latn": "Ei somoyer baireo protidin ager appointment e treatment pawa jay",
+  hi: "इस समय के बाहर भी हर दिन पहले से अपॉइंटमेंट पर इलाज मिल सकता है",
+  "hi-Latn": "Is samay ke bahar bhi har din pehle se appointment par ilaj mil sakta hai",
+  ar: "العلاج خارج هذه الساعات متاح كل يوم بموعد مسبق",
+  ur: "ان اوقات کے علاوہ بھی ہر روز پہلے سے اپائنٹمنٹ پر علاج دستیاب ہے",
+  fa: "درمان خارج از این ساعت‌ها هر روز با وقت قبلی ممکن است",
+  zh: "上述时间以外，每天可预约就诊",
+  es: "Hay atención fuera de ese horario todos los días con cita previa",
+  fr: "En dehors de ces horaires, un rendez-vous est possible chaque jour",
+  pt: "Há atendimento fora desse horário todos os dias com marcação prévia",
+  it: "Fuori da questi orari è possibile un appuntamento ogni giorno",
+  de: "Außerhalb dieser Zeiten ist jeden Tag eine Behandlung nach Vereinbarung möglich",
+  vi: "Ngoài các giờ trên, có thể khám mỗi ngày nếu đặt lịch trước",
+  ko: "위 시간 외에도 매일 사전 예약으로 진료가 가능합니다",
+  el: "Εκτός αυτών των ωρών, θεραπεία είναι διαθέσιμη κάθε μέρα με ραντεβού",
+  id: "Di luar jam ini, perawatan tersedia setiap hari dengan janji sebelumnya",
+  ms: "Di luar waktu ini, rawatan tersedia setiap hari dengan temujanji terlebih dahulu",
+  tl: "Sa labas ng oras na ito, may treatment araw-araw kung may appointment",
+  ja: "上記以外の時間も、事前予約で毎日受診できます",
+  ru: "Вне этих часов приём возможен каждый день по предварительной записи",
+  tr: "Bu saatler dışında her gün önceden randevu ile tedavi mümkündür",
+};
+
+const ENGLISH_DAYS =
+  "(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun)";
+
+const ENGLISH_CLOCK = String.raw`(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?)`;
+
+const DAY_INDEX: Record<string, number> = {
+  monday: 0,
+  mon: 0,
+  tuesday: 1,
+  tue: 1,
+  tues: 1,
+  wednesday: 2,
+  wed: 2,
+  thursday: 3,
+  thu: 3,
+  thur: 3,
+  thurs: 3,
+  friday: 4,
+  fri: 4,
+  saturday: 5,
+  sat: 5,
+  sunday: 6,
+  sun: 6,
+};
+
+const HOURS_QUESTION =
+  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
+
+const HOURS_CHUNK = /clinic hours|operating hours|opening hours|monday to friday|mon\s*[–—-]\s*fri|8:00\s*am|8\.00\s*am|8am/i;
+
+export function hoursSource(clinic: ClinicId): { sources: string[]; disagreement?: string } {
+  const schedule = CLINIC_HOURS[clinic];
+  return { sources: schedule.sources, disagreement: schedule.disagreement };
+}
+
+export function questionAsksHours(text: string): boolean {
+  return HOURS_QUESTION.test(text);
+}
+
+export function chunkStatesHours(chunk: { heading?: string; text?: string }): boolean {
+  return HOURS_CHUNK.test(`${chunk.heading || ""} ${chunk.text || ""}`);
+}
+
+export function hoursRelevant(question: string, chunks: { heading?: string; text?: string }[]): boolean {
+  if (questionAsksHours(question)) return true;
+  return chunks.some((chunk) => chunkStatesHours(chunk));
+}
+
+function known(code: string): boolean {
+  return Object.prototype.hasOwnProperty.call(DAY_NAMES, code);
+}
+
+function dayNames(code: string): string[] {
+  return DAY_NAMES[code] ?? DAY_NAMES.en ?? [];
+}
+
+function formatDays(days: Day[], code: string): string {
+  const names = dayNames(code);
+  const indexes = days.map((day) => DAY_ORDER.indexOf(day)).filter((index) => index >= 0);
+  const first = names[indexes[0] ?? 0] ?? "";
+  if (indexes.length <= 1) return first;
+  const last = names[indexes[indexes.length - 1] ?? 0] ?? "";
+  const join = code === "fa" || code === "ur" ? " تا " : code === "zh" ? "至" : "–";
+  return `${first}${join}${last}`;
+}
+
+function parts(hhmm: string): { hour: number; minute: string } {
+  const [hour, minute] = hhmm.split(":");
+  return { hour: Number(hour), minute: minute || "00" };
+}
+
+function hour12(hour: number): number {
+  const next = hour % 12;
+  return next === 0 ? 12 : next;
+}
+
+/** One clock time in the reply language. Western digits. Unknown languages use 24-hour. */
+export function formatClock(hhmm: string, code: string): string {
+  const { hour, minute } = parts(hhmm);
+  const h12 = hour12(hour);
+  const h24 = known(code) ? String(hour) : String(hour).padStart(2, "0");
+  switch (code) {
+    case "en":
+      return `${h12}:${minute} ${hour >= 12 ? "PM" : "AM"}`;
+    case "fr":
+    case "pt":
+      return `${hour}h${minute}`;
+    case "de":
+      return `${hour}:${minute}`;
+    case "id":
+    case "ms":
+      return `${hour}.${minute}`;
+    case "tr":
+      return `${String(hour).padStart(2, "0")}.${minute}`;
+    case "ar":
+      return `${h12}:${minute} ${hour >= 12 ? "مساءً" : "صباحاً"}`;
+    case "ur":
+      return `${h12}:${minute} ${hour >= 12 ? "شام" : "صبح"}`;
+    case "hi":
+      return `${hour < 12 ? "सुबह" : hour < 17 ? "दोपहर" : "शाम"} ${h12}:${minute}`;
+    case "bn":
+      return `${hour < 12 ? "সকাল" : hour < 17 ? "বিকেল" : "সন্ধ্যা"} ${h12}:${minute}`;
+    case "zh":
+      return `${hour < 12 ? "上午" : "下午"}${h12}:${minute}`;
+    case "ko":
+      return `${hour < 12 ? "오전" : "오후"} ${h12}:${minute}`;
+    case "ja":
+      return `${hour < 12 ? "午前" : "午後"}${h12}:${minute}`;
+    default:
+      return `${h24}:${minute}`;
+  }
+}
+
+function formatSpan(open: string, close: string, code: string): string {
+  if (code === "fa") return `${formatClock(open, "fa")} تا ${formatClock(close, "fa")}`;
+  if (code === "de") return `${formatClock(open, code)}–${formatClock(close, code)} Uhr`;
+  return `${formatClock(open, code)}–${formatClock(close, code)}`;
+}
+
+export function formatClinicHours(clinic: ClinicId, code: string): string {
+  const schedule = CLINIC_HOURS[clinic];
+  const comma = code === "ar" || code === "fa" || code === "ur" ? "، " : ", ";
+  const partsLine = [
+    ...schedule.spans.map((span) => `${formatDays(span.days, code)} ${formatSpan(span.open, span.close, code)}`),
+    ...schedule.notes
+      .filter((note): note is { kind: "appointment"; days: Day[] } => note.kind === "appointment")
+      .map((note) => `${formatDays(note.days, code)} ${APPOINTMENT[code] ?? APPOINTMENT.en}`),
+  ];
+  const line = partsLine.join(comma);
+  const after = schedule.notes.some((note) => note.kind === "after-hours") ? (AFTER_HOURS[code] ?? AFTER_HOURS.en) : "";
+  return after ? `${line}. ${after}` : line;
+}
+
+export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
+  if (focus.kind === "one") return [focus.clinic];
+  if (focus.kind === "many") return focus.clinics;
+  return ["dapto", "shellharbour", "woonona"];
+}
+
+export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string): string {
+  const lines = clinicIdsForHours(focus).flatMap((clinic) => {
+    const schedule = CLINIC_HOURS[clinic];
+    const row = `${names(clinic)}: ${formatClinicHours(clinic, code)}`;
+    return schedule.disagreement ? [row, `Do not quote the conflicting page. ${schedule.disagreement}`] : [row];
+  });
+  return [
+    "LOCALISED OPENING HOURS",
+    "When you state opening hours, quote the matching line below verbatim. Do not translate it again. Do not use English day names or AM/PM.",
+    ...lines,
+  ].join("\n");
+}
+
+const SKIP_REWRITE = new Set(["en", "bn-Latn", "hi-Latn"]);
+
+/** Replace leftover English day names and AM/PM. Banglish, Hinglish and English are left as written. */
+export function rewriteEnglishHours(text: string, code: string): string {
+  if (!code || SKIP_REWRITE.has(code)) return text;
+  const names = dayNames(code);
+  const days = text.replace(new RegExp(`\\b${ENGLISH_DAYS}\\b`, "gi"), (word) => names[DAY_INDEX[word.toLowerCase()] ?? 0] ?? word);
+  return days.replace(new RegExp(`\\b${ENGLISH_CLOCK}\\b`, "gi"), (_all, hour: string, minute: string | undefined, suffix: string) => {
+    let h = Number(hour);
+    const pm = /^p/i.test(suffix);
+    if (pm && h < 12) h += 12;
+    if (!pm && h === 12) h = 0;
+    const hhmm = `${String(h).padStart(2, "0")}:${minute || "00"}`;
+    return formatClock(hhmm, code);
+  });
+}
+
+type HoursChunk = { type: string; id?: string; delta?: string };
+
+function splitHold(text: string, final: boolean): { stable: string; rest: string } {
+  if (final) return { stable: text, rest: "" };
+  const match = text.match(/^(.*\s)(\S{0,40})$/u);
+  if (!match) return { stable: "", rest: text };
+  return { stable: match[1] ?? "", rest: match[2] ?? "" };
+}
+
+/** Stream rewrite for leftover English hours wording. No-op when hours are not relevant. */
+export function attachHoursWording<T extends HoursChunk>(stream: ReadableStream<T>, code: string, enabled: boolean): ReadableStream<T> {
+  if (!enabled || SKIP_REWRITE.has(code)) return stream;
+  let hold = "";
+  let textId: string | undefined;
+  let flushed = false;
+  const emit = (controller: TransformStreamDefaultController<T>, final: boolean) => {
+    const split = splitHold(hold, final);
+    hold = split.rest;
+    const visible = rewriteEnglishHours(split.stable, code);
+    if (visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
+  };
+  return stream.pipeThrough(
+    new TransformStream<T, T>({
+      transform(chunk, controller) {
+        if (chunk.type === "text-start" && chunk.id) textId = chunk.id;
+        if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
+          hold += chunk.delta;
+          emit(controller, false);
+          return;
+        }
+        if (chunk.type === "text-end" || chunk.type === "finish") {
+          if (!flushed) {
+            flushed = true;
+            emit(controller, true);
+          }
+          controller.enqueue(chunk);
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+      flush(controller) {
+        if (flushed) return;
+        flushed = true;
+        emit(controller, true);
+      },
+    }),
+  );
+}

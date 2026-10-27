@@ -42,17 +42,30 @@ function timeAllowed(token: string, corpus: string): boolean {
   const hour = Number(match[1]);
   const minute = match[2] || "00";
   const suffix = match[3] || "";
-  const variants = [
-    token.toLowerCase().replace(/\s+/g, ""),
-    `${hour}${suffix}`,
-    `${hour}:00`,
-    `${hour}.${minute}`,
-    `${String(hour).padStart(2, "0")}:${minute}`,
-    `${hour}.00`,
-    `${hour}:00${suffix}`,
-  ];
+  const variants = new Set<string>();
+  const add = (h: number, suf: string) => {
+    if (h < 0 || h > 23) return;
+    const hh = String(h).padStart(2, "0");
+    variants.add(`${h}${suf}`);
+    variants.add(`${h}:${minute}${suf}`);
+    variants.add(`${h}.${minute}${suf}`);
+    variants.add(`${hh}:${minute}${suf}`);
+    variants.add(`${h}:${minute}`);
+    variants.add(`${hh}:${minute}`);
+    variants.add(`${h}.${minute}`);
+  };
+  add(hour, suffix);
+  if (suffix === "pm" && hour < 12) add(hour + 12, "");
+  if (suffix === "am" && (hour === 12 || hour === 0)) add(0, "");
+  if (!suffix && hour >= 13) add(hour - 12, "pm");
+  if (!suffix && hour === 0) add(12, "am");
   const flat = corpus.replace(/\s+/g, "");
-  return variants.some((variant) => variant.length > 0 && (corpus.includes(variant) || flat.includes(variant.replace(/\s+/g, ""))));
+  for (const variant of variants) {
+    const compact = variant.replace(/\s+/g, "");
+    if (compact.length < 3) continue;
+    if (corpus.includes(variant) || flat.includes(compact)) return true;
+  }
+  return false;
 }
 
 export type GroundingKind = "fee" | "hours" | "emergency" | "unknown" | "offtopic";

@@ -3,6 +3,7 @@ import { languageOption } from "../language/catalog";
 import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
 import type { ScoredChunk } from "../retrieval/search";
 import { clinicName } from "../retrieval/search";
+import { formatClinicHours, hoursRelevant, localisedHoursBlock } from "./hours";
 
 export const CHAT_MODEL = "openai/gpt-5.4-mini";
 export const CHAT_MODEL_REASON =
@@ -12,7 +13,7 @@ function wantsAlternatePhones(question: string | undefined): boolean {
   return /other (?:phone|number)s?|alternative (?:phone|number)s?|another (?:phone|number)|second (?:phone|number)|all (?:the )?(?:phone )?numbers|\balternatives\b/i.test(question || "");
 }
 
-function contactBlock(card: ContactCard, showAlternatives: boolean): string {
+function contactBlock(card: ContactCard, showAlternatives: boolean, languageCode: string): string {
   return [
     `${card.name} (${card.clinic})`,
     `Phone: ${card.phone}`,
@@ -20,7 +21,7 @@ function contactBlock(card: ContactCard, showAlternatives: boolean): string {
     `Email: ${card.email}`,
     `Booking: ${card.bookingUrl}`,
     card.address ? `Address: ${card.address}` : "",
-    card.hours ? `Hours: ${card.hours}` : "",
+    `Hours: ${formatClinicHours(card.clinic, languageCode)}`,
     `Website: ${card.site}`,
   ]
     .filter(Boolean)
@@ -36,7 +37,12 @@ export function buildInstructions(input: {
   question?: string;
 }): string {
   const showAlternatives = wantsAlternatePhones(input.question);
-  const directory = Object.values(input.index.contacts).map((card) => contactBlock(card, showAlternatives)).join("\n\n");
+  const directory = Object.values(input.index.contacts)
+    .map((card) => contactBlock(card, showAlternatives, input.language.code))
+    .join("\n\n");
+  const hoursBlock = hoursRelevant(input.question ?? "", input.chunks)
+    ? localisedHoursBlock(input.language.code, input.focus, clinicName)
+    : "";
   const context = input.chunks.length
     ? input.chunks
         .map(
@@ -81,7 +87,7 @@ For Shellharbour Dentists, give only the main phone printed as Phone. Do not men
 
 NUMERALS AND WORDS
 Copy phone numbers, email addresses and URLs exactly as printed. Keep Western digits 0-9 in phone numbers, prices and clock times. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
-Translate day names, the words AM and PM, and every other sentence into the reply language. Do not paste an English hours line such as "Monday – Friday 8.00 AM – 6.00 PM" into a Persian, Arabic, or any other non-English reply. Say those hours in the reply language, with Western digits for the clock times.
+Translate day names, the words AM and PM, and every other sentence into the reply language. Do not paste English day names or AM/PM into a non-English reply. Use Western digits for the clock times. When LOCALISED OPENING HOURS is present, quote that line verbatim instead of translating it again.
 Keep proper names verbatim: clinic names, street names, suburb names and dentist names. This applies in every language.
 Banglish and Hinglish replies use Latin letters only. Do not mix in Bengali or Devanagari characters.
 
@@ -108,7 +114,7 @@ ${
 STYLE
 Short, calm sentences. No markdown headings. Do not invent source links. The app shows source chips separately. You may repeat a booking link from the directory when giving the contact route.
 
-CONTACT DIRECTORY
+${hoursBlock ? `${hoursBlock}\n\n` : ""}CONTACT DIRECTORY
 ${directory}
 
 CONTEXT

@@ -174,4 +174,55 @@ describe("contact footer", () => {
     expect(text).toContain("02 4288 0737");
     expect(text).toContain("zavy360.com");
   });
+
+  it("appends the footer when a Bengali reply says there is no information and sources scored", async () => {
+    expect(
+      shouldAppendContactFooter({
+        question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?",
+        sourceCount: 2,
+        topScore: 0.8,
+        replyText: "তথ্য নেই",
+      }),
+    ).toBe(true);
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "তথ্য নেই" });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const chunks = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, detectLanguage("এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?"), { kind: "any" }),
+        sourcesFound: true,
+        question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?",
+        covered: (text) => replyHasContactRoute(text, index),
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("তথ্য নেই");
+    expect(text).toContain("02 4288 0737");
+    expect(text).toContain("02 4216 9911");
+  });
+
+  it("appends the footer when the question shares no clinic or service terms with the hits", () => {
+    expect(
+      shouldAppendContactFooter({
+        question: "Who won the world cup in 2022?",
+        sourceCount: 4,
+        topScore: 0.9,
+        sharesTopic: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAppendContactFooter({
+        question: "우노나 치과 전화번호",
+        sourceCount: 2,
+        topScore: 0.8,
+        sharesTopic: true,
+        replyText: "The phone is 02 4284 4486.",
+      }),
+    ).toBe(false);
+  });
 });

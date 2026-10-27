@@ -1,4 +1,12 @@
-export type TextPart = { kind: "text"; value: string } | { kind: "isolate"; value: string };
+export type EmbedKind = "phone" | "email" | "url";
+
+export type TextPart = { kind: "text"; value: string } | { kind: "isolate"; value: string; embed: EmbedKind };
+
+function embedKind(value: string): EmbedKind {
+  if (value.includes("@")) return "email";
+  if (/^https?:/i.test(value)) return "url";
+  return "phone";
+}
 
 const EMBEDDED =
   /(?:\+?\d(?:[\s().-]*\d){7,}|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|https?:\/\/[^\s<>"']+)/gi;
@@ -12,7 +20,7 @@ export function splitIsolatedEmbeds(text: string): TextPart[] {
     const value = match[0] ?? "";
     if (!value) continue;
     if (index > last) parts.push({ kind: "text", value: text.slice(last, index) });
-    parts.push({ kind: "isolate", value });
+    parts.push({ kind: "isolate", value, embed: embedKind(value) });
     last = index + value.length;
   }
   if (last < text.length) parts.push({ kind: "text", value: text.slice(last) });

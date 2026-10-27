@@ -29,4 +29,4 @@ Copy `.env.example` to `.env.local` (that file stays uncommitted):
 - `DEEPGRAM_API_KEY`
 - `CHAT_ALLOWED_ORIGINS`
 
-Chat model: `openai/gpt-5.4-mini` via the Vercel AI Gateway. It is a fast gateway model aimed at high-volume chat, so time to first token stays low for a public widget while the reply still follows the script instruction.
+Chat model: `openai/gpt-5.4-mini` via the Vercel AI Gateway. It is a fast gateway model aimed at high-volume chat, so time to first token stays low for a public widget while the reply still follows the script instruction. If no text arrives within 8 seconds, that attempt is aborted and retried once on `google/gemini-2.5-flash`.

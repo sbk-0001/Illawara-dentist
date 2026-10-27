@@ -1,7 +1,7 @@
-import { clinicContextText, mentionsServiceArea, type ClinicFocus } from "../intent";
+import { clinicContextText, mentionedClinics, mentionsServiceArea, type ClinicFocus } from "../intent";
 import { hasLetters } from "../language/detect";
-import { expandQuery } from "../retrieval/search";
-import type { ClinicId, KnowledgeIndex, ReplyLanguage } from "../types";
+import { expandQuery, mentionsIndexedTopic } from "../retrieval/search";
+import type { ClinicId, KnowledgeChunk, KnowledgeIndex, ReplyLanguage } from "../types";
 
 /** The model emits this only when it did not answer. It is removed before display. */
 export const NO_ANSWER_SENTINEL = "[[NO_ANSWER]]";
@@ -38,6 +38,67 @@ const LEAD: Record<string, string> = {
 
 const GREETING =
   /^(?:hi|hey|hello|thanks|thank you|ok|okay|hola|ciao|salut|bonjour|hallo|namaste|salam|gracias|merci|obrigado|danke|xin chao|xin chào)[.!?\s]*$/i;
+
+/** Short replies that mean "the site does not say", even when the model skips [[NO_ANSWER]]. */
+const NO_INFO = [
+  "তথ্য নেই",
+  "কোনো তথ্য নেই",
+  "জানি না",
+  "উত্তর নেই",
+  "لا توجد معلومات",
+  "لا توجد إجابة",
+  "لا أعرف",
+  "ليس لدي معلومات",
+  "जानकारी नहीं",
+  "पता नहीं",
+  "नहीं पता",
+  "मुझे नहीं पता",
+  "معلوم نہیں",
+  "مجھے نہیں پتا",
+  "اطلاعاتی ندارم",
+  "نمی‌دانم",
+  "اطلاعاتی در دسترس نیست",
+  "پاسخی نیست",
+  "没有相关信息",
+  "没有这个信息",
+  "不知道",
+  "no tengo información",
+  "no hay información",
+  "no lo sé",
+  "je ne sais pas",
+  "aucune information",
+  "pas cette information",
+  "i don't know",
+  "i do not know",
+  "don't have that information",
+  "no information",
+  "not listed on the website",
+  "não sei",
+  "não tenho essa informação",
+  "non so",
+  "non ho questa informazione",
+  "keine information",
+  "ich weiß es nicht",
+  "không có thông tin",
+  "tôi không biết",
+  "정보가 없습니다",
+  "모르겠습니다",
+  "δεν γνωρίζω",
+  "bilmiyorum",
+  "bilgi yok",
+  "не знаю",
+  "нет информации",
+  "わかりません",
+  "情報がありません",
+  "tidak ada informasi",
+  "saya tidak tahu",
+  "tiada maklumat",
+  "tidak tahu",
+  "walang impormasyon",
+  "hindi ko alam",
+];
+
+const TOPIC_STOP = new Set(["that", "this", "with", "from", "your", "have", "what", "when", "where", "does", "about", "please", "much", "they", "them", "then", "than", "into", "over", "also", "just", "like", "want", "need", "tell", "know", "there", "which", "would", "could", "should"]);
 
 const ON_TOPIC =
   /\b(dentist|dental|tooth|teeth|implant|invisalign|crown|veneer|whiten|canal|clean|check-?up|fee|fees|price|cost|hour|hours|open|appointment|book|clinic|pain|swell|emergency|child|children|kids|gum|aligner|denture|sedation|dapto|woonona|shellharbour|illawarra|phone|address|parking|saturday|sunday|monday|zavy|root|brace|filling|extract|wisdom|ortho|tratamiento|implante|diente|horario|dentista|impianto|appuntamento|zahn|termin|nha|khoa)\b/i;
@@ -112,17 +173,50 @@ export type FooterDecision = {
   topScore?: number;
   /** True when the model emitted the no-answer sentinel. Sources do not block the footer in that case. */
   modelSaidNoAnswer?: boolean;
+  /** Finished reply, used to catch a no-information phrase that skipped the sentinel. */
+  replyText?: string;
+  /** False when the question shares no clinic or service terms with the top chunks. */
+  sharesTopic?: boolean;
 };
 
+/** A short reply that says the information is missing, in the languages the widget answers. */
+export function replySignalsNoInformation(text: string): boolean {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return false;
+  const lower = flat.toLowerCase();
+  const hit = NO_INFO.find((phrase) => lower.includes(phrase.toLowerCase()));
+  if (!hit) return false;
+  const words = flat.split(/\s+/).length;
+  return words <= 24 || hit.length >= flat.length * 0.35;
+}
+
 /**
- * Append when retrieval found nothing usable, or the model marked the reply unanswered.
- * Never append when sources were found and the model answered.
+ * True when the question names a clinic that appears in the top chunks, a known service
+ * whose English terms appear there, or a content word that appears there.
+ * A high embedding score with none of those is not an answer.
+ */
+export function sharesClinicOrService(question: string, chunks: Pick<KnowledgeChunk, "clinic" | "title" | "heading" | "text">[]): boolean {
+  if (!chunks.length) return false;
+  const top = chunks.slice(0, 4);
+  if (mentionedClinics(question).some((id) => top.some((chunk) => chunk.clinic === id))) return true;
+  const blob = top.map((chunk) => `${chunk.title} ${chunk.heading} ${chunk.text}`).join("\n").toLowerCase();
+  if (mentionsIndexedTopic(question).some((term) => blob.includes(term.toLowerCase()))) return true;
+  const words = question.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+  return words.some((word) => !TOPIC_STOP.has(word) && blob.includes(word));
+}
+
+/**
+ * Append when retrieval found nothing usable, the model marked the reply unanswered,
+ * the reply itself says there is no information, or the question shares nothing with the hits.
+ * A real answer that overlaps the pages does not get the footer.
  */
 export function shouldAppendContactFooter(input: FooterDecision): boolean {
-  if (!input.question.trim() && !input.modelSaidNoAnswer) return false;
+  if (!input.question.trim() && !input.modelSaidNoAnswer && !input.replyText?.trim()) return false;
   if (input.question.trim() && !hasLetters(input.question)) return true;
   if (input.modelSaidNoAnswer) return true;
+  if (input.replyText && replySignalsNoInformation(input.replyText)) return true;
   if (GREETING.test(input.question.trim())) return false;
+  if (input.sharesTopic === false) return true;
   const top = input.topScore ?? (input.sourceCount > 0 ? 1 : 0);
   return !retrievalHasAnswer(input.sourceCount, top);
 }
@@ -169,7 +263,13 @@ export function takeVisibleReply(buffer: string, final: boolean): { visible: str
  */
 export function attachContactFooter<T extends FooterChunk>(
   stream: ReadableStream<T>,
-  input: { footer: string; sourcesFound: boolean; question: string; covered: (text: string) => boolean },
+  input: {
+    footer: string;
+    sourcesFound: boolean;
+    question: string;
+    covered: (text: string) => boolean;
+    sharesTopic?: boolean;
+  },
 ): ReadableStream<T> {
   let textId: string | undefined;
   let pending = "";
@@ -190,6 +290,8 @@ export function attachContactFooter<T extends FooterChunk>(
       sourceCount: input.sourcesFound ? 1 : 0,
       topScore: input.sourcesFound ? 1 : 0,
       modelSaidNoAnswer: sawSentinel,
+      replyText: shown,
+      sharesTopic: input.sharesTopic,
     });
     if (!append || !input.footer || input.covered(shown)) return;
     const id = textId ?? "contact-footer";

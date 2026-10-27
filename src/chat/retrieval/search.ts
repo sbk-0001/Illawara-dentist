@@ -82,6 +82,15 @@ export function expandQuery(query: string): string {
   return extras.length ? `${query} ${extras.join(" ")}` : query;
 }
 
+/** English service words added when the question names a known clinic topic, in any supported script. */
+export function mentionsIndexedTopic(text: string): string[] {
+  const terms: string[] = [];
+  for (const item of EXPANSIONS) {
+    if (item.re.test(text)) terms.push(...item.terms.split(" "));
+  }
+  return terms;
+}
+
 function overlapCount(query: string, chunk: KnowledgeChunk): number {
   const wanted = new Set(tokens(query));
   const seen = new Set(tokens(`${chunk.title} ${chunk.heading} ${chunk.text}`));
