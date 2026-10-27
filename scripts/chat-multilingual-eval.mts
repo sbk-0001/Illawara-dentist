@@ -9,7 +9,7 @@
 import { streamText } from "ai";
 import { EVAL_CASES } from "../src/chat/eval/cases.ts";
 import { replyMatchesLanguage } from "../src/chat/language/reply-script.ts";
-import { ensureContactFooter, shouldAppendContactFooter } from "../src/chat/server/contacts.ts";
+import { ensureContactFooter, modelSignalsNoAnswer, retrievalHasAnswer, shouldAppendContactFooter, stripNoAnswerSentinel } from "../src/chat/server/contacts.ts";
 import { checkGrounding } from "../src/chat/server/grounding.ts";
 import { getKnowledgeIndex } from "../src/chat/server/index-store.ts";
 import { prepareTurn } from "../src/chat/server/chat-route.ts";
@@ -40,8 +40,10 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
   const messages = [{ role: "user" as const, parts: [{ type: "text", text: prompt }] }];
   const started = performance.now();
   const turn = prepareTurn(messages, "auto", index);
-  const chunks = await hybridRetrieve(index, turn.text, turn.chunks);
-  const sourced = sourcesFromChunks(chunks);
+  const chunks = await hybridRetrieve(index, turn.query, turn.chunks);
+  const topScore = chunks[0]?.score ?? 0;
+  const answered = retrievalHasAnswer(chunks.length, topScore);
+  const sourced = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
     language: turn.reply,
@@ -64,9 +66,16 @@ async function answer(prompt: string): Promise<{ reply: string; ttftMs: number; 
     reply += part;
   }
   const finished = reply.trim();
-  const withContacts = shouldAppendContactFooter(turn.text, sourced.length)
-    ? ensureContactFooter(finished, index, turn.reply, turn.focus)
-    : finished;
+  const saidNo = modelSignalsNoAnswer(finished);
+  const visible = stripNoAnswerSentinel(finished);
+  const withContacts = shouldAppendContactFooter({
+    question: turn.text,
+    sourceCount: sourced.length,
+    topScore,
+    modelSaidNoAnswer: saidNo,
+  })
+    ? ensureContactFooter(visible, index, turn.reply, turn.focus)
+    : visible;
   return { reply: withContacts, ttftMs, totalMs: performance.now() - started, detected: turn.reply.code };
 }
 

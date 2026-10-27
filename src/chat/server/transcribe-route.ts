@@ -1,4 +1,4 @@
-import { deepgramListenUrl } from "../stt";
+import { correctTranscript, deepgramListenUrl } from "../stt";
 import { guardRequest, withCors } from "./guard";
 
 export const runtime = "nodejs";
@@ -58,7 +58,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const payload = (await upstream.json()) as DeepgramListen;
   const alternative = payload.results?.channels?.[0]?.alternatives?.[0];
-  const transcript = alternative?.transcript?.trim() || "";
+  const transcript = correctTranscript(alternative?.transcript?.trim() || "");
   const language = alternative?.languages?.[0] || payload.results?.channels?.[0]?.detected_language || "";
   return withCors(request, Response.json({ transcript, language }));
 }

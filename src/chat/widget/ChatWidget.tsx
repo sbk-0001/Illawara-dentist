@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { deepgramListenUrl } from "../stt";
+import { correctTranscript, deepgramListenUrl } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import styles from "./ChatWidget.module.css";
 
@@ -135,7 +135,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         setMic("idle");
         return;
       }
-      setInput((value) => (value ? `${value.trim()} ${payload.transcript}` : payload.transcript || ""));
+      const transcript = correctTranscript(payload.transcript);
+      setInput((value) => (value ? `${value.trim()} ${transcript}` : transcript));
       setMicNote("");
       setMic("idle");
     } catch {
@@ -212,11 +213,10 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const transcript = payload.channel?.alternatives?.[0]?.transcript?.trim() || "";
           if (!transcript) return;
           if (payload.is_final) {
-            session.current.finals = `${session.current.finals} ${transcript}`.trim();
+            session.current.finals = correctTranscript(`${session.current.finals} ${transcript}`.trim());
             setInput(session.current.finals);
           } else {
-            const live = `${session.current.finals} ${transcript}`.trim();
-            setInput(live);
+            setInput(correctTranscript(`${session.current.finals} ${transcript}`.trim()));
           }
         } catch {
           // Ignore non-JSON socket frames.

@@ -42,6 +42,8 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "fr", label: "Français", script: "Latin", dir: "ltr", instruction: "Write in French." },
   { code: "de", label: "Deutsch", script: "Latin", dir: "ltr", instruction: "Write in German." },
   { code: "pt", label: "Português", script: "Latin", dir: "ltr", instruction: "Write in Portuguese." },
+  { code: "id", label: "Bahasa Indonesia", script: "Latin", dir: "ltr", instruction: "Write in Indonesian (Bahasa Indonesia)." },
+  { code: "ms", label: "Bahasa Melayu", script: "Latin", dir: "ltr", instruction: "Write in Malay (Bahasa Melayu)." },
   { code: "pa", label: "ਪੰਜਾਬੀ", script: "Gurmukhi", dir: "ltr", instruction: "Write in Punjabi, using Gurmukhi script." },
   { code: "ta", label: "தமிழ்", script: "Tamil", dir: "ltr", instruction: "Write in Tamil script." },
   { code: "te", label: "తెలుగు", script: "Telugu", dir: "ltr", instruction: "Write in Telugu script." },

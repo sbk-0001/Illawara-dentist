@@ -40,6 +40,10 @@ const PORTUGUESE = ["horário", "horario", "horários", "horarios", "sábado", "
 const PORTUGUESE_FUNCTION = ["para", "os", "as"];
 const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy", "nha", "khoa", "phi", "nieng", "niềng", "trang", "trắng", "thoai", "thoại", "lich", "lịch", "dat", "đặt", "chua", "chữa", "implant", "bacsi", "nhakhoa"];
 const VIETNAMESE_FUNCTION = ["bac", "si"];
+const INDONESIAN = ["apakah", "dokter", "bisa", "saya", "buka", "berapa", "gigi", "anak", "klinik", "perawatan", "cabut", "sakit"];
+const INDONESIAN_FUNCTION = ["ada", "di", "yang", "untuk", "ini", "jam"];
+const MALAY = ["adakah", "doktor", "boleh", "awak", "pukul", "buka", "berapa", "gigi", "anak", "klinik", "rawatan", "sakit"];
+const MALAY_FUNCTION = ["ada", "di", "yang", "untuk", "ini"];
 
 const ARABIC_WORDS = ["ما", "هي", "ساعات", "العمل", "عيادة", "السبت", "ألم", "سن", "رسوم", "موعد", "كم"];
 const URDU_WORDS = ["کیا", "ہے", "ہیں", "کلینک", "بجے", "کھلتا", "ہفتہ", "درد", "دانت", "کتنے", "میں"];
@@ -151,6 +155,8 @@ function latinFamily(text: string, tokens: string[]): Detection {
   const portuguese = scoreWords(tokens, PORTUGUESE, 2) + scoreWords(tokens, PORTUGUESE_FUNCTION, 1);
   const vietnameseDiacritics = /[ăơưđắằẳẵặấầẩẫậếềểễệốồổỗộớờởỡợứừửữựạẹịọụỵảẽỉỏủỷỹ]/i.test(text) ? 3 : 0;
   const vietnamese = scoreWords(tokens, VIETNAMESE, 2) + scoreWords(tokens, VIETNAMESE_FUNCTION, 1) + vietnameseDiacritics;
+  const indonesian = scoreWords(tokens, INDONESIAN, 2) + scoreWords(tokens, INDONESIAN_FUNCTION, 1);
+  const malay = scoreWords(tokens, MALAY, 2) + scoreWords(tokens, MALAY_FUNCTION, 1);
 
   const ranked: { code: string; score: number }[] = [
     { code: "bn-Latn", score: banglish },
@@ -162,6 +168,8 @@ function latinFamily(text: string, tokens: string[]): Detection {
     { code: "de", score: german },
     { code: "pt", score: portuguese },
     { code: "vi", score: vietnamese },
+    { code: "id", score: indonesian },
+    { code: "ms", score: malay },
   ].sort((a, b) => b.score - a.score);
 
   const best = ranked[0];

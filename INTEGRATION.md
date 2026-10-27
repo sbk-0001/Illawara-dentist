@@ -81,4 +81,4 @@ Chat uses `openai/gpt-5.4-mini` through the AI Gateway (`src/chat/server/prompt.
 
 The microphone uses Deepgram Nova-3 with `language=multi`. Keyterm prompting (`keyterm`, not Nova-2 `keywords`) is sent for Dapto, Woonona, Shellharbour, Illawarra, Invisalign, Barrack Heights and Zavy. Deepgram documents that keyterms work on Nova-3 multilingual, so language detection stays on.
 
-When retrieval has no answer, or the question is off-topic, the server appends the three clinic phones and Zavy booking links in the visitor's language. That block is not left to the model.
+When retrieval returns no usable pages, or the model marks the reply with `[[NO_ANSWER]]` (the marker is removed before display), the server appends the three clinic phones and Zavy booking links. A reply that already answered from found pages does not get that block. Phone numbers stay in Western digits.

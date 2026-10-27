@@ -1,16 +1,22 @@
 import type { ClinicId } from "./types";
 
 const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
-  { clinic: "dapto", re: /\bdapto\b|डाप्टो|داپتو|دابتو|ড্যাপ্টো|达普托|답토|ντάπτο|ダプト/i },
+  {
+    clinic: "dapto",
+    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|ντάπτο|ダプト/i,
+  },
   {
     clinic: "shellharbour",
-    re: /\bshellharbour\b|\bshell harbor\b|barrack heights|shell cove|warilla|oak flats|albion park|kiama|windang|blackbutt|lake heights|tullimbar|warrawong|calderwood|شيلهاربر|شل ہاربر|शेलहारबर|শেলহারবার/i,
+    re: /\bshellharbour\b|\bshell harbor\b|barrack heights|shell cove|warilla|oak flats|albion park|kiama|windang|blackbutt|lake heights|tullimbar|warrawong|calderwood|شيلهاربر|شيل هاربور|شل ہاربر|شیلہاربر|شیل ہاربر|شلهاربر|شل‌هاربر|शेलहारबर|शेलहार्बर|শেলহারবার|谢尔港|謝爾港|셸하버|쉘하버|باراك هايتس|باراک ہائٹس|巴拉克高地|배랙하이츠|배럭하이츠|बैरक हाइट्स|ব্যারাক হাইটস/i,
   },
   {
     clinic: "woonona",
-    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|वूनोना|উনোনা/i,
+    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|伍诺纳|沃诺纳|烏諾納|우노나|워노나/i,
   },
 ];
+
+/** Illawarra is the group, not one of the three clinics. */
+const GROUP_TERMS = /illawarra|إلاوارا|الاوارا|ایلاوارا|इलावारा|ইলাওয়ারা|伊拉瓦拉|일라와라/i;
 
 const LOCATION_CUES = [
   /hour|opening|open|close|address|where|parking|direction|located|phone|call|what time|which dentist|who works|dentist named/i,
@@ -25,6 +31,8 @@ const LOCATION_CUES = [
   /indirizzo|orari|dove|telefono/i,
   /horario|dirección|dónde|teléfono/i,
   /kothay|khula|khola|shonibar|baje|address|parking/i,
+  /پتہ|فون|نمبر|کہاں|مقام|لوکیشن|آدرس|تلفن|کجاست|نشانی/,
+  /alamat|telepon|di mana|jam buka/i,
 ];
 
 const SEVERE = [
@@ -47,6 +55,31 @@ export function mentionedClinics(text: string): ClinicId[] {
     if (term.re.test(text) && !found.includes(term.clinic)) found.push(term.clinic);
   }
   return found;
+}
+
+export function mentionsServiceArea(text: string): boolean {
+  return GROUP_TERMS.test(text) || mentionedClinics(text).length > 0;
+}
+
+const FOLLOW_UP = /^(?:and|also|what about|how about|وما|و ما|और|aur|그리고|还有|then)\b/i;
+
+/** A short location question can inherit the clinic named in a recent turn. */
+export function isClinicFollowUp(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 180) return false;
+  if (FOLLOW_UP.test(trimmed)) return true;
+  return isLocationQuestion(trimmed);
+}
+
+/** Latest question, plus the most recent earlier turn that names a clinic when this one is a follow-up. */
+export function clinicContextText(turns: string[]): string {
+  const latest = turns[turns.length - 1] || "";
+  if (!latest || mentionedClinics(latest).length || !isClinicFollowUp(latest)) return latest;
+  for (let i = turns.length - 2; i >= Math.max(0, turns.length - 4); i -= 1) {
+    const prior = turns[i] || "";
+    if (mentionedClinics(prior).length || mentionsServiceArea(prior)) return `${prior}\n${latest}`;
+  }
+  return latest;
 }
 
 export function isLocationQuestion(text: string): boolean {

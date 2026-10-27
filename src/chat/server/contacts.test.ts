@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { detectLanguage } from "../language/detect";
+import { mentionedClinics } from "../intent";
 import {
   attachContactFooter,
   contactFooter,
   ensureContactFooter,
+  isClearlyOffTopic,
   replyHasContactRoute,
   shouldAppendContactFooter,
 } from "./contacts";
+import { prepareTurn } from "./chat-route";
 import { getKnowledgeIndex } from "./index-store";
 
 const index = getKnowledgeIndex();
@@ -32,7 +35,7 @@ describe("contact footer", () => {
     expect(block).toContain("02 4284 4486");
     expect(block).toContain("zavy360.com");
     expect(block).not.toContain("02 4062 8706");
-    expect(shouldAppendContactFooter("এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?", 0)).toBe(true);
+    expect(shouldAppendContactFooter({ question: "এই ক্লিনিকে কি রোবট দাঁত বসানো হয়?", sourceCount: 0, topScore: 0 })).toBe(true);
   });
 
   it("does not duplicate a reply that already has the contact route", () => {
@@ -46,11 +49,41 @@ describe("contact footer", () => {
     expect(ensureContactFooter(reply, index, detectLanguage(reply), { kind: "any" })).toBe(reply);
   });
 
-  it("appends for off-topic questions and skips a greeting", () => {
-    expect(shouldAppendContactFooter("Who won the world cup in 2022?", 4)).toBe(true);
-    expect(shouldAppendContactFooter("২০২২ বিশ্বকাপ কে জিতেছে?", 3)).toBe(true);
-    expect(shouldAppendContactFooter("hello", 0)).toBe(false);
-    expect(shouldAppendContactFooter("How much is a check-up?", 3)).toBe(false);
+  it("appends only when retrieval missed or the model marked the reply unanswered", () => {
+    expect(shouldAppendContactFooter({ question: "Who won the world cup in 2022?", sourceCount: 4, topScore: 0.9 })).toBe(false);
+    expect(shouldAppendContactFooter({ question: "우노나 치과 전화번호", sourceCount: 2, topScore: 0.8 })).toBe(false);
+    expect(shouldAppendContactFooter({ question: "ڈاپٹو کا پتہ کیا ہے؟", sourceCount: 3, topScore: 1.4 })).toBe(false);
+    expect(shouldAppendContactFooter({ question: "Who won the world cup in 2022?", sourceCount: 0, topScore: 0 })).toBe(true);
+    expect(shouldAppendContactFooter({ question: "How much is a check-up?", sourceCount: 2, topScore: 0.05 })).toBe(true);
+    expect(
+      shouldAppendContactFooter({ question: "وما هو رقم الهاتف؟", sourceCount: 2, topScore: 0.9, modelSaidNoAnswer: true }),
+    ).toBe(true);
+    expect(shouldAppendContactFooter({ question: "hello", sourceCount: 0, topScore: 0 })).toBe(false);
+  });
+
+  it("keeps a follow-up phone question on the clinic named earlier", () => {
+    const follow = prepareTurn(
+      [
+        { role: "user", content: "What is the Shellharbour address?" },
+        { role: "assistant", content: "Suite 7, Barrack Heights." },
+        { role: "user", content: "وما هو رقم الهاتف؟" },
+      ],
+      "auto",
+      index,
+    );
+    expect(follow.focus).toEqual({ kind: "one", clinic: "shellharbour" });
+    expect(follow.query).toContain("shellharbour");
+    expect(follow.reply.code).toBe("ar");
+    expect(isClearlyOffTopic("وما هو رقم الهاتف؟", ["What is the Shellharbour address?"])).toBe(false);
+    expect(mentionedClinics("ڈاپٹو کا لوکیشن")).toEqual(["dapto"]);
+    expect(mentionedClinics("우노나 전화번호")).toEqual(["woonona"]);
+    expect(mentionedClinics("伍诺纳诊所")).toEqual(["woonona"]);
+    expect(mentionedClinics("شيلهاربر")).toEqual(["shellharbour"]);
+    if (follow.sources.length) {
+      expect(
+        shouldAppendContactFooter({ question: follow.text, sourceCount: follow.sources.length, topScore: follow.chunks[0]?.score ?? 1 }),
+      ).toBe(false);
+    }
   });
 
   it("writes the contact block into the answer stream before the text closes", async () => {
@@ -65,7 +98,12 @@ describe("contact footer", () => {
     });
     const language = detectLanguage("জানি না কেন");
     const chunks = await readChunks(
-      attachContactFooter(source, contactFooter(index, language, { kind: "any" }), (text) => replyHasContactRoute(text, index)),
+      attachContactFooter(source, {
+        footer: contactFooter(index, language, { kind: "any" }),
+        sourcesFound: false,
+        question: "জানি না কেন",
+        covered: (text) => replyHasContactRoute(text, index),
+      }),
     );
     const end = chunks.findIndex((chunk) => chunk.type === "text-end");
     const injected = chunks.slice(0, end).filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
@@ -74,5 +112,55 @@ describe("contact footer", () => {
     expect(injected).toContain("02 4284 4486");
     expect(injected).toContain("zavy360.com");
     expect(injected).not.toContain("02 4062 8706");
+  });
+
+  it("does not append the footer when sources were found and the model answered", async () => {
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "The Woonona phone is 02 4284 4486." });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.enqueue({ type: "finish" });
+        controller.close();
+      },
+    });
+    const chunks = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, detectLanguage("hello"), { kind: "one", clinic: "woonona" }),
+        sourcesFound: true,
+        question: "우노나 전화번호",
+        covered: (text) => replyHasContactRoute(text, index),
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("02 4284 4486");
+    expect(text).not.toContain("02 4288 0737");
+    expect(text).not.toContain("does not list an answer");
+    expect(text).not.toContain("답이 없습니다");
+  });
+
+  it("strips the no-answer sentinel and then appends the contact block", async () => {
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "text-start", id: "t1" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "I can't answer that.\n[[NO_ANS" });
+        controller.enqueue({ type: "text-delta", id: "t1", delta: "WER]]" });
+        controller.enqueue({ type: "text-end", id: "t1" });
+        controller.close();
+      },
+    });
+    const chunks = await readChunks(
+      attachContactFooter(source, {
+        footer: contactFooter(index, detectLanguage("hello"), { kind: "any" }),
+        sourcesFound: true,
+        question: "Who won the world cup?",
+        covered: (text) => replyHasContactRoute(text, index),
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).not.toContain("[[NO_ANSWER]]");
+    expect(text).toContain("I can't answer that.");
+    expect(text).toContain("02 4288 0737");
+    expect(text).toContain("zavy360.com");
   });
 });

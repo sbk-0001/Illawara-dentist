@@ -76,6 +76,35 @@ describe("prompt rules", () => {
     expect(instructions).toMatch(/phone and booking link/i);
   });
 
+  it("tells Persian replies to keep Western digits", () => {
+    const instructions = buildInstructions({
+      index,
+      language: { code: "fa", label: "فارسی", script: "Arabic", dir: "rtl", fallback: false, source: "detected" },
+      focus: { kind: "one", clinic: "dapto" },
+      severe: false,
+      chunks: [],
+      question: "شماره تلفن داپتو چیست؟",
+    });
+    expect(instructions).toMatch(/Western digits/);
+    expect(instructions).toContain("0-9");
+    expect(instructions).toContain("02 4288 0737");
+    expect(instructions).not.toMatch(/[۰-۹٠-٩]/);
+  });
+
+  it("asks for the no-answer marker only when no pages were found", () => {
+    const missed = buildInstructions({
+      index,
+      language: { code: "en", label: "English", script: "Latin", dir: "ltr", fallback: false, source: "detected" },
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+    });
+    expect(missed).toContain("[[NO_ANSWER]]");
+    const found = prepareTurn([{ role: "user", content: "Do you offer dental implants?" }], "en", index);
+    expect(found.sources.length).toBeGreaterThan(0);
+    expect(found.instructions).toMatch(/Do not write \[\[NO_ANSWER\]\]/);
+  });
+
   it("says the language could not be detected for gibberish", () => {
     const instructions = buildInstructions({
       index,

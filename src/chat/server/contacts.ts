@@ -1,6 +1,15 @@
-import { mentionedClinics, type ClinicFocus } from "../intent";
+import { clinicContextText, mentionsServiceArea, type ClinicFocus } from "../intent";
 import { expandQuery } from "../retrieval/search";
 import type { ClinicId, KnowledgeIndex, ReplyLanguage } from "../types";
+
+/** The model emits this only when it did not answer. It is removed before display. */
+export const NO_ANSWER_SENTINEL = "[[NO_ANSWER]]";
+
+/**
+ * Fused retrieval scores are about 0–1 (the top hit is usually near 1).
+ * Raw BM25 scores are larger than 1. Below this, treat the hit list as no answer.
+ */
+export const RETRIEVAL_SCORE_FLOOR = 0.2;
 
 const CLINIC_ORDER: ClinicId[] = ["dapto", "shellharbour", "woonona"];
 
@@ -67,45 +76,122 @@ export function ensureContactFooter(reply: string, index: KnowledgeIndex, langua
   return trimmed ? `${trimmed}\n\n${block}` : block;
 }
 
-export function isClearlyOffTopic(question: string): boolean {
-  const trimmed = question.trim();
-  if (!trimmed || GREETING.test(trimmed)) return false;
-  if (mentionedClinics(trimmed).length > 0) return false;
-  if (ON_TOPIC.test(trimmed)) return false;
-  if (expandQuery(trimmed) !== trimmed) return false;
-  return trimmed.replace(/\s/g, "").length >= 12;
+export function modelSignalsNoAnswer(text: string): boolean {
+  return text.includes(NO_ANSWER_SENTINEL);
 }
 
-/** No-answer and off-topic replies get the contact block. A bare greeting does not. */
-export function shouldAppendContactFooter(question: string, sourceCount: number): boolean {
-  const trimmed = question.trim();
-  if (!trimmed) return false;
-  if (GREETING.test(trimmed)) return false;
-  if (sourceCount === 0) return true;
-  return isClearlyOffTopic(trimmed);
+export function stripNoAnswerSentinel(text: string): string {
+  return text.replaceAll(NO_ANSWER_SENTINEL, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** A retrieval hit the reply can be grounded on. Empty lists and tiny scores are not. */
+export function retrievalHasAnswer(sourceCount: number, topScore = 0): boolean {
+  if (sourceCount <= 0) return false;
+  if (topScore >= 1) return true;
+  return topScore >= RETRIEVAL_SCORE_FLOOR;
+}
+
+/**
+ * Off-topic only when the recent user turns name no clinic and no dental topic.
+ * This does not by itself add the contact footer. A found answer is never "off topic" for that purpose.
+ */
+export function isClearlyOffTopic(question: string, priorTurns: string[] = []): boolean {
+  const conversation = clinicContextText([...priorTurns, question].filter(Boolean));
+  const trimmed = conversation.trim();
+  if (!trimmed || GREETING.test(question.trim())) return false;
+  if (mentionsServiceArea(trimmed)) return false;
+  if (ON_TOPIC.test(trimmed)) return false;
+  if (expandQuery(trimmed) !== trimmed) return false;
+  return question.trim().replace(/\s/g, "").length >= 12;
+}
+
+export type FooterDecision = {
+  question: string;
+  sourceCount: number;
+  topScore?: number;
+  /** True when the model emitted the no-answer sentinel. Sources do not block the footer in that case. */
+  modelSaidNoAnswer?: boolean;
+};
+
+/**
+ * Append when retrieval found nothing usable, or the model marked the reply unanswered.
+ * Never append when sources were found and the model answered.
+ */
+export function shouldAppendContactFooter(input: FooterDecision): boolean {
+  if (!input.question.trim() && !input.modelSaidNoAnswer) return false;
+  if (input.modelSaidNoAnswer) return true;
+  if (GREETING.test(input.question.trim())) return false;
+  const top = input.topScore ?? (input.sourceCount > 0 ? 1 : 0);
+  return !retrievalHasAnswer(input.sourceCount, top);
 }
 
 type FooterChunk = { type: string; id?: string; delta?: string };
 
+/** Drop a complete sentinel, and hold back a suffix that might still grow into one. */
+export function takeVisibleReply(buffer: string, final: boolean): { visible: string; hold: string; sawSentinel: boolean } {
+  let sawSentinel = false;
+  let visible = "";
+  let rest = buffer;
+  while (rest.length) {
+    const at = rest.indexOf(NO_ANSWER_SENTINEL);
+    if (at >= 0) {
+      sawSentinel = true;
+      visible += rest.slice(0, at);
+      rest = rest.slice(at + NO_ANSWER_SENTINEL.length);
+      continue;
+    }
+    if (final) {
+      visible += rest;
+      rest = "";
+      break;
+    }
+    let hold = 0;
+    const max = Math.min(rest.length, NO_ANSWER_SENTINEL.length - 1);
+    for (let n = max; n > 0; n -= 1) {
+      if (NO_ANSWER_SENTINEL.startsWith(rest.slice(-n))) {
+        hold = n;
+        break;
+      }
+    }
+    visible += rest.slice(0, rest.length - hold);
+    rest = rest.slice(rest.length - hold);
+    break;
+  }
+  return { visible, hold: rest, sawSentinel };
+}
+
 /**
- * Append the contact block as a text-delta before the text part closes.
- * Skips the append when the model's own text already has every clinic phone and a booking link.
+ * Strip the no-answer sentinel from the stream. Append the contact block only when
+ * retrieval found nothing usable, or the sentinel was present. A reply that already
+ * lists every clinic phone and a booking link is left unchanged.
  */
 export function attachContactFooter<T extends FooterChunk>(
   stream: ReadableStream<T>,
-  footer: string,
-  covered: (text: string) => boolean,
+  input: { footer: string; sourcesFound: boolean; question: string; covered: (text: string) => boolean },
 ): ReadableStream<T> {
   let textId: string | undefined;
-  let accumulated = "";
+  let pending = "";
+  let shown = "";
+  let sawSentinel = false;
   let sealed = false;
 
-  const inject = (controller: TransformStreamDefaultController<T>) => {
+  const finishText = (controller: TransformStreamDefaultController<T>) => {
     if (sealed) return;
     sealed = true;
-    if (!footer || covered(accumulated)) return;
+    const drained = takeVisibleReply(pending, true);
+    pending = "";
+    if (drained.sawSentinel) sawSentinel = true;
+    shown += drained.visible;
+    if (drained.visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: drained.visible } as T);
+    const append = shouldAppendContactFooter({
+      question: input.question,
+      sourceCount: input.sourcesFound ? 1 : 0,
+      topScore: input.sourcesFound ? 1 : 0,
+      modelSaidNoAnswer: sawSentinel,
+    });
+    if (!append || !input.footer || input.covered(shown)) return;
     const id = textId ?? "contact-footer";
-    const delta = `${accumulated.trim() ? "\n\n" : ""}${footer}`;
+    const delta = `${shown.trim() ? "\n\n" : ""}${input.footer}`;
     if (!textId) controller.enqueue({ type: "text-start", id } as T);
     controller.enqueue({ type: "text-delta", id, delta } as T);
     if (!textId) controller.enqueue({ type: "text-end", id } as T);
@@ -115,12 +201,24 @@ export function attachContactFooter<T extends FooterChunk>(
     new TransformStream<T, T>({
       transform(chunk, controller) {
         if (chunk.type === "text-start" && chunk.id) textId = chunk.id;
-        if (chunk.type === "text-delta" && typeof chunk.delta === "string") accumulated += chunk.delta;
-        if (chunk.type === "text-end" || chunk.type === "finish") inject(controller);
+        if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
+          pending += chunk.delta;
+          const drained = takeVisibleReply(pending, false);
+          pending = drained.hold;
+          if (drained.sawSentinel) sawSentinel = true;
+          shown += drained.visible;
+          if (drained.visible) controller.enqueue({ ...chunk, delta: drained.visible });
+          return;
+        }
+        if (chunk.type === "text-end" || chunk.type === "finish") {
+          finishText(controller);
+          controller.enqueue(chunk);
+          return;
+        }
         controller.enqueue(chunk);
       },
       flush(controller) {
-        inject(controller);
+        finishText(controller);
       },
     }),
   );

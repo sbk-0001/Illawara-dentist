@@ -6,12 +6,12 @@ import {
   type UIMessage,
 } from "ai";
 import { z } from "zod";
-import { clinicFocus, isSevereEmergency } from "../intent";
+import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { resolveReplyLanguage } from "../language/detect";
 import { hybridRetrieve } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
 import type { ChatMetadata, KnowledgeIndex, ReplyLanguage } from "../types";
-import { attachContactFooter, contactFooter, replyHasContactRoute, shouldAppendContactFooter } from "./contacts";
+import { attachContactFooter, contactFooter, replyHasContactRoute, retrievalHasAnswer } from "./contacts";
 import { guardRequest, withCors } from "./guard";
 import { getKnowledgeIndex } from "./index-store";
 import { buildInstructions, CHAT_MODEL } from "./prompt";
@@ -40,16 +40,33 @@ export function messageText(message: { parts?: unknown; content?: unknown }): st
   return typeof message.content === "string" ? message.content.trim() : "";
 }
 
+function userTexts(messages: { role?: string; parts?: unknown; content?: unknown }[]): string[] {
+  return messages
+    .filter((message) => message.role === "user")
+    .map((message) => messageText(message).trim())
+    .filter(Boolean);
+}
+
+/** Follow-up location questions keep the clinic named in a recent turn, without replacing the latest wording. */
+export function retrievalQuery(latest: string, prior: string[]): string {
+  const context = clinicContextText([...prior, latest]);
+  if (context === latest) return latest;
+  const names = mentionedClinics(context);
+  return names.length ? `${names.join(" ")} ${latest}`.trim() : latest;
+}
+
 export function prepareTurn(messages: { role?: string; parts?: unknown; content?: unknown }[], language: string | undefined, index: KnowledgeIndex) {
-  const latest = [...messages].reverse().find((message) => message.role === "user");
-  const text = (latest ? messageText(latest) : "").slice(0, 4000);
+  const turns = userTexts(messages);
+  const text = (turns[turns.length - 1] || "").slice(0, 4000);
+  const query = retrievalQuery(text, turns.slice(0, -1)).slice(0, 4000);
   const reply: ReplyLanguage = resolveReplyLanguage(text, language);
-  const focus = clinicFocus(text);
+  const focus = clinicFocus(clinicContextText(turns));
   const severe = isSevereEmergency(text);
-  const chunks = text ? searchIndex(index, text, 8).slice(0, 6) : [];
-  const sources = chunks.length && chunks[0].score >= 1 ? sourcesFromChunks(chunks) : [];
+  const chunks = query ? searchIndex(index, query, 8).slice(0, 6) : [];
+  const sources = chunks.length && (chunks[0]?.score ?? 0) >= 1 ? sourcesFromChunks(chunks) : [];
   return {
     text,
+    query,
     reply,
     focus,
     severe,
@@ -83,8 +100,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }
-  const chunks = await hybridRetrieve(index, lexical.text, lexical.chunks);
-  const sources = sourcesFromChunks(chunks);
+  const chunks = await hybridRetrieve(index, lexical.query, lexical.chunks);
+  const topScore = chunks[0]?.score ?? 0;
+  const answered = retrievalHasAnswer(chunks.length, topScore);
+  const sources = answered ? sourcesFromChunks(chunks) : [];
   const instructions = buildInstructions({
     index,
     language: lexical.reply,
@@ -114,9 +133,12 @@ export async function POST(request: Request): Promise<Response> {
     sendReasoning: false,
     messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
   });
-  const stream = shouldAppendContactFooter(lexical.text, sources.length)
-    ? attachContactFooter(uiStream, contactFooter(index, lexical.reply, lexical.focus), (text) => replyHasContactRoute(text, index))
-    : uiStream;
+  const stream = attachContactFooter(uiStream, {
+    footer: contactFooter(index, lexical.reply, lexical.focus),
+    sourcesFound: answered,
+    question: lexical.text,
+    covered: (text) => replyHasContactRoute(text, index),
+  });
 
   return withCors(request, createUIMessageStreamResponse({ stream }));
 }
