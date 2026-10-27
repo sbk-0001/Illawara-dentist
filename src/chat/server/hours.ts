@@ -515,14 +515,24 @@ export function attachHoursWording<T extends HoursChunk>(stream: ReadableStream<
     const split = splitHold(hold, final);
     hold = split.rest;
     const visible = rewriteEnglishHours(split.stable, code);
-    if (visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
+    if (!visible) return;
+    if (!textId) {
+      textId = "hours";
+      controller.enqueue({ type: "text-start", id: textId } as T);
+    }
+    controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
   };
   const finish = (controller: TransformStreamDefaultController<T>) => {
     if (flushed) return;
     flushed = true;
     if (rewrite) emit(controller, true);
     const extra = hoursRangeClause(full, question, code);
-    if (extra && textId) controller.enqueue({ type: "text-delta", id: textId, delta: `\n${extra}` } as T);
+    if (!extra) return;
+    if (!textId) {
+      textId = "hours";
+      controller.enqueue({ type: "text-start", id: textId } as T);
+    }
+    controller.enqueue({ type: "text-delta", id: textId, delta: `\n${extra}` } as T);
   };
   return stream.pipeThrough(
     new TransformStream<T, T>({

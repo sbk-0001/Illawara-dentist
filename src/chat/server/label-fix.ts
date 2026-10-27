@@ -217,6 +217,24 @@ export function attachContactLabels<T extends LabelChunk>(
     return body;
   };
 
+  const enqueueLabeled = (controller: TransformStreamDefaultController<T>, chunk: T, delta: string) => {
+    const known = chunk.id || textId;
+    if (!known) {
+      textId = "labels";
+      controller.enqueue({ type: "text-start", id: textId } as T);
+    }
+    const id = known || textId;
+    controller.enqueue({ ...chunk, id, delta });
+  };
+  const enqueueTail = (controller: TransformStreamDefaultController<T>, delta: string) => {
+    if (!delta) return;
+    if (!textId) {
+      textId = "labels";
+      controller.enqueue({ type: "text-start", id: textId } as T);
+    }
+    controller.enqueue({ type: "text-delta", id: textId, delta } as T);
+  };
+
   return stream.pipeThrough(
     new TransformStream<T, T>({
       transform(chunk, controller) {
@@ -227,7 +245,7 @@ export function attachContactLabels<T extends LabelChunk>(
               sealed = true;
               const tail = `${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`;
               lineHold = "";
-              if (tail && textId) controller.enqueue({ type: "text-delta", id: textId, delta: tail } as T);
+              enqueueTail(controller, tail);
             }
           }
           controller.enqueue(chunk);
@@ -246,18 +264,18 @@ export function attachContactLabels<T extends LabelChunk>(
           if (pending && held.length < (hoursPending || addressPending ? 500 : 80)) return;
           passed = true;
           const visible = releaseHeld();
-          if (visible) controller.enqueue({ ...chunk, delta: visible });
+          if (visible) enqueueLabeled(controller, chunk, visible);
           return;
         }
         const visible = rewritePass(chunk.delta);
-        if (visible) controller.enqueue({ ...chunk, delta: visible });
+        if (visible) enqueueLabeled(controller, chunk, visible);
       },
       flush(controller) {
         if (sealed) return;
         sealed = true;
         const tail = `${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`;
         lineHold = "";
-        if (tail && textId) controller.enqueue({ type: "text-delta", id: textId, delta: tail } as T);
+        enqueueTail(controller, tail);
       },
     }),
   );

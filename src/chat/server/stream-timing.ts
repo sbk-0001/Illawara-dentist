@@ -1,7 +1,7 @@
 import { replyScriptGate } from "../language/reply-script";
 import { CHAT_MODEL } from "./prompt";
 import { drainStatusTag, type StatusTag } from "./status-tag";
-import { createSystemTextFilter, tryAgainMessage } from "./system-text";
+import { createSystemTextFilter, stripFeeCaveat, tryAgainMessage } from "./system-text";
 
 /** Abort a gateway stream that has not produced visible text, then try once more. */
 export const FIRST_TOKEN_TIMEOUT_MS = 8_000;
@@ -44,7 +44,7 @@ export function chatGenerationSettings(attempt: number, firstChunkMs = FIRST_TOK
   };
 }
 
-type TextPart = { type: string; text?: string };
+type TextPart = { type: string; text?: string; id?: string };
 
 export type ChatTimingEvent = {
   event: "chat-timing";
@@ -229,11 +229,32 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       const clearDeadline = () => {
         if (deadlineTimer) clearTimeout(deadlineTimer);
       };
+      let activeTextId: string | undefined;
+      let textOpen = false;
+      let idSeq = 0;
+      const nextId = () => `reply-${++idSeq}`;
+      const markOpen = (id: string) => {
+        activeTextId = id;
+        textOpen = true;
+      };
+      const closeText = () => {
+        if (!textOpen || !activeTextId) return;
+        controller.enqueue({ type: "text-end", id: activeTextId } as T);
+        textOpen = false;
+      };
       const emitFallback = (stage: StalledStage) => {
         stalled = stage;
         clearDeadline();
         const text = released ? `\n${fallbackText}` : fallbackText;
-        controller.enqueue({ type: "text-delta", text } as T);
+        if (!textOpen || !activeTextId) {
+          const id = nextId();
+          controller.enqueue({ type: "text-start", id } as T);
+          controller.enqueue({ type: "text-delta", id, text } as T);
+          controller.enqueue({ type: "text-end", id } as T);
+        } else {
+          controller.enqueue({ type: "text-delta", id: activeTextId, text } as T);
+          closeText();
+        }
         finish("deadline", "deadline");
         controller.close();
       };
@@ -262,20 +283,78 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         timeoutPromise.catch(() => undefined);
         const iterator = input.run(attempt, attemptAbort.signal, scriptRetry ? { scriptRetry: true } : undefined)[Symbol.asyncIterator]();
         const buffered: T[] = [];
+        const deferred: T[] = [];
         let held = "";
+        let partId: string | undefined;
+        let sawContent = false;
         const filter = createSystemTextFilter(input.language);
         let showed = false;
+        const noteContent = () => {
+          if (sawContent) return;
+          sawContent = true;
+          if (timer) clearTimeout(timer);
+        };
+        const notePartId = (part: T): T => {
+          if (part.type === "text-start") {
+            const id = part.id || partId || nextId();
+            partId = id;
+            return { ...part, id } as T;
+          }
+          if ((part.type === "text-delta" || part.type === "text-end") && part.id) partId = part.id;
+          return part;
+        };
+        const publishOpen = () => {
+          let sawStart = false;
+          for (const earlier of buffered) {
+            const part = notePartId(earlier);
+            if (part.type === "text-end" || part.type === "finish" || part.type === "finish-step" || part.type === "abort") {
+              deferred.push(part);
+              continue;
+            }
+            if (part.type === "text-start" && part.id) {
+              sawStart = true;
+              markOpen(part.id);
+            }
+            controller.enqueue(part);
+          }
+          buffered.length = 0;
+          if (!sawStart && !textOpen) {
+            const id = partId || nextId();
+            partId = id;
+            markOpen(id);
+            controller.enqueue({ type: "text-start", id } as T);
+          }
+        };
+        const writeDelta = (text: string) => {
+          if (!text) return;
+          const id = activeTextId || partId || nextId();
+          if (!textOpen) {
+            markOpen(id);
+            controller.enqueue({ type: "text-start", id } as T);
+          }
+          controller.enqueue({ type: "text-delta", id: activeTextId, text } as T);
+        };
         const show = (text: string) => {
           const visible = filter.push(text);
           if (!showed) {
             showed = true;
             released = true;
-            if (timer) clearTimeout(timer);
             if (ttftMs === null) ttftMs = Date.now() - origin;
-            for (const earlier of buffered) controller.enqueue(earlier);
-            buffered.length = 0;
+            publishOpen();
           }
-          if (visible) controller.enqueue({ type: "text-delta", text: visible } as T);
+          if (visible) writeDelta(visible);
+        };
+        const flushDeferred = () => {
+          let ended = false;
+          const pending = deferred.splice(0);
+          for (const part of pending) {
+            if (part.type === "text-end") {
+              ended = true;
+              textOpen = false;
+            }
+            controller.enqueue(part);
+          }
+          if (!ended) closeText();
         };
         try {
           for (;;) {
@@ -286,7 +365,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               : await Promise.race([pending, timeoutPromise, deadlinePromise]);
             if (step.done) {
               held += takeText("", true);
-              const gate = replyScriptGate(held, input.language);
+              const gate = replyScriptGate(stripFeeCaveat(held), input.language, true);
               if (gate === "conflict") {
                 await stopIterator(iterator, timer);
                 return "script";
@@ -296,23 +375,28 @@ export function createRetryingTextStream<T extends TextPart>(input: {
                 held = "";
               }
               const rest = filter.flush();
-              if (rest) controller.enqueue({ type: "text-delta", text: rest } as T);
-              if (!showed) {
-                for (const earlier of buffered) controller.enqueue(earlier);
+              if (rest) {
+                if (!showed) show(rest);
+                else writeDelta(rest);
               }
+              if (!showed) {
+                for (const earlier of buffered) controller.enqueue(notePartId(earlier));
+              } else flushDeferred();
               await stopIterator(iterator, timer);
               return "ok";
             }
             const part = step.value;
             if (part.type === "text-delta" && part.text) {
+              if (part.id) partId = part.id;
               const visible = takeText(part.text, false);
               if (!visible) continue;
+              noteContent();
               if (showed) {
                 show(visible);
                 continue;
               }
               held += visible;
-              const gate = replyScriptGate(held, input.language);
+              const gate = replyScriptGate(held, input.language, false);
               if (gate === "conflict") {
                 await stopIterator(iterator, timer);
                 return "script";
@@ -323,8 +407,13 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               }
               continue;
             }
-            if (!showed) buffered.push(part);
-            else controller.enqueue(part);
+            if (!showed) buffered.push(notePartId(part));
+            else {
+              const forwarded = notePartId(part);
+              if (forwarded.type === "text-start" && forwarded.id) markOpen(forwarded.id);
+              if (forwarded.type === "text-end") textOpen = false;
+              controller.enqueue(forwarded);
+            }
           }
         } catch (error) {
           await stopIterator(iterator, timer);

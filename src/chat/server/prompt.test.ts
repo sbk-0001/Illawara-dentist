@@ -255,8 +255,11 @@ describe("prompt rules", () => {
     expect(instructions).not.toContain(FEE_CAVEAT_EN);
     expect(instructions).toContain("Whitening is available.");
     expect(instructions).toMatch(/write that sentence in the reply language/i);
+    expect(instructions).toContain("দাঁত সাদা করা");
+    expect(instructions).toMatch(/Do not leave English service words/i);
     expect(scriptRetryInstruction(language)).toMatch(/Bengali/);
     expect(scriptRetryInstruction(language)).toMatch(/Do not write English sentences/);
+    expect(scriptRetryInstruction(language)).toMatch(/teeth whitening/);
   });
 
   it("says the language could not be detected for gibberish", () => {

@@ -234,6 +234,40 @@ describe("first-token timeout", () => {
     const fallback = await readText(stillEnglish);
     expect(fallback).toContain("আবার চেষ্টা করুন");
     expect(fallback).not.toContain(FEE_CAVEAT_EN);
+
+    let minorCalls = 0;
+    const minor = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        minorCalls += 1;
+        yield { type: "text-delta", text: "হ্যাঁ, Dapto Dentists-এ দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।" };
+      },
+    });
+    expect(await readText(minor)).toContain("দাঁত সাদা");
+    expect(minorCalls).toBe(1);
+
+    let heavyCalls = 0;
+    const heavy = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: () => {
+        heavyCalls += 1;
+        const text =
+          heavyCalls === 1
+            ? "পেজে teeth whitening এবং professional teeth whitening সম্পর্কে বলা আছে। আরও বিস্তারিত নেই।"
+            : bengali;
+        return (async function* () {
+          yield { type: "text-delta", text };
+        })();
+      },
+    });
+    const repaired = await readText(heavy);
+    expect(heavyCalls).toBe(2);
+    expect(repaired).toContain("দাঁত");
+    expect(repaired).not.toContain("teeth whitening");
   });
 
   it("ends a stalled retry at the overall deadline and logs the stage", async () => {

@@ -50,22 +50,50 @@ const NATIVE_REPLY: Record<string, RegExp> = {
 };
 
 /**
+ * Clinic, brand, street and suburb names may stay in Latin. Generic service
+ * words may not. URLs and email addresses are not service words either.
+ */
+const PROPER_LATIN =
+  /\b(?:illawarra dentists|dapto dentists|shellharbour dentists|woonona dentists|barrack heights|shell cove|oak flats|albion park|lake heights|fairy meadow|mount pleasant|baan baan|captain cook|princes highway|zavy ?360|invisalign|shellharbour|shell harbor|woonona|illawarra|dapto|warilla|kiama|windang|blackbutt|tullimbar|warrawong|calderwood|bulli|thirroul|corrimal|balgownie|helensburgh|fernhill|nsw|suite|street|drive|highway)\b/gi;
+
+const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/;
+
+/** Above this share of non-name Latin letters, the reply is in the wrong script. */
+export const LATIN_SCRIPT_LIMIT = 0.35;
+
+function countPattern(text: string, re: RegExp): number {
+  return text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))?.length ?? 0;
+}
+
+function countableReply(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, " ")
+    .replace(new RegExp(PROPER_LATIN.source, PROPER_LATIN.flags), " ");
+}
+
+/**
  * The finished text is in the wrong script for a native-script reply.
- * A phone number or a short clinic name is not enough Latin to count.
+ * Proper nouns are ignored. A minor mix under 35% Latin letters is allowed.
  */
 export function replyScriptConflicts(text: string, code: string): boolean {
   const nativeRe = NATIVE_REPLY[code];
   if (!nativeRe) return false;
-  const native = text.match(nativeRe)?.length ?? 0;
-  if (native >= 4) return false;
-  const latin = text.match(/[A-Za-z\u00C0-\u024F]/g)?.length ?? 0;
-  return latin >= 24;
+  const body = countableReply(text);
+  const latin = countPattern(body, LATIN_LETTER);
+  const native = countPattern(body, nativeRe);
+  const total = latin + native;
+  if (total < 16) return false;
+  return latin / total > LATIN_SCRIPT_LIMIT;
 }
 
-/** Whether a native-script reply can be shown, must wait, or must be regenerated. */
-export function replyScriptGate(text: string, code: string): "release" | "wait" | "conflict" {
+/**
+ * A native-script reply is judged when it is finished, so a Bengali opening
+ * is not released before later English service words can be measured.
+ * Other languages can be shown as they arrive.
+ */
+export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) return "release";
-  if (replyScriptConflicts(text, code)) return "conflict";
-  const native = text.match(NATIVE_REPLY[code])?.length ?? 0;
-  return native >= 4 ? "release" : "wait";
+  if (!final) return "wait";
+  return replyScriptConflicts(text, code) ? "conflict" : "release";
 }

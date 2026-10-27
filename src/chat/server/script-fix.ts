@@ -309,7 +309,12 @@ export function attachScriptFix<T extends ScriptChunk>(stream: ReadableStream<T>
     if (flushed) return;
     flushed = true;
     const rest = buffer.flush();
-    if (rest && textId) controller.enqueue({ type: "text-delta", id: textId, delta: rest } as T);
+    if (!rest) return;
+    if (!textId) {
+      textId = "script";
+      controller.enqueue({ type: "text-start", id: textId } as T);
+    }
+    controller.enqueue({ type: "text-delta", id: textId, delta: rest } as T);
   };
   return stream.pipeThrough(
     new TransformStream<T, T>({
@@ -317,7 +322,15 @@ export function attachScriptFix<T extends ScriptChunk>(stream: ReadableStream<T>
         if (chunk.type === "text-start" && chunk.id) textId = chunk.id;
         if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
           const delta = buffer.push(chunk.delta);
-          if (delta) controller.enqueue({ ...chunk, delta });
+          if (!delta) return;
+          const id = chunk.id || textId;
+          if (!id) {
+            textId = "script";
+            controller.enqueue({ type: "text-start", id: textId } as T);
+            controller.enqueue({ type: "text-delta", id: textId, delta } as T);
+            return;
+          }
+          controller.enqueue({ ...chunk, id, delta });
           return;
         }
         if (chunk.type === "text-end" || chunk.type === "finish") {
