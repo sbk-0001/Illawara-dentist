@@ -214,12 +214,14 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   const fallbackText = input.fallbackText || tryAgainMessage(input.language, []);
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let activeAbort: AbortController | undefined;
+  let onDeadline: () => void = () => undefined;
   const pastDeadline = () => Date.now() - origin >= deadlineMs;
   const deadlinePromise = new Promise<never>((_, reject) => {
     const remaining = Math.max(0, deadlineMs - (Date.now() - origin));
     deadlineTimer = setTimeout(() => {
       const error = deadlineError();
       activeAbort?.abort(error);
+      onDeadline();
       reject(error);
     }, remaining);
   });
@@ -261,7 +263,10 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         if (ttftMs === null) ttftMs = Date.now() - origin;
         released = true;
       };
+      let fallbackSent = false;
       const emitFallback = (stage: StalledStage) => {
+        if (fallbackSent || settled) return;
+        fallbackSent = true;
         stalled = stage;
         clearDeadline();
         const text = released ? `\n${fallbackText}` : fallbackText;
@@ -275,7 +280,15 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           closeText();
         }
         finish("deadline", "deadline");
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by the deadline watchdog.
+        }
+      };
+      onDeadline = () => {
+        if (settled) return;
+        emitFallback(released ? "body" : attempt > 0 ? "retry" : "first-token");
       };
       const stopIterator = async (iterator: AsyncIterator<T>, timer?: ReturnType<typeof setTimeout>) => {
         if (timer) clearTimeout(timer);
@@ -381,6 +394,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         };
         try {
           for (;;) {
+            if (pastDeadline()) return "deadline";
             const pending = iterator.next();
             pending.catch(() => undefined);
             const step = showed

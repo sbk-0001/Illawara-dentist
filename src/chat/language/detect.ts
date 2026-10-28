@@ -225,6 +225,50 @@ export function detectLanguage(text: string): Detection {
   return fromCode(nonLatin.code, "high");
 }
 
+const PROPER_TOKEN = new Set([
+  "dapto", "woonona", "shellharbour", "illawarra", "barrack", "heights", "princes", "highway", "baan", "street", "nsw",
+  "suite", "drive", "warilla", "kiama", "windang", "bulli", "thirroul", "corrimal", "oak", "flats", "albion", "park",
+  "lake", "fairy", "meadow", "mount", "pleasant", "calderwood", "blackbutt", "tullimbar", "warrawong", "helensburgh",
+  "fernhill", "balgownie", "captain", "cook", "shell", "harbor", "harbour", "dentists", "dentist",
+]);
+
+const DICTIONARY_ENGLISH = new Set([
+  ...ENGLISH,
+  "phone", "phones", "number", "numbers", "email", "call", "calls", "yes", "no", "thanks", "thank", "today", "tomorrow",
+  "time", "times", "at", "for", "of", "and", "or", "to", "in", "on", "me", "my", "their", "there", "this", "that",
+  "a", "an", "it", "its", "with", "from", "about", "available", "offer", "offers", "close", "closed", "opening",
+  "opened", "prices", "price", "book", "booking", "please", "clinic", "clinics", "open",
+]);
+
+/** Typed Latin whose ordinary words are English, ignoring clinic and place names. */
+export function isDictionaryEnglish(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || /[^\sA-Za-z0-9?.!',-]/.test(trimmed)) return false;
+  const tokens = trimmed.toLowerCase().match(/[a-z]{2,}/g) ?? [];
+  if (!tokens.length) return false;
+  let words = 0;
+  for (const token of tokens) {
+    if (PROPER_TOKEN.has(token)) continue;
+    if (!DICTIONARY_ENGLISH.has(token)) return false;
+    words += 1;
+  }
+  return words > 0;
+}
+
+/** Romanised Banglish or Hinglish markers. Not a guess from a previous turn by itself. */
+export function romanisedIndic(text: string): "bn-Latn" | "hi-Latn" | null {
+  const trimmed = text.trim();
+  if (!trimmed || /[^\sA-Za-z0-9?.!',-]/.test(trimmed)) return null;
+  const tokens = trimmed.toLowerCase().match(/[a-z]{2,}/g) ?? [];
+  if (!tokens.length) return null;
+  let banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
+  if (/\bki\s*\??\s*$/i.test(trimmed)) banglish += 2;
+  const hinglish = scoreWords(tokens, HINGLISH_STRONG, 2) + scoreWords(tokens, HINGLISH_WEAK, 1);
+  if (banglish > hinglish && banglish > 0) return "bn-Latn";
+  if (hinglish > banglish && hinglish > 0) return "hi-Latn";
+  return null;
+}
+
 export function resolveReplyLanguage(text: string, picker: string | null | undefined): Detection {
   const selected = (picker || "auto").trim();
   if (selected && selected !== "auto") {

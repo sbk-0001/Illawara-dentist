@@ -117,19 +117,35 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
 
   function bindVoice(transcript: string, heard: string) {
     if (staleDraft()) return;
-    const spoken = spokenLanguageForTranscript(heard, transcript, preferredSpeechLanguage()) || "";
+    const spoken = voiceLanguage(heard, transcript);
     voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop: session.current.liveDrop };
     setInput(transcript);
-    const note = interimMicLanguage(heard ? { languages: [heard] } : undefined, transcript, { final: true, seen: transcript });
-    setMicNote(note ? micListeningNote(note) : micWaitingNote(preferredSpeechLanguage()));
+    setMicNote(listeningNote(transcript));
+  }
+
+  function pickerLanguage(): string | null {
+    return language !== "auto" ? language : null;
+  }
+
+  /** Last reply language. Not a guess from the current transcript or from Deepgram. */
+  function chatLanguage(): string | null {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    return lastAssistant?.metadata?.language || null;
   }
 
   function preferredSpeechLanguage(): string | null {
-    if (language !== "auto") return language;
-    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-    if (lastAssistant?.metadata?.language) return lastAssistant.metadata.language;
-    if (lastUser) return detectLanguage(textOf(lastUser)).code;
-    return null;
+    return pickerLanguage() || chatLanguage();
+  }
+
+  function voiceLanguage(heard: string, transcript: string): string {
+    return spokenLanguageForTranscript(heard, transcript, chatLanguage(), pickerLanguage()) || "";
+  }
+
+  function listeningNote(transcript: string, streak?: MicLanguageStreak): string {
+    const picked = pickerLanguage();
+    if (picked && picked !== "en") return micListeningNote(picked);
+    const code = interimMicLanguage(undefined, transcript, { seen: transcript, streak, picker: picked });
+    return code ? micListeningNote(code) : micWaitingNote(chatLanguage());
   }
 
   function captureRecording(): Promise<{ blob: Blob; hadSocket: boolean; finals: string; spokenLanguage: string; liveDrop: string }> {
@@ -137,7 +153,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const hadSocket = current.socket?.readyState === WebSocket.OPEN;
     const finals = current.finals.trim();
     const heard = majoritySpokenLanguage(current.langVotes) || current.interimLanguage || current.spokenLanguage;
-    const spokenLanguage = spokenLanguageForTranscript(heard, finals, preferredSpeechLanguage()) || "";
+    const spokenLanguage = voiceLanguage(heard, finals);
     const liveDrop = current.liveDrop;
     const recorder = current.recorder;
     current.ignoreClose = true;
@@ -193,7 +209,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         return false;
       }
       const transcript = correctTranscript(payload.transcript);
-      const spoken = spokenLanguageAtSubmit({
+      const spoken = pickerLanguage() || spokenLanguageAtSubmit({
         interim: payload.language,
         draft: priorSpoken,
         text: transcript,
@@ -201,8 +217,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       });
       voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop };
       setInput(transcript);
-      const note = interimMicLanguage(spoken ? { languages: [spoken] } : undefined, transcript, { final: true, seen: transcript });
-      finishNote(note ? micListeningNote(note) : micWaitingNote(hint));
+      finishNote(listeningNote(transcript));
       return true;
     } catch {
       if (abandoned()) {
@@ -335,45 +350,42 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           });
           const transcript = alternative?.transcript?.trim() || "";
           if (staleDraft()) return;
-          const heardNow = interimMicLanguage(alternative, transcript, {
-            hint: preferredSpeechLanguage(),
-            previous: session.current.spokenLanguage,
-            seen: `${session.current.finals} ${transcript}`,
-            final: payload.is_final === true,
+          const cumulative = `${session.current.finals} ${transcript}`.trim();
+          const heardNow = interimMicLanguage(undefined, cumulative, {
+            seen: cumulative,
             streak: session.current.noteStreak,
+            picker: pickerLanguage(),
           });
           if (heardNow) {
             session.current.interimLanguage = heardNow;
             setMicNote(micListeningNote(heardNow));
-          } else {
-            if (!session.current.noteStreak.code) session.current.interimLanguage = "";
-            setMicNote(micWaitingNote(preferredSpeechLanguage()));
+          } else if (!session.current.noteStreak.code) {
+            session.current.interimLanguage = "";
+            setMicNote(micWaitingNote(chatLanguage()));
           }
           if (!transcript) return;
-          const hint = preferredSpeechLanguage();
           if (payload.is_final) {
             session.current.langVotes.push(...votesFromAlternative(alternative));
             const spoken = majoritySpokenLanguage(session.current.langVotes);
             if (spoken) session.current.spokenLanguage = spoken;
             session.current.finals = correctTranscript(`${session.current.finals} ${transcript}`.trim());
-            const resolved = spokenLanguageForTranscript(spoken || heardNow || session.current.interimLanguage, session.current.finals, hint) || "";
+            const resolved = voiceLanguage(pickerLanguage() || spoken || heardNow || session.current.interimLanguage, session.current.finals);
             if (staleDraft()) return;
             voiceRequest.current = { transcript: session.current.finals, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
             setInput(session.current.finals);
           } else {
             const shown = correctTranscript(`${session.current.finals} ${transcript}`.trim());
-            const resolved = spokenLanguageForTranscript(heardNow || session.current.interimLanguage, shown, hint) || "";
+            const resolved = voiceLanguage(pickerLanguage() || heardNow || session.current.interimLanguage, shown);
             if (staleDraft()) return;
             voiceRequest.current = { transcript: shown, spokenLanguage: resolved, liveDrop: session.current.liveDrop };
             setInput(shown);
           }
-          if (!heardNow && !session.current.noteStreak.code) setMicNote(micWaitingNote(preferredSpeechLanguage()));
         } catch {
           // Ignore non-JSON socket frames.
         }
       });
       setMic("listening");
-      setMicNote(micWaitingNote(preferredSpeechLanguage()));
+      setMicNote(pickerLanguage() && pickerLanguage() !== "en" ? micListeningNote(pickerLanguage()) : micWaitingNote(chatLanguage()));
     } catch {
       if (!session.current.liveDrop) session.current.liveDrop = formatLiveDrop({ fallback: "open-failed" });
       setMic("listening");
@@ -389,7 +401,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const useVoice = Boolean(voice && voiceDraftStillApplies(voice, text));
     const hint = preferredSpeechLanguage();
     const spoken = useVoice
-      ? spokenLanguageAtSubmit({
+      ? pickerLanguage() || spokenLanguageAtSubmit({
           votes: session.current.langVotes,
           interim: session.current.interimLanguage,
           draft: voice?.spokenLanguage,
@@ -410,11 +422,12 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         {
           body: useVoice
             ? {
+                language,
                 inputMode: "voice" as const,
                 ...(spoken ? { spokenLanguage: spoken } : {}),
                 ...(liveDrop ? { liveDrop } : {}),
               }
-            : { inputMode: "text" as const },
+            : { language, inputMode: "text" as const },
         },
       );
     } catch {

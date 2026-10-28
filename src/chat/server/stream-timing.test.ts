@@ -342,6 +342,58 @@ describe("first-token timeout", () => {
     expect(events[0]?.totalMs).toBeLessThan(2_000);
   });
 
+  it("ends a model that never yields, including during the first-sentence hold", async () => {
+    const events: ChatTimingEvent[] = [];
+    const hung = () => ({
+      [Symbol.asyncIterator](): AsyncIterator<{ type: string; text?: string }> {
+        return {
+          next: () => new Promise<IteratorResult<{ type: string; text?: string }>>(() => undefined),
+          return: () => Promise.resolve({ done: true as const, value: undefined }),
+        };
+      },
+    });
+    const silent = createRetryingTextStream({
+      language: "ko",
+      timeoutMs: 5_000,
+      deadlineMs: 80,
+      fallbackText: "다시 시도하거나 병원에 전화해 주세요.\nWoonona Dentists: 02 4284 4486",
+      log: (event) => events.push(event),
+      run: hung,
+    });
+    const silentText = await readText(silent);
+    expect(silentText).toContain("다시 시도");
+    expect(silentText).toContain("Woonona Dentists: 02 4284 4486");
+    expect(events[0]).toMatchObject({ outcome: "deadline", language: "ko" });
+    expect(events[0]?.totalMs).toBeLessThan(2_000);
+
+    let sent = false;
+    const partial = createRetryingTextStream({
+      language: "ko",
+      timeoutMs: 5_000,
+      deadlineMs: 80,
+      fallbackText: "다시 시도하거나 병원에 전화해 주세요.\nWoonona Dentists: 02 4284 4486",
+      log: () => undefined,
+      run: () => ({
+        [Symbol.asyncIterator](): AsyncIterator<{ type: string; text?: string }> {
+          return {
+            next() {
+              if (!sent) {
+                sent = true;
+                return Promise.resolve({ done: false as const, value: { type: "text-delta", text: "울로나 치과의" } });
+              }
+              return new Promise<IteratorResult<{ type: string; text?: string }>>(() => undefined);
+            },
+            return: () => Promise.resolve({ done: true as const, value: undefined }),
+          };
+        },
+      }),
+    });
+    const partialText = await readText(partial);
+    expect(partialText).toContain("다시 시도");
+    expect(partialText).toContain("02 4284 4486");
+    expect(partialText).not.toContain("울로나");
+  });
+
   it("streams a Bengali reply after the first sentence instead of holding it all", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {

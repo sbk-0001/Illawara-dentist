@@ -172,6 +172,26 @@ describe("UI message stream validation", () => {
     });
   });
 
+  it("accepts the deadline fallback when the model never yields", async () => {
+    const stream = widgetStream({
+      language: "ko",
+      question: "우노나 전화번호",
+      timeoutMs: 5_000,
+      deadlineMs: 80,
+      run: () => ({
+        [Symbol.asyncIterator](): AsyncIterator<ModelPart> {
+          return {
+            next: () => new Promise<IteratorResult<ModelPart>>(() => undefined),
+            return: () => Promise.resolve({ done: true as const, value: undefined }),
+          };
+        },
+      }),
+    });
+    await assertValidReply(stream, (text) => {
+      expect(text).toContain("다시 시도");
+    });
+  });
+
   it("accepts the deadline fallback, including its own text part", async () => {
     const stream = widgetStream({
       language: "bn",

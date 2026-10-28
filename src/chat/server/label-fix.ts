@@ -15,6 +15,21 @@ function digits(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+/** Korean and other speech often writes the clinic name in that script. Keep the Latin name. */
+export function restoreClinicNames(text: string): string {
+  return text
+    .replace(/울로나\s*치과|우노나\s*치과|워노나\s*치과/g, "Woonona Dentists")
+    .replace(/닥토\s*치과|다프토\s*치과|댑토\s*치과|답토\s*치과/g, "Dapto Dentists")
+    .replace(/셸하버\s*치과|쉘하버\s*치과/g, "Shellharbour Dentists");
+}
+
+function phoneAlreadyStated(text: string, phone: string, code: string): boolean {
+  const needle = digits(phone).slice(-8);
+  if (needle.length < 8 || !digits(text).includes(needle)) return false;
+  if (isShortLabelReply(text, code) || text.split(/\n/).some((line) => isLabelValueLine(line, code))) return false;
+  return /[.!?।。？！]|입니다|합니다/.test(text);
+}
+
 export function rewriteContactLabels(text: string, code: string): string {
   if (!code || code === "en" || code === "und") return text;
   const labels = directoryLabels(code);
@@ -164,6 +179,7 @@ export function bareContactPreface(code: string, text: string, index: KnowledgeI
   const found = clinicForPhone(index, text);
   const phone = found?.phone ?? text.match(/\d[\d\s()-]{8,}\d/)?.[0]?.replace(/\s+/g, " ").trim();
   if (!phone) return "";
+  if (phoneAlreadyStated(text, found?.phone ?? phone, code)) return "";
   return phoneSentence(code, found?.name ?? "", phone);
 }
 
@@ -207,14 +223,14 @@ export function attachContactLabels<T extends LabelChunk>(
       lineHold = rest;
       return rewriteContactLabels(done, input.code);
     }
-    return rewriteContactLabels(combined, input.code);
+    return restoreClinicNames(rewriteContactLabels(combined, input.code));
   };
 
   const releaseHeld = (): string => {
     const raw = held;
     held = "";
     if (!raw) return "";
-    const body = rewriteContactLabels(raw, input.code);
+    const body = restoreClinicNames(rewriteContactLabels(raw, input.code));
     const hours = guardBareHoursReply(body, input.code, input.focus ?? { kind: "ask" });
     const addressed = input.question
       ? ensureAddressReply(hours, input.question, input.code, input.index, input.focus ?? { kind: "ask" })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getKnowledgeIndex } from "./index-store";
-import { attachContactLabels, isLabelValueLine, isOnlyContactLine, isShortLabelReply, rewriteContactLabels } from "./label-fix";
+import { attachContactLabels, isLabelValueLine, isOnlyContactLine, isShortLabelReply, restoreClinicNames, rewriteContactLabels } from "./label-fix";
 
 const index = getKnowledgeIndex();
 
@@ -224,5 +224,15 @@ describe("contact label rewrite", () => {
     const bareText = bare.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(bareText.startsWith("Dapto Dentists의 전화번호는 02 4288 0737입니다.")).toBe(true);
     expect(bareText).toContain("Dapto Dentists 전화 02 4288 0737");
+
+    const sentence = "울로나 치과의 전화번호는 02 4284 4486입니다.";
+    expect(restoreClinicNames(sentence)).toBe("Woonona Dentists의 전화번호는 02 4284 4486입니다.");
+    const duplicated = await readChunks(
+      attachContactLabels(source([sentence]), { code: "ko", index, replyStatus: { missing: true }, focus: { kind: "one", clinic: "woonona" } }),
+    );
+    const once = duplicated.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(once).toBe("Woonona Dentists의 전화번호는 02 4284 4486입니다.");
+    expect(once.match(/02 4284 4486/g)).toHaveLength(1);
+    expect(once).not.toContain("울로나");
   });
 });

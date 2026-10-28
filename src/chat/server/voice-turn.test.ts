@@ -105,7 +105,22 @@ describe("spoken language on a voice turn", () => {
       "auto",
       index,
     );
-    expect(followed.reply.code).toBe("und");
+    expect(followed.reply.code).toBe("en");
+    expect(followed.instructions).toContain("Write in English.");
+
+    const banglish = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ।" },
+        { role: "user", content: "woonona er phone number ki" },
+      ],
+      "auto",
+      index,
+    );
+    expect(banglish.reply.code).toBe("bn-Latn");
+
+    const spanish = prepareTurn([{ role: "user", content: "Woonona phone?" }], "es", index, { inputMode: "voice" });
+    expect(spanish.reply.code).toBe("es");
+    expect(spanish.spokenLanguage).toBe("es");
 
     const voiced = prepareTurn([{ role: "user", content: "Woonona phone?" }], "auto", index, {
       inputMode: "voice",

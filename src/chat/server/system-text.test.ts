@@ -23,6 +23,11 @@ describe("localized system text", () => {
     expect(
       replyScriptConflicts("হ্যাঁ, same day emergency appointment slots আছে। আরও বিস্তারিত জানতে ক্লিনিকে ফোন করুন আজই।", "bn"),
     ).toBe(true);
+    expect(replyScriptConflicts("হ্যাঁ, whitening options assessment-এর পরে ক্লিনিকে ফোন করুন আজ।", "bn")).toBe(true);
+    expect(replyScriptConflicts("হ্যাঁ, whitening options assessmentএর পরে ক্লিনিকে ফোন করুন আজ।", "bn")).toBe(true);
+    expect(replyScriptConflicts("urgent dental concern के लिए आज क्लिनिक में आएँ और फ़ोन करें।", "hi")).toBe(true);
+    expect(replyScriptConflicts("urgent dental concernके लिए आज क्लिनिक में आएँ और फ़ोन करें।", "hi")).toBe(true);
+    expect(replyScriptConflicts("urgent medical help के लिए तुरंत क्लिनिक को फ़ोन करें आज।", "hi")).toBe(true);
     expect(replyScriptConflicts("Please call the clinic for an urgent dental appointment today.", "hi")).toBe(true);
     expect(
       replyScriptConflicts(

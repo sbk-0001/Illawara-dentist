@@ -9,7 +9,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { addressFocus } from "./address";
-import { hasLetters, detectLanguage, resolveReplyLanguage } from "../language/detect";
+import { hasLetters, detectLanguage, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
 import { normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
@@ -125,21 +125,25 @@ export function prepareTurn(
   const textDetection = detectLanguage(text);
   let reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
-  const spokenLanguage = inputMode === "voice" ? spokenLanguageForTranscript(voice?.spokenLanguage, text, priorReplyLanguage(messages)) : null;
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
+  const spokenLanguage = inputMode === "voice"
+    ? spokenLanguageForTranscript(voice?.spokenLanguage, text, priorReplyLanguage(messages), pickerLocked ? language : null)
+    : null;
   // Reply language comes only from this request: the latest text, an explicit picker,
   // a voice language on this turn, or an earlier turn in the same message list.
   // Nothing here is cached between requests.
-  if (
-    !pickerLocked &&
-    reply.code === "und" &&
-    textDetection.code === "und" &&
-    shortUnidentifiedLatin(text) &&
-    !spokenLanguage &&
-    !priorNonEnglishTurn(messages)
-  ) {
-    const english = languageOption("en");
-    if (english) reply = replyFromOption(english, "detected", false);
+  const english = languageOption("en");
+  if (!pickerLocked && inputMode !== "voice" && english && isDictionaryEnglish(text)) {
+    reply = replyFromOption(english, "detected", false);
+  } else if (!pickerLocked && inputMode !== "voice" && reply.code === "und" && textDetection.code === "und") {
+    const romanised = romanisedIndic(text);
+    const prior = priorReplyLanguage(messages);
+    const priorRomanised = prior === "bn" || prior === "bn-Latn" ? "bn-Latn" : prior === "hi" || prior === "hi-Latn" ? "hi-Latn" : null;
+    const follow = romanised && priorRomanised === romanised ? languageOption(romanised) : null;
+    if (follow) reply = replyFromOption(follow, "detected", false);
+    else if (shortUnidentifiedLatin(text) && !spokenLanguage && !priorNonEnglishTurn(messages) && english) {
+      reply = replyFromOption(english, "detected", false);
+    }
   }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
   const hindiOnBengali = spokenLanguage === "bn" && (reply.code === "hi" || reply.code === "hi-Latn");

@@ -303,7 +303,14 @@ export function mixedIndicScripts(text: string): boolean {
  * Bengali, Devanagari, Arabic, Han, or another non-Latin script.
  * Mixed Devanagari and Bengali, or a Bengali session hint, does not settle on Hindi.
  */
-export function spokenLanguageForTranscript(heard: string | null | undefined, text: string, hint?: string | null): string | null {
+export function spokenLanguageForTranscript(
+  heard: string | null | undefined,
+  text: string,
+  hint?: string | null,
+  picker?: string | null,
+): string | null {
+  const picked = normalizeSpokenLanguage(picker);
+  if (picked) return picked;
   const normalized = normalizeSpokenLanguage(heard);
   const hinted = normalizeSpokenLanguage(hint);
   const fromScript = languageFromNativeScript(text);
@@ -373,47 +380,12 @@ function wordLanguageVotes(alternative: DeepgramAlternative | undefined): { code
   return votes;
 }
 
-function utteranceLanguage(alternative: DeepgramAlternative | undefined): string | null {
-  return (
-    normalizeSpokenLanguage(languageCode(alternative?.language)) ||
-    normalizeSpokenLanguage(languageCode(alternative?.languages?.[0])) ||
-    null
-  );
-}
-
 export type MicLanguageStreak = { code: string; count: number };
-
-function detectedInterimLanguage(alternative: DeepgramAlternative | undefined): string {
-  const fromWords = majoritySpokenLanguage(wordLanguageVotes(alternative).map((vote) => vote.code));
-  return fromWords || utteranceLanguage(alternative) || "";
-}
 
 const NOTE_SCRIPT_MIN = 3;
 
 function scriptCount(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0;
-}
-
-function noteScriptContradicts(code: string, text: string): boolean {
-  const bengali = /[\u0980-\u09FF]/.test(text);
-  const devanagari = /[\u0900-\u097F]/.test(text);
-  if ((code === "hi" || code === "ne" || code === "te") && bengali) return true;
-  if (code === "bn" && devanagari) return true;
-  return false;
-}
-
-/** A non-English note language, once the transcript has at least three characters of that script. */
-function nativeNoteLanguage(text: string): string {
-  const bengali = scriptCount(text, /[\u0980-\u09FF]/g);
-  const devanagari = scriptCount(text, /[\u0900-\u097F]/g);
-  if (bengali >= NOTE_SCRIPT_MIN && devanagari === 0) return "bn";
-  if (devanagari >= NOTE_SCRIPT_MIN && bengali === 0) return "hi";
-  if (bengali > 0 || devanagari > 0) return "";
-  const code = languageFromNativeScript(text);
-  if (!code) return "";
-  const re = NATIVE_SCRIPT[code];
-  if (!re || scriptCount(text, new RegExp(re.source, "g")) < NOTE_SCRIPT_MIN) return "";
-  return code;
 }
 
 function lockNote(streak: MicLanguageStreak | undefined, code: string) {
@@ -422,34 +394,60 @@ function lockNote(streak: MicLanguageStreak | undefined, code: string) {
   streak.count = NOTE_SCRIPT_MIN;
 }
 
+const NOTE_BLOCKS: { code: string; re: RegExp }[] = [
+  { code: "bn", re: /[\u0980-\u09FF]/g },
+  { code: "hi", re: /[\u0900-\u097F]/g },
+  { code: "ar", re: /[\u0600-\u06FF]/g },
+  { code: "he", re: /[\u0590-\u05FF]/g },
+  { code: "ko", re: /[\uAC00-\uD7AF]/g },
+  { code: "el", re: /[\u0370-\u03FF]/g },
+  { code: "ru", re: /[\u0400-\u04FF]/g },
+  { code: "th", re: /[\u0E00-\u0E7F]/g },
+  { code: "pa", re: /[\u0A00-\u0A7F]/g },
+  { code: "ta", re: /[\u0B80-\u0BFF]/g },
+  { code: "te", re: /[\u0C00-\u0C7F]/g },
+];
+
+/** The one native script that has at least three characters. Devanagari is Hindi. Bengali is Bangla. */
+function scriptNoteLanguage(text: string): string {
+  const counts = NOTE_BLOCKS.map((block) => ({ code: block.code, count: scriptCount(text, block.re) }));
+  const kana = scriptCount(text, /[\u3040-\u30FF]/g);
+  const han = scriptCount(text, /[\u4E00-\u9FFF]/g);
+  if (kana >= NOTE_SCRIPT_MIN) counts.push({ code: "ja", count: kana + han });
+  else if (han >= NOTE_SCRIPT_MIN) counts.push({ code: "zh", count: han });
+  const qualified = counts.filter((block) => block.count >= NOTE_SCRIPT_MIN);
+  if (qualified.length !== 1) return "";
+  const winner = qualified[0];
+  if (!winner) return "";
+  if (counts.some((block) => block.code !== winner.code && block.count > 0)) return "";
+  if (winner.code === "ar") return languageFromNativeScript(text) || "ar";
+  return winner.code;
+}
+
 /**
  * Language for the listening note.
- * Romanised Deepgram interims are not trusted. A non-English language is shown
- * only after three native characters of its script, which locks the utterance,
- * or after a final result. Bengali characters never show Hindi or Telugu, and
- * Devanagari characters never show Bengali. Otherwise the widget stays on a
- * neutral listening line.
+ * The label comes only from characters actually in the transcript, or from the
+ * reply-language picker. Deepgram's detected language and romanised text do not
+ * name it. Three characters of one script lock that label for the utterance.
+ * Until then the widget stays on a neutral listening line.
  */
 export function interimMicLanguage(
-  alternative: DeepgramAlternative | undefined,
+  _alternative: DeepgramAlternative | undefined,
   transcript: string,
-  context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak },
+  context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak; picker?: string | null },
 ): string {
+  const picked = normalizeSpokenLanguage(context?.picker);
+  if (picked && picked !== "en") {
+    lockNote(context?.streak, picked);
+    return picked;
+  }
   const seen = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
   const locked = context?.streak?.code || "";
-  if (locked && !noteScriptContradicts(locked, seen)) return locked;
-  if (context?.streak && locked) context.streak.code = "";
-  const fromScript = nativeNoteLanguage(seen);
-  if (fromScript) {
-    lockNote(context?.streak, fromScript);
-    return fromScript;
-  }
-  if (/[\u0980-\u09FF]/.test(seen) || /[\u0900-\u097F]/.test(seen)) return "";
-  if (!context?.final || !seen) return "";
-  const detected = detectedInterimLanguage(alternative);
-  if (!detected || detected === "en" || noteScriptContradicts(detected, seen)) return "";
-  lockNote(context?.streak, detected);
-  return detected;
+  if (locked) return locked;
+  const fromScript = scriptNoteLanguage(seen);
+  if (!fromScript) return "";
+  lockNote(context?.streak, fromScript);
+  return fromScript;
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;

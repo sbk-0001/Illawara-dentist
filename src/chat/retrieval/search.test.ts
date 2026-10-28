@@ -76,6 +76,40 @@ describe("retrieval", () => {
     expect(hits.some((hit) => hit.clinic === "dapto" && /Baan Baan|located/i.test(`${hit.heading} ${hit.text}`))).toBe(true);
   });
 
+  it("retrieves teeth whitening for Hindi and other scripts", () => {
+    const hindi = "क्या आप दांत सफ़ेद करते हैं";
+    const expanded = expandQuery(hindi);
+    expect(expanded).toMatch(/teeth whitening/);
+    expect(expandQuery("আপনারা কি দাঁত সাদা করার চিকিৎসা করেন")).toMatch(/teeth whitening/);
+    expect(expandQuery("هل تقدمون تبييض الأسنان؟")).toMatch(/teeth whitening/);
+    expect(expandQuery("你们做牙齿美白吗？")).toMatch(/teeth whitening/);
+    expect(expandQuery("¿Hacen blanqueamiento dental?")).toMatch(/teeth whitening/);
+    const hits = searchIndex(index, hindi, 6);
+    expect(hits.some((hit) => /whiten/i.test(`${hit.title} ${hit.heading} ${hit.text}`))).toBe(true);
+    const whitening = {
+      id: "white",
+      clinic: "dapto" as const,
+      url: "https://daptodentists.com.au/services/cosmetic-dentistry/teeth-whitening",
+      title: "Teeth whitening",
+      heading: "Whitening",
+      text: "Professional teeth whitening is available after an assessment.",
+    };
+    const other = {
+      id: "fees",
+      clinic: "dapto" as const,
+      url: "https://daptodentists.com.au/our-fees",
+      title: "Fees",
+      heading: "Fees",
+      text: "Check-up fees are listed for new patients.",
+    };
+    const tiny: KnowledgeIndex = { ...fixture, chunkCount: 2, chunks: [other, whitening] };
+    const semantic = searchByVectors(tiny, expanded, [0, 1], new Float32Array([1, 0, 0, 1]), 2, 4);
+    expect(semantic[0]?.id).toBe("white");
+    expect(semantic[0]?.text).toMatch(/whitening/i);
+    const fused = fuseRetrieval(hits, semantic, 6);
+    expect(fused.some((hit) => /whiten/i.test(`${hit.title} ${hit.heading} ${hit.text}`))).toBe(true);
+  });
+
   it("retrieves implants, Invisalign and children's dentistry for non-Latin questions", () => {
     const implants = searchIndex(index, "هل تقدمون زراعة الأسنان؟", 6);
     expect(implants.some((hit) => /implant/i.test(`${hit.title} ${hit.heading}`))).toBe(true);

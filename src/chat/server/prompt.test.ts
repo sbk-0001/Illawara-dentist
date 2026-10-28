@@ -260,7 +260,10 @@ describe("prompt rules", () => {
     expect(instructions).toContain("দাঁত সাদা করা");
     expect(instructions).toMatch(/same-day appointment/i);
     expect(instructions).toMatch(/urgent care/i);
-    expect(instructions).toMatch(/Do not leave English phrases/i);
+    expect(instructions).toMatch(/cosmetic dentistry/i);
+    expect(instructions).toMatch(/Only proper nouns stay in Latin/i);
+    expect(instructions).toMatch(/Do not transliterate them/i);
+    expect(instructions).toMatch(/Do not leave English words/i);
     expect(scriptRetryInstruction(language)).toMatch(/Bengali/);
     expect(scriptRetryInstruction(language)).toMatch(/Do not write English sentences/);
     expect(scriptRetryInstruction(language)).toMatch(/teeth whitening/);

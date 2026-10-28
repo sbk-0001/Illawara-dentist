@@ -82,8 +82,13 @@ function countPattern(text: string, re: RegExp): number {
   return text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))?.length ?? 0;
 }
 
+/** A Latin word glued to a native suffix still counts, including -এর, -কে, -তে and के. */
+function separateGluedLatin(text: string): string {
+  return text.replace(/([A-Za-z\u00C0-\u024F]{2,})[-‐‑‒–—]?(?=[^\sA-Za-z0-9\u00C0-\u024F])/g, "$1 ");
+}
+
 function withoutProperNouns(text: string): string {
-  return text
+  return separateGluedLatin(text)
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, " ")
     .replace(/\+?\d[\d\s().-]{7,}\d/g, " ")
@@ -99,7 +104,7 @@ function countableReply(text: string): string {
  * Longest run of consecutive Latin words after proper nouns are removed.
  * Single clinical terms may stay. A run of three or more is an English phrase.
  */
-export function latinWordRun(text: string): number {
+function latinRuns(text: string): { longest: number; trailing: number } {
   const tokens = withoutProperNouns(text).split(/[^\p{L}\p{M}]+/u).filter(Boolean);
   let run = 0;
   let longest = 0;
@@ -113,7 +118,11 @@ export function latinWordRun(text: string): number {
       run = 0;
     }
   }
-  return longest;
+  return { longest, trailing: run };
+}
+
+export function latinWordRun(text: string): number {
+  return latinRuns(text).longest;
 }
 
 export type ScriptMeasure = { ratio: number | null; conflicts: boolean };
@@ -167,8 +176,16 @@ function hasSentenceEnd(text: string): boolean {
  */
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) return "release";
-  if (!final && !hasSentenceEnd(text) && countedLetters(text, code) < SCRIPT_SAMPLE_LETTERS) return "wait";
+  const runs = latinRuns(text);
+  // A phrase of three Latin words conflicts even when it arrives after a long native opening.
+  if (runs.longest >= 3) return final ? "conflict" : "wait";
+  // "urgent dental" may still grow into "urgent dental concern".
+  if (!final && runs.trailing > 0) return "wait";
+  // Judge a whole sentence, so an English phrase after the first 40 letters is still seen.
+  // A pure native opening with no Latin can still stream once it is long enough.
+  if (!final && !hasSentenceEnd(text) && (runs.longest > 0 || countedLetters(text, code) < SCRIPT_SAMPLE_LETTERS)) return "wait";
   const judged = final ? text : stripSample(text);
+  if (latinWordRun(judged) >= 3) return final ? "conflict" : "wait";
   if (!measureReplyScript(judged, code).conflicts) return "release";
   return final ? "conflict" : "wait";
 }
