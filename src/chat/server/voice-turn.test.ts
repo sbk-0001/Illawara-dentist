@@ -21,15 +21,17 @@ describe("spoken language on a voice turn", () => {
     expect(turn.instructions).toContain("Write in Bengali, using Bengali script.");
   });
 
-  it("leaves typed Banglish in Latin script", () => {
+  it("answers typed Banglish in Bengali script", () => {
     const turn = prepareTurn([{ role: "user", content: "Dapto te check up er dam koto?" }], "auto", index, {
       inputMode: "text",
       spokenLanguage: "bn",
     });
-    expect(turn.reply.code).toBe("bn-Latn");
+    expect(turn.reply.code).toBe("bn");
+    expect(turn.reply.script).toBe("Bengali");
     expect(turn.langOverride).toBe(false);
     expect(turn.spokenLanguage).toBeNull();
-    expect(turn.instructions).toContain("Latin letters only");
+    expect(turn.instructions).toContain("Write in Bengali, using Bengali script.");
+    expect(turn.instructions).toMatch(/Reply ONLY in বাংলা \(Bengali\) for this message, regardless of earlier messages/);
   });
 
   it("keeps English speech in English and ignores a language that is not allowed", () => {
@@ -116,7 +118,10 @@ describe("spoken language on a voice turn", () => {
       "auto",
       index,
     );
-    expect(banglish.reply.code).toBe("bn-Latn");
+    expect(banglish.reply.code).toBe("bn");
+    expect(banglish.reply.script).toBe("Bengali");
+    expect(banglish.instructions).toMatch(/Reply ONLY in বাংলা \(Bengali\) for this message, regardless of earlier messages/);
+    expect(followed.instructions).toMatch(/Reply ONLY in English \(Latin\) for this message, regardless of earlier messages/);
 
     const spanish = prepareTurn([{ role: "user", content: "Woonona phone?" }], "es", index, { inputMode: "voice" });
     expect(spanish.reply.code).toBe("es");

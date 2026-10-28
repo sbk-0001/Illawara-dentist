@@ -1,5 +1,6 @@
 import { mentionedClinics } from "./intent";
 import { languageOption } from "./language/catalog";
+import { detectLanguage, isDictionaryEnglish } from "./language/detect";
 
 /**
  * Deepgram Nova-3 keyterm prompting.
@@ -139,11 +140,13 @@ export function deepgramLanguageHints(preferred: string | null | undefined): str
   return hint ? [hint, "en"] : ["en"];
 }
 
-/** Latin clinic names stay only for an English-only hint. A non-English hint uses that script's names. */
+const LATIN_CLINIC_KEYTERMS = ["Dapto", "Woonona", "Shellharbour"] as const;
+
+/** Native names plus the Latin clinic names, for every hint. Spanish otherwise hears "Buona". */
 export function keytermsForHints(hints: readonly string[]): string[] {
   const nonEnglish = hints.filter((hint) => hint !== "en");
   if (!nonEnglish.length) return [...STT_KEYTERMS];
-  return [...new Set(nonEnglish.flatMap((hint) => NATIVE_KEYTERMS[hint] ?? []))];
+  return [...new Set([...LATIN_CLINIC_KEYTERMS, ...nonEnglish.flatMap((hint) => NATIVE_KEYTERMS[hint] ?? [])])];
 }
 
 export function deepgramListenQuery(options?: { interim?: boolean; endpointing?: boolean; hints?: string[] }): string {
@@ -388,12 +391,6 @@ function scriptCount(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0;
 }
 
-function lockNote(streak: MicLanguageStreak | undefined, code: string) {
-  if (!streak) return;
-  streak.code = code;
-  streak.count = NOTE_SCRIPT_MIN;
-}
-
 const NOTE_BLOCKS: { code: string; re: RegExp }[] = [
   { code: "bn", re: /[\u0980-\u09FF]/g },
   { code: "hi", re: /[\u0900-\u097F]/g },
@@ -425,29 +422,42 @@ function scriptNoteLanguage(text: string): string {
 }
 
 /**
- * Language for the listening note.
- * The label comes only from characters actually in the transcript, or from the
- * reply-language picker. Deepgram's detected language and romanised text do not
- * name it. Three characters of one script lock that label for the utterance.
- * Until then the widget stays on a neutral listening line.
+ * Language of this utterance only. Native script wins from the characters in
+ * `transcript`. Latin text is named only on a final result, by the text detector.
+ * The previous turn, a Deepgram tag, and a language hint are not inputs.
+ * An explicit picker still wins, because the visitor chose it.
+ */
+export function utteranceLanguage(transcript: string, options?: { final?: boolean; picker?: string | null }): string {
+  const picked = normalizeSpokenLanguage(options?.picker);
+  if (picked) return picked;
+  const text = transcript.replace(/\s+/g, " ").trim();
+  const fromScript = scriptNoteLanguage(text);
+  if (fromScript) return fromScript;
+  if (/[\u0980-\u09FF\u0900-\u097F]/.test(text)) return "";
+  if (!options?.final || !text) return "";
+  const detected = detectLanguage(text);
+  if (detected.code === "bn-Latn") return "bn";
+  if (detected.code === "hi-Latn") return "hi";
+  if (detected.code === "und" || detected.fallback) return isDictionaryEnglish(text) ? "en" : "";
+  return detected.code;
+}
+
+/**
+ * Listening-note language. Same answer as `utteranceLanguage`. A stale streak,
+ * Deepgram language, or previous-turn hint cannot override the current transcript.
  */
 export function interimMicLanguage(
   _alternative: DeepgramAlternative | undefined,
   transcript: string,
   context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak; picker?: string | null },
 ): string {
-  const picked = normalizeSpokenLanguage(context?.picker);
-  if (picked && picked !== "en") {
-    lockNote(context?.streak, picked);
-    return picked;
+  const current = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
+  const code = utteranceLanguage(current, { final: context?.final, picker: context?.picker });
+  if (context?.streak) {
+    context.streak.code = code;
+    context.streak.count = code ? NOTE_SCRIPT_MIN : 0;
   }
-  const seen = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
-  const locked = context?.streak?.code || "";
-  if (locked) return locked;
-  const fromScript = scriptNoteLanguage(seen);
-  if (!fromScript) return "";
-  lockNote(context?.streak, fromScript);
-  return fromScript;
+  return code === "en" ? "" : code;
 }
 
 const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
@@ -512,13 +522,14 @@ export function correctTranscript(text: string): string {
   const replaced = correctJiShiMei(
     correctDoctorClinic(correctBengaliAddress(text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو"))),
   );
-  return replaced.replace(/\bBuona\b/gi, (match, offset: number, whole: string) => {
-    const after = whole.slice(offset + match.length, offset + match.length + 12);
+  return replaced.replace(/\b(?:buona|wunona|wonona|woona|voonona|woonana|unona)\b/gi, (match, offset: number, whole: string) => {
+    const after = whole.slice(offset + match.length, offset + match.length + 16);
     if (/^\s+(?:sera|notte|giornata|giorno|serata)\b/i.test(after)) return match;
     const start = Math.max(0, offset - 48);
     const end = Math.min(whole.length, offset + match.length + 48);
     const window = whole.slice(start, end);
-    if (!CLINIC_CONTEXT.test(window) && mentionedClinics(window).length === 0) return match;
+    const short = whole.trim().split(/\s+/).length <= 6;
+    if (!short && !CLINIC_CONTEXT.test(window) && mentionedClinics(window).length === 0) return match;
     return "Woonona";
   });
 }

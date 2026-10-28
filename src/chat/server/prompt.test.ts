@@ -8,10 +8,11 @@ import { FEE_CAVEAT_EN } from "./system-text";
 const index = getKnowledgeIndex();
 
 describe("prompt rules", () => {
-  it("tells a Banglish visitor to stay in romanised Bengali and includes real contacts", () => {
+  it("answers Banglish in Bengali script and includes real contacts", () => {
     const turn = prepareTurn([{ role: "user", parts: [{ type: "text", text: "Dapto te check up er dam koto?" }] }], "auto", index);
-    expect(turn.reply.code).toBe("bn-Latn");
-    expect(turn.instructions).toContain("Banglish");
+    expect(turn.reply.code).toBe("bn");
+    expect(turn.instructions).toContain("Write in Bengali, using Bengali script.");
+    expect(turn.instructions.trimEnd()).toMatch(/Reply ONLY in বাংলা \(Bengali\) for this message, regardless of earlier messages\.$/);
     expect(turn.instructions).toContain(index.contacts.dapto.phone);
     expect(turn.instructions).toContain(index.contacts.dapto.bookingUrl);
     expect(turn.instructions).not.toContain("02 4210 5301");
@@ -94,7 +95,7 @@ describe("prompt rules", () => {
     expect(instructions).toContain("8:00 تا 18:00");
     expect(instructions).not.toMatch(/8\.00 AM/);
     expect(instructions).not.toMatch(/Monday – Friday/);
-    expect(instructions).toMatch(/Latin letters only/);
+    expect(instructions).toMatch(/answer in Bengali or Hindi script, not Latin/i);
     expect(instructions).toMatch(/proper names verbatim/i);
   });
 

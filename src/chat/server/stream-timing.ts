@@ -1,4 +1,5 @@
-import { replyScriptGate, replyScriptRatio } from "../language/reply-script";
+import { latinWordRun, replyScriptGate, replyScriptRatio } from "../language/reply-script";
+import { createGlossaryFilter } from "./glossary";
 import { CHAT_MODEL } from "./prompt";
 import { drainStatusTag, type StatusTag } from "./status-tag";
 import { createSystemTextFilter, stripFeeCaveat, tryAgainMessage } from "./system-text";
@@ -79,6 +80,10 @@ export type ChatTimingEvent = {
    * Null when that reply was not judged. Logged even when nothing stalled.
    */
   scriptRatio: number | null;
+  /** The shown reply still has a run of 3+ Latin words after the glossary. */
+  scriptViolation: boolean;
+  /** A script regeneration was attempted. */
+  scriptRegen: boolean;
   /** The 2s retrieval cap returned lexical hits. */
   retrievalTimedOut?: boolean;
 };
@@ -156,6 +161,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   let stalled: StalledStage | undefined;
   let released = false;
   let scriptRatio: number | null = null;
+  let scriptViolation = false;
+  let scriptRegen = false;
   let heldScript: { text: string; ratio: number | null } | null = null;
 
   const noteTag = (tag: StatusTag | null, missing: boolean) => {
@@ -203,6 +210,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       ...(input.liveDrop ? { liveDrop: input.liveDrop } : {}),
       stalled: stalled ?? null,
       scriptRatio,
+      scriptViolation,
+      scriptRegen,
       ...(input.retrievalTimedOut ? { retrievalTimedOut: true } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
@@ -320,7 +329,16 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         let partId: string | undefined;
         let sawContent = false;
         const filter = createSystemTextFilter(input.language);
+        const gloss = createGlossaryFilter(input.language);
         let showed = false;
+        let shownBody = "";
+        const takeGloss = (text: string): string => {
+          const cleaned = gloss.push(text);
+          if (!cleaned) return "";
+          shownBody += cleaned;
+          if (latinWordRun(shownBody) >= 3) scriptViolation = true;
+          return cleaned;
+        };
         const noteContent = () => {
           if (sawContent) return;
           sawContent = true;
@@ -402,6 +420,12 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               : await Promise.race([pending, timeoutPromise, deadlinePromise]);
             if (step.done) {
               held += takeText("", true);
+              const tail = gloss.flush();
+              if (tail) {
+                shownBody += tail;
+                if (latinWordRun(shownBody) >= 3) scriptViolation = true;
+                held += tail;
+              }
               const judged = stripFeeCaveat(held);
               const gate = replyScriptGate(judged, input.language, true);
               if (gate === "conflict") {
@@ -433,11 +457,13 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               const visible = takeText(part.text, false);
               if (!visible) continue;
               noteContent();
+              const cleaned = takeGloss(visible);
+              if (!cleaned) continue;
               if (showed) {
-                show(visible);
+                show(cleaned);
                 continue;
               }
-              held += visible;
+              held += cleaned;
               const gate = replyScriptGate(held, input.language, false);
               if (gate === "release") {
                 rememberRatio(held);
@@ -486,6 +512,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           }
           if (result === "script" && !scriptRetried) {
             scriptRetried = true;
+            scriptRegen = true;
+            scriptViolation = false;
             stalled = "script";
             const firstDraft = heldScript;
             heldScript = null;
@@ -503,6 +531,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             }
             if (chosen?.text) {
               scriptRatio = chosen.ratio;
+              if (latinWordRun(chosen.text) >= 3) scriptViolation = true;
               publishSaved(chosen.text);
               clearDeadline();
               finish("done");

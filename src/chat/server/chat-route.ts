@@ -138,12 +138,17 @@ export function prepareTurn(
   } else if (!pickerLocked && inputMode !== "voice" && reply.code === "und" && textDetection.code === "und") {
     const romanised = romanisedIndic(text);
     const prior = priorReplyLanguage(messages);
-    const priorRomanised = prior === "bn" || prior === "bn-Latn" ? "bn-Latn" : prior === "hi" || prior === "hi-Latn" ? "hi-Latn" : null;
-    const follow = romanised && priorRomanised === romanised ? languageOption(romanised) : null;
+    const priorNative = prior === "bn" || prior === "bn-Latn" ? "bn" : prior === "hi" || prior === "hi-Latn" ? "hi" : null;
+    const romanNative = romanised === "bn-Latn" ? "bn" : romanised === "hi-Latn" ? "hi" : null;
+    const follow = romanNative && priorNative === romanNative ? languageOption(romanNative) : null;
     if (follow) reply = replyFromOption(follow, "detected", false);
     else if (shortUnidentifiedLatin(text) && !spokenLanguage && !priorNonEnglishTurn(messages) && english) {
       reply = replyFromOption(english, "detected", false);
     }
+  }
+  if (!pickerLocked && (reply.code === "bn-Latn" || reply.code === "hi-Latn")) {
+    const native = languageOption(reply.code === "bn-Latn" ? "bn" : "hi");
+    if (native) reply = replyFromOption(native, "detected", false);
   }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
   const hindiOnBengali = spokenLanguage === "bn" && (reply.code === "hi" || reply.code === "hi-Latn");

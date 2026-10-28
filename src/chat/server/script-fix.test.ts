@@ -30,6 +30,10 @@ describe("reply script fix", () => {
     expect(fixReplyScript("সাदा", "bn")).not.toMatch(/[\u0900-\u097F]/);
     expect(fixReplyScript("সাদা", "bn")).toBe("সাদা");
     expect(fixReplyScript("सादा", "hi")).toBe("सादा");
+    const mixed = "সোমবার–শুক্রवार";
+    expect(mixed).toMatch(/\u0935/);
+    expect(fixReplyScript(mixed, "bn")).toBe("সোমবার–শুক্রবার");
+    expect(fixReplyScript(mixed, "bn")).not.toMatch(/[\u0900-\u097F]/);
   });
 
   it("maps a stray traditional character only for simplified Chinese", () => {

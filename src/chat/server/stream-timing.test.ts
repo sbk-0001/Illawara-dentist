@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
+import { applyGlossary } from "./glossary";
 import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
 import { replyScriptConflicts, replyScriptRatio } from "../language/reply-script";
 import { FEE_CAVEAT_EN } from "./system-text";
@@ -189,7 +190,7 @@ describe("first-token timeout", () => {
   });
 
   it("regenerates once when a Bengali reply is English, and localizes a fee sentence inside Bengali", async () => {
-    const english = `Teeth whitening is available. ${FEE_CAVEAT_EN}`;
+    const english = `The clinic is open every weekday for regular visits. ${FEE_CAVEAT_EN}`;
     const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";
     const modes: boolean[] = [];
     let calls = 0;
@@ -236,7 +237,7 @@ describe("first-token timeout", () => {
     });
     const fallback = await readText(stillEnglish);
     expect(fallback).not.toContain("আবার চেষ্টা করুন");
-    expect(fallback).toContain("Teeth whitening");
+    expect(fallback).toContain("regular visits");
     expect(fallback).not.toContain(FEE_CAVEAT_EN);
 
     let minorCalls = 0;
@@ -269,8 +270,8 @@ describe("first-token timeout", () => {
       },
     });
     const repaired = await readText(heavy);
-    expect(heavyCalls).toBe(2);
-    expect(repaired).toContain("বিস্তারিত");
+    expect(heavyCalls).toBe(1);
+    expect(repaired).toContain("দাঁত সাদা করা");
     expect(repaired).not.toContain("professional teeth whitening");
 
     const hindi =
@@ -291,7 +292,8 @@ describe("first-token timeout", () => {
     const hindiText = await readText(hindiStream);
     expect(hindiCalls).toBe(1);
     expect(hindiText).toContain("दाँत");
-    expect(hindiText).toContain("urgent");
+    expect(hindiText).toContain("जरूरी");
+    expect(hindiText).not.toContain("urgent");
     expect(events[0]?.stalled).toBeNull();
     expect(events[0]?.scriptRatio).toBeGreaterThanOrEqual(0.4);
 
@@ -340,6 +342,46 @@ describe("first-token timeout", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ outcome: "deadline", stalled: "retry", language: "bn" });
     expect(events[0]?.totalMs).toBeLessThan(2_000);
+  });
+
+  it("rewrites a mid-reply English run in place and logs a leftover violation", async () => {
+    expect(applyGlossary("यहाँ दांत सादा है", "hi")).toBe("यहाँ दांत सफ़ेद करना है");
+    const events: ChatTimingEvent[] = [];
+    let calls = 0;
+    const stream = createRetryingTextStream({
+      language: "hi",
+      timeoutMs: 500,
+      log: (event) => events.push(event),
+      run: async function* () {
+        calls += 1;
+        yield { type: "text-delta", text: "हाँ, क्लिनिक में इलाज उपलब्ध है। " };
+        yield { type: "text-delta", text: "या कोई और urgent dental concern है तो फ़ोन करें।" };
+      },
+    });
+    const text = await readText(stream);
+    expect(calls).toBe(1);
+    expect(text).toContain("जरूरी दंत समस्या");
+    expect(text).not.toContain("urgent dental concern");
+    expect(events[0]?.scriptRegen).toBe(false);
+    expect(events[0]?.scriptViolation).toBe(false);
+
+    const violations: ChatTimingEvent[] = [];
+    let leftoverCalls = 0;
+    const leftover = createRetryingTextStream({
+      language: "hi",
+      timeoutMs: 500,
+      log: (event) => violations.push(event),
+      run: async function* () {
+        leftoverCalls += 1;
+        yield { type: "text-delta", text: "हाँ, क्लिनिक में इलाज उपलब्ध है। " };
+        yield { type: "text-delta", text: "alpha beta gamma के बाद फ़ोन करें।" };
+      },
+    });
+    const leftoverText = await readText(leftover);
+    expect(leftoverCalls).toBe(1);
+    expect(leftoverText).toContain("alpha beta gamma");
+    expect(violations[0]?.scriptRegen).toBe(false);
+    expect(violations[0]?.scriptViolation).toBe(true);
   });
 
   it("ends a model that never yields, including during the first-sentence hold", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -33,15 +33,20 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(terms).toContain("শেলহারবার");
     expect(terms).toContain("ঠিকানা");
     expect(terms).toContain("অ্যাপয়েন্টমেন্ট");
-    expect(terms).not.toContain("Dapto");
+    expect(terms).toContain("Dapto");
+    expect(terms).toContain("Woonona");
+    expect(terms).toContain("Shellharbour");
+    const spanish = new URL(deepgramListenUrl("stream", "es").replace(/^wss:/, "https:")).searchParams.getAll("keyterm");
+    expect(spanish).toEqual(expect.arrayContaining(["Dapto", "Woonona", "Shellharbour"]));
     const chinese = new URL(deepgramListenUrl("prerecorded", "zh").replace(/^wss:/, "https:")).searchParams.getAll("keyterm");
     expect(chinese).toContain("种植牙");
     expect(chinese).toContain("隐适美");
-    expect(chinese).not.toContain("Dapto");
-    expect(terms).not.toContain("Woonona");
+    expect(chinese).toContain("Dapto");
+    expect(chinese).toContain("Woonona");
+    expect(chinese).toContain("Shellharbour");
     expect(deepgramListenUrl("prerecorded", "hi")).toContain("language_hint=hi");
     expect(new URL(deepgramListenUrl("prerecorded", "hi")).searchParams.getAll("keyterm")).toContain("वूनोना");
-    expect(new URL(deepgramListenUrl("prerecorded", "hi")).searchParams.getAll("keyterm")).not.toContain("Dapto");
+    expect(new URL(deepgramListenUrl("prerecorded", "hi")).searchParams.getAll("keyterm")).toContain("Dapto");
   });
 
   it("takes the majority spoken language from words, and a tie is not a majority", () => {
@@ -79,7 +84,12 @@ describe("Deepgram Nova-3 keyterms", () => {
     const bengaliSpeech = "আপনারা কি দাঁত সাদা করার চিকিৎসা করেন";
     expect(interimMicLanguage({ languages: ["hi"], words: [{ language: "hi" }, { language: "hi" }] }, bengaliSpeech)).toBe("bn");
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "bn" }] }, "क्या आप दांत सफेद करते हैं")).toBe("hi");
-    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?", { final: true })).toBe("");
+    expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto el sábado?", { final: true })).toBe("es");
+    expect(interimMicLanguage({ languages: ["bn"] }, "¿A qué hora abre Dapto el sábado?", { final: false, hint: "bn", previous: "bn" })).toBe("");
+    expect(utteranceLanguage("আপনারা কি দাঁত সাদা করার চিকিৎসা করেন", { final: true })).toBe("bn");
+    const stale = { code: "bn", count: 3 };
+    expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "bn" }] }, "क्या आप दांत सफेद करते हैं", { streak: stale, hint: "bn", previous: "bn", final: true })).toBe("hi");
+    expect(stale.code).toBe("hi");
     expect(interimMicLanguage({ languages: ["es"] }, "", { picker: "es" })).toBe("es");
     expect(interimMicLanguage({ languages: ["bn"] }, "hola", { picker: "es", final: true })).toBe("es");
     expect(interimMicLanguage({ languages: ["es"] }, "", { final: true })).toBe("");
@@ -97,7 +107,7 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage(undefined, "কলি", { streak: locked })).toBe("bn");
     expect(interimMicLanguage({ languages: ["hi"] }, "teeth whitening", { streak: locked, seen: "কলি" })).toBe("bn");
     expect(interimMicLanguage({ languages: ["bn"] }, "mujhe dard hai")).toBe("");
-    expect(interimMicLanguage({ languages: ["hi"] }, "mujhe dard hai", { final: true })).toBe("");
+    expect(interimMicLanguage({ languages: ["bn"] }, "mujhe dard hai", { final: true, hint: "bn" })).toBe("hi");
     expect(votesFromAlternative({ language: { language: "es" } })).toEqual(["es"]);
     expect(votesFromAlternative({ words: [{ language: { language: "bn" } }] })).toEqual(["bn"]);
     expect(interimMicLanguage(alternativeFromLiveResult({ detectedLanguage: "bn", channelLanguages: [{ language: "bn" }] }), "")).toBe("");
@@ -126,7 +136,9 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(correctTranscript("the Buona clinic")).toBe("the Woonona clinic");
     expect(correctTranscript("dentist in Buona")).toBe("dentist in Woonona");
     expect(correctTranscript("Buona sera")).toBe("Buona sera");
-    expect(correctTranscript("Buona")).toBe("Buona");
+    expect(correctTranscript("Buona")).toBe("Woonona");
+    expect(correctTranscript("Wunona")).toBe("Woonona");
+    expect(correctTranscript("Unona")).toBe("Woonona");
     expect(correctTranscript("Buona sera at the clinic")).toBe("Buona sera at the clinic");
     expect(correctTranscript("ডাক্তার ক্লিনিক কখন খোলা?")).toBe("Dapto কখন খোলা?");
     expect(correctTranscript("ডাক্তার ক্লিনিকের ঠিকানা কি?")).toBe("Dapto ঠিকানা কি?");

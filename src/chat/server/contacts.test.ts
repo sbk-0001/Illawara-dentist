@@ -4,6 +4,7 @@ import { detectLanguage, hasLetters } from "../language/detect";
 import { mentionedClinics } from "../intent";
 import {
   attachContactFooter,
+  nameClinicInReply,
   chooseContactFooter,
   contactFooter,
   contactLabels,
@@ -818,5 +819,36 @@ describe("contact footer", () => {
       }
     }
     expect(directoryLabels("vi").email).toBe("Thư điện tử:");
+  });
+
+  it("names the clinic on a Spanish booking line that only has the URL and phone", async () => {
+    const url = index.contacts.shellharbour.bookingUrl;
+    const sentence = `Puede reservar aquí: ${url}. También puede llamar al 02 4216 9911.`;
+    expect(nameClinicInReply(sentence, index)).toContain("Shellharbour Dentists:");
+    expect(nameClinicInReply(sentence, index)).toContain(url);
+    const chunks = await readChunks(
+      attachContactFooter(new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "t1" });
+          controller.enqueue({ type: "text-delta", id: "t1", delta: sentence });
+          controller.enqueue({ type: "text-end", id: "t1" });
+          controller.close();
+        },
+      }), {
+        footer: "",
+        routeFooter: "",
+        sourcesFound: true,
+        sourceCount: 2,
+        topScore: 2,
+        question: "¿Puedo reservar en Shellharbour?",
+        covered: () => true,
+        index,
+        focus: { kind: "one", clinic: "shellharbour" },
+      }),
+    );
+    const text = chunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(text).toContain("Shellharbour Dentists:");
+    expect(text).toContain(url);
+    expect(text).toContain("02 4216 9911");
   });
 });

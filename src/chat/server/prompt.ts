@@ -6,6 +6,7 @@ import { clinicName } from "../retrieval/search";
 import { isAddressQuestion } from "./address";
 import { directoryLabels } from "./contacts";
 import { formatClinicHours, hoursRelevant, localisedHoursBlock } from "./hours";
+import { glossaryBlock } from "./glossary";
 import { stripFeeCaveat } from "./system-text";
 
 export const CHAT_MODEL = "openai/gpt-5.4-mini";
@@ -93,6 +94,7 @@ export function buildInstructions(input: {
       : "The visitor asked for an address and did not name a clinic. List the street address of Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not answer with only a phone number. Do not ask which clinic they mean."
     : "";
 
+  const glossary = glossaryBlock(input.language.code);
   const severeLine = input.severe
     ? "SEVERE SYMPTOMS: The first sentence must tell the visitor to call 000 now. Then give the relevant clinic phone from the directory. Do not give first aid steps, medicines or a diagnosis."
     : "For toothache, swelling, trauma or a broken tooth, do not diagnose or recommend treatment. Point them to the relevant clinic phone and the emergency information in the context, plus that clinic's booking link.";
@@ -115,8 +117,8 @@ NUMERALS AND WORDS
 Copy phone numbers, email addresses and URLs exactly. Keep Western digits 0-9. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
 Copy the contact labels in the directory. They are already in the reply language.
 Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, start the hours answer with the short sentence, quote that line verbatim, and do not wrap the hours in quotation marks or write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
-Keep proper names verbatim: clinic names, street names, suburb names and dentist names. Write clinic names in Latin exactly as Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not transliterate them. Translate generic words and phrases into the reply language. Do not leave English words such as urgent, dental, concern, whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, check-up, implant, crown, filling or cleaning inside a non-English sentence. Only proper nouns stay in Latin. In Bengali, write দাঁত সাদা করা for teeth whitening.
-Banglish and Hinglish replies use Latin letters only. Do not mix in Bengali or Devanagari characters.
+Keep proper names verbatim: clinic names, street names, suburb names and dentist names. Write clinic names in Latin exactly as Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not transliterate them. Translate generic words and phrases into the reply language. Do not leave English words such as urgent, dental, concern, whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, same day treatment, emergency appointment, toothache, swelling, broken tooth, jaw fracture, urgent medical help, check-up, implant, crown, filling or cleaning inside a non-English sentence. Only proper nouns stay in Latin. In Bengali, write দাঁত সাদা করা for teeth whitening. In Hindi, write दांत सफ़ेद करना, not दांत सादा.
+When the visitor writes Banglish or Hinglish, answer in Bengali or Hindi script, not Latin. Do not mix Devanagari into a Bengali reply or Bengali letters into a Hindi reply.
 
 CLINIC
 ${clinicLine}
@@ -146,9 +148,12 @@ ${hoursBlock ? `${hoursBlock}\n\n` : ""}CONTACT DIRECTORY
 ${directory}
 
 CONTEXT
+The pages below are in English. Translate every service name and symptom into the reply language. Do not copy English phrases from them.
 ${context}
 
-STATUS TAG
+${glossary ? `${glossary}\n\n` : ""}STATUS TAG
 Start with the tag, then at least one full sentence in the visitor's language. Never reply with only a contact line. Copy the directory labels. Examples of the tag, not the language:
-${STATUS_EXAMPLES}`;
+${STATUS_EXAMPLES}
+
+Reply ONLY in ${input.language.label} (${input.language.script}) for this message, regardless of earlier messages.`;
 }

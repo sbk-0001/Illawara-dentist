@@ -263,13 +263,32 @@ const DEVA_START = 0x0900;
 const BENG_START = 0x0980;
 const INDIC_BLOCK = 0x80;
 
+/**
+ * Letters whose block offset is not a letter in the other script.
+ * Devanagari व (U+0935) lands on U+09B5, which is not a Bengali letter, so
+ * শুক্রवार would otherwise keep the Devanagari व. Bengali writes that sound as ব.
+ */
+const DEVA_TO_BENG_FALLBACK: Record<number, string> = {
+  0x0935: "\u09AC",
+  0x0929: "\u09A8",
+  0x0931: "\u09B0",
+  0x0933: "\u09B2",
+};
+const BENG_TO_DEVA_FALLBACK: Record<number, string> = {
+  0x09b5: "\u0935",
+};
+
 /** Bengali and Devanagari share a layout. 0x0980 maps onto 0x0900. */
-function mapIndicBlock(text: string, from: number, to: number): string {
+function mapIndicBlock(text: string, from: number, to: number, fallback: Record<number, string>): string {
   let out = "";
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
     if (code < from || code >= from + INDIC_BLOCK) {
       out += ch;
+      continue;
+    }
+    if (fallback[code]) {
+      out += fallback[code];
       continue;
     }
     const mapped = String.fromCodePoint(code - from + to);
@@ -280,12 +299,12 @@ function mapIndicBlock(text: string, from: number, to: number): string {
 
 /** Stray Bengali letters inside a Devanagari reply, for example सাদা → सादा. */
 export function bengaliToDevanagari(text: string): string {
-  return mapIndicBlock(text, BENG_START, DEVA_START);
+  return mapIndicBlock(text, BENG_START, DEVA_START, BENG_TO_DEVA_FALLBACK);
 }
 
 /** Stray Devanagari letters inside a Bengali reply. */
 export function devanagariToBengali(text: string): string {
-  return mapIndicBlock(text, DEVA_START, BENG_START);
+  return mapIndicBlock(text, DEVA_START, BENG_START, DEVA_TO_BENG_FALLBACK);
 }
 
 /** Fix a finished reply. `visitorText` decides whether a Chinese reply should stay traditional. */

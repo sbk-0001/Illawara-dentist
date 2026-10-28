@@ -134,6 +134,22 @@ async function assertValidReply(stream: ReadableStream<unknown>, check: (text: s
 }
 
 describe("UI message stream validation", () => {
+  it("maps a Devanagari व inside streamed Bengali hours", async () => {
+    const stream = widgetStream({
+      language: "bn",
+      question: "ডাপ্টো শনিবার",
+      run: async function* () {
+        yield { type: "text-start", id: "h" };
+        yield { type: "text-delta", id: "h", text: "[[A]]Dapto Dentists খোলা থাকে: সোমবার–শুক্র\u0935\u093e\u0930 সকাল 8:00।" };
+        yield { type: "text-end", id: "h" };
+      },
+    });
+    await assertValidReply(stream, (text) => {
+      expect(text).toContain("শুক্রবার");
+      expect(text).not.toMatch(/\u0935/);
+    });
+  });
+
   it("accepts a normal English reply", async () => {
     const stream = widgetStream({
       language: "en",
@@ -218,7 +234,7 @@ describe("UI message stream validation", () => {
   });
 
   it("accepts a regenerated Bengali reply and drops the English attempt", async () => {
-    const english = `Teeth whitening is available. ${FEE_CAVEAT_EN}`;
+    const english = `The clinic is open every weekday for regular visits. ${FEE_CAVEAT_EN}`;
     const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";
     let calls = 0;
     const stream = widgetStream({

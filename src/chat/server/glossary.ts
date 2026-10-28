@@ -1,0 +1,174 @@
+/**
+ * English service phrases the model copies out of the English pages.
+ * Longest phrases are replaced first, on the stream, so a mid-reply run
+ * is rewritten without a second model call.
+ */
+const PHRASES: Record<string, readonly [string, string][]> = {
+  bn: [
+    ["professional teeth whitening", "পেশাদার দাঁত সাদা করা"],
+    ["teeth whitening", "দাঁত সাদা করা"],
+    ["suspected jaw fracture", "সন্দেহজনক চোয়াল ভাঙা"],
+    ["jaw fracture", "চোয়াল ভাঙা"],
+    ["emergency appointment slots", "জরুরি অ্যাপয়েন্টমেন্টের সময়"],
+    ["emergency appointment slot", "জরুরি অ্যাপয়েন্টমেন্টের সময়"],
+    ["emergency appointment", "জরুরি অ্যাপয়েন্টমেন্ট"],
+    ["same-day treatment", "একই দিনের চিকিৎসা"],
+    ["same day treatment", "একই দিনের চিকিৎসা"],
+    ["urgent dental concern", "জরুরি দাঁতের সমস্যা"],
+    ["urgent medical help", "জরুরি চিকিৎসা সহায়তা"],
+    ["broken tooth", "ভাঙা দাঁত"],
+    ["toothache", "দাঁতের ব্যথা"],
+    ["swelling", "ফোলা"],
+    ["medical help", "চিকিৎসা সহায়তা"],
+    ["whitening", "দাঁত সাদা করা"],
+    ["urgent", "জরুরি"],
+    ["dental", "দাঁতের"],
+    ["concern", "সমস্যা"],
+  ],
+  hi: [
+    ["professional teeth whitening", "पेशेवर दांत सफ़ेद करना"],
+    ["teeth whitening", "दांत सफ़ेद करना"],
+    ["suspected jaw fracture", "संदिग्ध जबड़े की फ्रैक्चर"],
+    ["jaw fracture", "जबड़े की फ्रैक्चर"],
+    ["emergency appointment slots", "आपातकालीन अपॉइंटमेंट के समय"],
+    ["emergency appointment slot", "आपातकालीन अपॉइंटमेंट का समय"],
+    ["emergency appointment", "आपातकालीन अपॉइंटमेंट"],
+    ["same-day treatment", "उसी दिन का इलाज"],
+    ["same day treatment", "उसी दिन का इलाज"],
+    ["urgent dental concern", "जरूरी दंत समस्या"],
+    ["urgent medical help", "जरूरी चिकित्सा सहायता"],
+    ["broken tooth", "टूटा दांत"],
+    ["toothache", "दांत का दर्द"],
+    ["swelling", "सूजन"],
+    ["medical help", "चिकित्सा सहायता"],
+    ["whitening", "दांत सफ़ेद करना"],
+    ["दांत सादा", "दांत सफ़ेद करना"],
+    ["दांतों की सादा", "दांतों की सफ़ेदी"],
+    ["urgent", "जरूरी"],
+    ["dental", "दंत"],
+    ["concern", "समस्या"],
+  ],
+  es: [
+    ["professional teeth whitening", "blanqueamiento dental profesional"],
+    ["teeth whitening", "blanqueamiento dental"],
+    ["suspected jaw fracture", "posible fractura de mandíbula"],
+    ["jaw fracture", "fractura de mandíbula"],
+    ["emergency appointment slots", "horarios de cita de urgencia"],
+    ["emergency appointment slot", "horario de cita de urgencia"],
+    ["emergency appointment", "cita de urgencia"],
+    ["same-day treatment", "tratamiento el mismo día"],
+    ["same day treatment", "tratamiento el mismo día"],
+    ["urgent dental concern", "urgencia dental"],
+    ["urgent medical help", "ayuda médica urgente"],
+    ["broken tooth", "diente roto"],
+    ["toothache", "dolor de muelas"],
+    ["swelling", "hinchazón"],
+  ],
+  ar: [
+    ["teeth whitening", "تبييض الأسنان"],
+    ["emergency appointment", "موعد طارئ"],
+    ["same day treatment", "علاج في اليوم نفسه"],
+    ["same-day treatment", "علاج في اليوم نفسه"],
+    ["urgent dental concern", "مشكلة أسنان عاجلة"],
+    ["urgent medical help", "مساعدة طبية عاجلة"],
+    ["broken tooth", "سن مكسور"],
+    ["toothache", "ألم الأسنان"],
+    ["swelling", "تورم"],
+    ["jaw fracture", "كسر في الفك"],
+  ],
+  zh: [
+    ["teeth whitening", "牙齿美白"],
+    ["emergency appointment", "急诊预约"],
+    ["same day treatment", "当天治疗"],
+    ["same-day treatment", "当天治疗"],
+    ["urgent dental concern", "紧急牙科问题"],
+    ["urgent medical help", "紧急医疗帮助"],
+    ["broken tooth", "断牙"],
+    ["toothache", "牙痛"],
+    ["swelling", "肿胀"],
+    ["jaw fracture", "颌骨骨折"],
+  ],
+  vi: [
+    ["teeth whitening", "tẩy trắng răng"],
+    ["emergency appointment", "lịch hẹn khẩn"],
+    ["same day treatment", "điều trị trong ngày"],
+    ["same-day treatment", "điều trị trong ngày"],
+    ["broken tooth", "răng gãy"],
+    ["toothache", "đau răng"],
+    ["swelling", "sưng"],
+    ["jaw fracture", "gãy xương hàm"],
+  ],
+  ko: [
+    ["teeth whitening", "치아 미백"],
+    ["emergency appointment", "응급 예약"],
+    ["same day treatment", "당일 치료"],
+    ["same-day treatment", "당일 치료"],
+    ["broken tooth", "부러진 치아"],
+    ["toothache", "치통"],
+    ["swelling", "부기"],
+    ["jaw fracture", "턱뼈 골절"],
+  ],
+};
+
+function phrasesFor(code: string): readonly [string, string][] {
+  if (code === "bn-Latn") return PHRASES.bn;
+  if (code === "hi-Latn") return PHRASES.hi;
+  return PHRASES[code] ?? [];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** English phrases still in a non-English reply, longest first. */
+export function applyGlossary(text: string, code: string): string {
+  const phrases = phrasesFor(code);
+  if (!phrases.length || !text) return text;
+  let out = text;
+  for (const [from, to] of phrases) {
+    const pattern = from.startsWith("द") || from.startsWith("स")
+      ? escapeRegExp(from)
+      : `(?<![A-Za-z])${escapeRegExp(from)}(?![A-Za-z])`;
+    out = out.replace(new RegExp(pattern, from.startsWith("द") ? "g" : "gi"), to);
+  }
+  return out;
+}
+
+/** Lines for the prompt. Empty for English. */
+export function glossaryBlock(code: string): string {
+  const phrases = phrasesFor(code).filter(([from]) => /^[A-Za-z]/.test(from));
+  if (!phrases.length) return "";
+  const lines = phrases.map(([from, to]) => `${from} = ${to}`);
+  return `GLOSSARY\nUse these ${code} words. Do not leave the English:\n${lines.join("\n")}`;
+}
+
+/** Hold a suffix that is the start of a glossary phrase so a split chunk still matches. */
+export function createGlossaryFilter(code: string) {
+  const sources = phrasesFor(code).map(([from]) => from.toLowerCase());
+  let held = "";
+  const holdLength = (text: string): number => {
+    const end = text.slice(-64).toLowerCase();
+    let size = 0;
+    for (const phrase of sources) {
+      const max = Math.min(phrase.length - 1, end.length);
+      for (let n = max; n > size; n -= 1) {
+        if (phrase.startsWith(end.slice(-n))) size = n;
+      }
+    }
+    return size;
+  };
+  return {
+    push(delta: string): string {
+      const combined = held + delta;
+      const size = holdLength(combined);
+      const ready = combined.slice(0, combined.length - size);
+      held = combined.slice(combined.length - size);
+      return applyGlossary(ready, code);
+    },
+    flush(): string {
+      const rest = applyGlossary(held, code);
+      held = "";
+      return rest;
+    },
+  };
+}

@@ -483,6 +483,22 @@ function coversClinicContact(reply: string, card: ContactCard): boolean {
  * True when the reply already gives the relevant clinic's phone, street address or booking link.
  * A single clinic is enough. The all-clinic contact block is a different check.
  */
+/** A booking URL or phone with no clinic name is not a usable booking line. */
+export function nameClinicInReply(text: string, index: KnowledgeIndex): string {
+  let out = text;
+  for (const id of CLINIC_ORDER) {
+    const card = index.contacts[id];
+    if (!card || out.includes(card.name)) continue;
+    const phone = digits(card.phone);
+    const hasPhone = phone.length >= 8 && digits(out).includes(phone.slice(-8));
+    const hasUrl = Boolean(card.bookingUrl) && out.includes(card.bookingUrl);
+    if (!hasPhone && !hasUrl) continue;
+    if (hasUrl) out = out.replace(card.bookingUrl, `${card.name}: ${card.bookingUrl}`);
+    else out = `${card.name}. ${out}`;
+  }
+  return out;
+}
+
 export function replyCoversRelevantContact(reply: string, index: KnowledgeIndex, focus: ClinicFocus): boolean {
   return relevantClinics(focus).some((id) => coversClinicContact(reply, index.contacts[id]));
 }
@@ -681,8 +697,13 @@ export function attachContactFooter<T extends FooterChunk>(
           const drained = takeVisibleReply(pending, false);
           pending = drained.hold;
           if (drained.sawSentinel) sawSentinel = true;
-          shown += drained.visible;
-          if (drained.visible) controller.enqueue({ ...chunk, delta: drained.visible });
+          if (drained.visible) {
+            const prior = shown;
+            const named = input.index ? nameClinicInReply(prior + drained.visible, input.index) : prior + drained.visible;
+            const delta = named.startsWith(prior) ? named.slice(prior.length) : drained.visible;
+            shown = named.startsWith(prior) ? named : prior + drained.visible;
+            controller.enqueue({ ...chunk, delta });
+          }
           return;
         }
         if (chunk.type === "text-end" || chunk.type === "finish") {
