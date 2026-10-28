@@ -491,10 +491,15 @@ export function nameClinicInReply(text: string, index: KnowledgeIndex): string {
     if (!card || out.includes(card.name)) continue;
     const phone = digits(card.phone);
     const hasPhone = phone.length >= 8 && digits(out).includes(phone.slice(-8));
-    const hasUrl = Boolean(card.bookingUrl) && out.includes(card.bookingUrl);
+    const uuid = card.bookingUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] ?? "";
+    const hasUrl = Boolean(card.bookingUrl) && (out.includes(card.bookingUrl) || (uuid.length > 0 && out.includes(uuid)));
     if (!hasPhone && !hasUrl) continue;
-    if (hasUrl) out = out.replace(card.bookingUrl, `${card.name}: ${card.bookingUrl}`);
-    else out = `${card.name}. ${out}`;
+    if (card.bookingUrl && out.includes(card.bookingUrl)) {
+      out = out.replace(card.bookingUrl, `${card.name}: ${card.bookingUrl}`);
+    } else if (uuid && out.includes(uuid)) {
+      out = out.replace(new RegExp(`https?:\\/\\/\\S*${uuid}\\S*`), (url) => `${card.name}: ${url}`);
+      if (!out.includes(card.name)) out = out.replace(uuid, `${card.name}: ${uuid}`);
+    } else out = `${card.name}. ${out}`;
   }
   return out;
 }
@@ -537,7 +542,10 @@ function replyHasRoute(reply: string, input: FooterDecision): boolean {
   if (!reply) return false;
   const focus = input.focus ?? { kind: "any" as const };
   if (input.index && replyCoversRelevantContact(reply, input.index, focus)) return true;
-  return replyLooksLikeContact(reply);
+  if (replyLooksLikeContact(reply)) return true;
+  if (!input.index) return false;
+  const namesClinic = Object.values(input.index.contacts).some((card) => reply.includes(card.name));
+  return namesClinic && /reserv|book|llam|phone|tel[eé]fono|cita|বুক|ফোন|预约|예약/i.test(reply);
 }
 
 export function chooseContactFooter(input: FooterDecision): FooterKind {

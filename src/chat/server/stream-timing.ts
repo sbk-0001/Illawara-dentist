@@ -1,4 +1,5 @@
-import { latinWordRun, replyScriptGate, replyScriptRatio } from "../language/reply-script";
+import { latinWordRun, replyScriptGate, replyScriptRatio, replyUsesNativeScript } from "../language/reply-script";
+import { restoreClinicNames } from "./label-fix";
 import { createGlossaryFilter } from "./glossary";
 import { CHAT_MODEL } from "./prompt";
 import { drainStatusTag, type StatusTag } from "./status-tag";
@@ -332,12 +333,23 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         const gloss = createGlossaryFilter(input.language);
         let showed = false;
         let shownBody = "";
+        const noteViolation = () => {
+          if (replyUsesNativeScript(input.language) && latinWordRun(shownBody) >= 3) scriptViolation = true;
+        };
         const takeGloss = (text: string): string => {
-          const cleaned = gloss.push(text);
+          const cleaned = restoreClinicNames(gloss.push(text));
           if (!cleaned) return "";
           shownBody += cleaned;
-          if (latinWordRun(shownBody) >= 3) scriptViolation = true;
+          noteViolation();
           return cleaned;
+        };
+        const flushGloss = () => {
+          const tail = restoreClinicNames(gloss.flush());
+          if (!tail) return;
+          shownBody += tail;
+          noteViolation();
+          if (showed) show(tail);
+          else held += tail;
         };
         const noteContent = () => {
           if (sawContent) return;
@@ -412,7 +424,10 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         };
         try {
           for (;;) {
-            if (pastDeadline()) return "deadline";
+            if (pastDeadline()) {
+              flushGloss();
+              return "deadline";
+            }
             const pending = iterator.next();
             pending.catch(() => undefined);
             const step = showed
@@ -420,12 +435,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               : await Promise.race([pending, timeoutPromise, deadlinePromise]);
             if (step.done) {
               held += takeText("", true);
-              const tail = gloss.flush();
-              if (tail) {
-                shownBody += tail;
-                if (latinWordRun(shownBody) >= 3) scriptViolation = true;
-                held += tail;
-              }
+              flushGloss();
               const judged = stripFeeCaveat(held);
               const gate = replyScriptGate(judged, input.language, true);
               if (gate === "conflict") {
@@ -474,6 +484,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             }
             if (!showed) buffered.push(notePartId(part));
             else {
+              if (part.type === "text-end" || part.type === "finish") flushGloss();
               const forwarded = notePartId(part);
               if (forwarded.type === "text-start" && forwarded.id) markOpen(forwarded.id);
               if (forwarded.type === "text-end") textOpen = false;
@@ -481,6 +492,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             }
           }
         } catch (error) {
+          flushGloss();
           await stopIterator(iterator, timer);
           if (errorName(error) === "DeadlineError" || pastDeadline()) return "deadline";
           if (errorName(error) === "TimeoutError" || errorName(error) === "AbortError") return showed ? "error" : "timeout";
@@ -531,7 +543,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             }
             if (chosen?.text) {
               scriptRatio = chosen.ratio;
-              if (latinWordRun(chosen.text) >= 3) scriptViolation = true;
+              if (replyUsesNativeScript(input.language) && latinWordRun(chosen.text) >= 3) scriptViolation = true;
               publishSaved(chosen.text);
               clearDeadline();
               finish("done");

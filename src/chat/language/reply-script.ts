@@ -174,9 +174,25 @@ function hasSentenceEnd(text: string): boolean {
  * An opening that looks like the wrong script waits for the finished reply, and
  * only that finished reply can ask for the one regenerate.
  */
+const SHORT_REPLY = 120;
+
+/** True when this reply language is judged for a non-Latin script. English and Spanish are not. */
+export function replyUsesNativeScript(code: string): boolean {
+  return Boolean(NATIVE_REPLY[code]);
+}
+
+function foreignScript(text: string): boolean {
+  return (text.match(/[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0590-\u05FF\u0370-\u03FF]/g) || []).length >= 4;
+}
+
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
-  if (!NATIVE_REPLY[code]) return "release";
+  if (!NATIVE_REPLY[code]) {
+    if (!foreignScript(text) || text.trim().length >= SHORT_REPLY) return "release";
+    return final ? "conflict" : "wait";
+  }
   const runs = latinRuns(text);
+  // A long reply streams. Holding it for a regeneration is what pushed TTFT past 10s.
+  if (text.length >= SHORT_REPLY) return "release";
   // A phrase of three Latin words conflicts even when it arrives after a long native opening.
   if (runs.longest >= 3) return final ? "conflict" : "wait";
   // "urgent dental" may still grow into "urgent dental concern".

@@ -120,18 +120,33 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** English phrases still in a non-English reply, longest first. */
-export function applyGlossary(text: string, code: string): string {
+const PROTECTED = /https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d\s().-]{7,}\d/gi;
+
+function replacePhrases(text: string, code: string): string {
   const phrases = phrasesFor(code);
   if (!phrases.length || !text) return text;
   let out = text;
   for (const [from, to] of phrases) {
-    const pattern = from.startsWith("द") || from.startsWith("स")
+    const pattern = /^[\u0900-\u097F]/.test(from)
       ? escapeRegExp(from)
       : `(?<![A-Za-z])${escapeRegExp(from)}(?![A-Za-z])`;
-    out = out.replace(new RegExp(pattern, from.startsWith("द") ? "g" : "gi"), to);
+    out = out.replace(new RegExp(pattern, /^[\u0900-\u097F]/.test(from) ? "g" : "gi"), to);
   }
   return out;
+}
+
+/** English phrases still in a non-English reply. URLs, emails and phone numbers are copied unchanged. */
+export function applyGlossary(text: string, code: string): string {
+  if (!text) return text;
+  let out = "";
+  let last = 0;
+  for (const match of text.matchAll(PROTECTED)) {
+    const index = match.index ?? 0;
+    out += replacePhrases(text.slice(last, index), code);
+    out += match[0];
+    last = index + match[0].length;
+  }
+  return out + replacePhrases(text.slice(last), code);
 }
 
 /** Lines for the prompt. Empty for English. */
@@ -147,12 +162,16 @@ export function createGlossaryFilter(code: string) {
   const sources = phrasesFor(code).map(([from]) => from.toLowerCase());
   let held = "";
   const holdLength = (text: string): number => {
-    const end = text.slice(-64).toLowerCase();
+    if (/https?:\/\/\S*$/i.test(text)) return 0;
+    const end = text.slice(-64);
+    const unprotected = end.replace(PROTECTED, "\n");
+    const tail = unprotected.slice(unprotected.lastIndexOf("\n") + 1).toLowerCase();
     let size = 0;
     for (const phrase of sources) {
-      const max = Math.min(phrase.length - 1, end.length);
+      const max = Math.min(phrase.length - 1, tail.length);
       for (let n = max; n > size; n -= 1) {
-        if (phrase.startsWith(end.slice(-n))) size = n;
+        if (n < 4) break;
+        if (phrase.startsWith(tail.slice(-n))) size = n;
       }
     }
     return size;

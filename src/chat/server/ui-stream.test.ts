@@ -234,7 +234,7 @@ describe("UI message stream validation", () => {
   });
 
   it("accepts a regenerated Bengali reply and drops the English attempt", async () => {
-    const english = `The clinic is open every weekday for regular visits. ${FEE_CAVEAT_EN}`;
+    const english = "The clinic is open today for visits.";
     const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";
     let calls = 0;
     const stream = widgetStream({

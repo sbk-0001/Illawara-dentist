@@ -20,7 +20,13 @@ export function restoreClinicNames(text: string): string {
   return text
     .replace(/울로나\s*치과|우노나\s*치과|워노나\s*치과/g, "Woonona Dentists")
     .replace(/닥토\s*치과|다프토\s*치과|댑토\s*치과|답토\s*치과/g, "Dapto Dentists")
-    .replace(/셸하버\s*치과|쉘하버\s*치과/g, "Shellharbour Dentists");
+    .replace(/셸하버\s*치과|쉘하버\s*치과/g, "Shellharbour Dentists")
+    .replace(/ডাপ্টো(?:\s+ডেন্টিস্টস?)?|ড্যাপ্টো(?:\s+ডেন্টিস্টস?)?|ডাপটো(?:\s+ডেন্টিস্টস?)?/g, "Dapto Dentists")
+    .replace(/উনোনা(?:\s+ডেন্টিস্টস?)?|উনোনা(?:\s+ডেন্টিস্টস?)?/g, "Woonona Dentists")
+    .replace(/শেলহারবার(?:\s+ডেন্টিস্টস?)?|শেলহারবর(?:\s+ডেন্টিস্টস?)?/g, "Shellharbour Dentists")
+    .replace(/डाप्टो(?:\s+डेंटिस्ट्स?)?|डैप्टो(?:\s+डेंटिस्ट्स?)?/g, "Dapto Dentists")
+    .replace(/वूनोना(?:\s+डेंटिस्ट्स?)?|वूनोणा(?:\s+डेंटिस्ट्स?)?/g, "Woonona Dentists")
+    .replace(/शेलहारबर(?:\s+डेंटिस्ट्स?)?|शेलहार्बर(?:\s+डेंटिस्ट्स?)?/g, "Shellharbour Dentists");
 }
 
 function phoneAlreadyStated(text: string, phone: string, code: string): boolean {

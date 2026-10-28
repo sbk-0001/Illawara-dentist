@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHAT_MODEL } from "./prompt";
 import { applyGlossary } from "./glossary";
+import { getKnowledgeIndex } from "./index-store";
 import { CHAT_FALLBACK_MODEL, FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, modelSupportsTemperature, type ChatTimingEvent } from "./stream-timing";
 import { replyScriptConflicts, replyScriptRatio } from "../language/reply-script";
 import { FEE_CAVEAT_EN } from "./system-text";
@@ -190,7 +191,7 @@ describe("first-token timeout", () => {
   });
 
   it("regenerates once when a Bengali reply is English, and localizes a fee sentence inside Bengali", async () => {
-    const english = `The clinic is open every weekday for regular visits. ${FEE_CAVEAT_EN}`;
+    const english = "The clinic is open today for visits.";
     const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";
     const modes: boolean[] = [];
     let calls = 0;
@@ -232,7 +233,7 @@ describe("first-token timeout", () => {
       timeoutMs: 500,
       log: () => undefined,
       run: async function* () {
-        yield { type: "text-delta", text: english };
+        yield { type: "text-delta", text: `The clinic is open every weekday for regular visits. ${FEE_CAVEAT_EN}` };
       },
     });
     const fallback = await readText(stillEnglish);
@@ -342,6 +343,65 @@ describe("first-token timeout", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ outcome: "deadline", stalled: "retry", language: "bn" });
     expect(events[0]?.totalMs).toBeLessThan(2_000);
+  });
+
+  it("emits a booking URL byte for byte when the last character looks like a glossary prefix", async () => {
+    const url = getKnowledgeIndex().contacts.dapto.bookingUrl;
+    expect(url.endsWith("patient-type")).toBe(true);
+    const stream = createRetryingTextStream({
+      language: "hi",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        yield { type: "text-start", id: "u" };
+        yield { type: "text-delta", id: "u", text: "यहाँ बुक करें " };
+        yield { type: "text-delta", id: "u", text: url.slice(0, url.lastIndexOf("/") + 1) };
+        yield { type: "text-delta", id: "u", text: "patien" };
+        yield { type: "text-delta", id: "u", text: "t-type" };
+        yield { type: "text-end", id: "u" };
+      },
+    });
+    const text = await readText(stream);
+    expect(text).toContain(url);
+    expect(text.slice(text.indexOf("https://"))).toBe(url);
+  });
+
+  it("regenerates a short English turn that came back in Bengali", async () => {
+    const bengali = "Woonona Dentists-এর ফোন 02 4284 4486।";
+    const english = "The phone number for Woonona Dentists is 02 4284 4486.";
+    for (let run = 0; run < 10; run += 1) {
+      let calls = 0;
+      const stream = createRetryingTextStream({
+        language: "en",
+        timeoutMs: 500,
+        log: () => undefined,
+        run: () => {
+          calls += 1;
+          const text = calls === 1 ? bengali : english;
+          return (async function* () {
+            yield { type: "text-delta", text };
+          })();
+        },
+      });
+      const text = await readText(stream);
+      expect(calls).toBe(2);
+      expect(text).toBe(english);
+      expect(text).not.toMatch(/[\u0980-\u09FF]/);
+    }
+  });
+
+  it("does not flag an English reply as a script violation", async () => {
+    const events: ChatTimingEvent[] = [];
+    const stream = createRetryingTextStream({
+      language: "es",
+      timeoutMs: 500,
+      log: (event) => events.push(event),
+      run: async function* () {
+        yield { type: "text-delta", text: "Puede reservar una cita de urgencia en la clínica hoy mismo." };
+      },
+    });
+    await readText(stream);
+    expect(events[0]?.scriptViolation).toBe(false);
   });
 
   it("rewrites a mid-reply English run in place and logs a leftover violation", async () => {

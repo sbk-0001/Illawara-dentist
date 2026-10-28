@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, micListeningNote, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording, type MicAudioQueue } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -323,6 +323,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const payload = JSON.parse(String(event.data)) as {
             type?: string;
             is_final?: boolean;
+            speech_final?: boolean;
             channel?: { alternatives?: DeepgramAlternative[]; detected_language?: string; languages?: unknown[] };
           };
           const alternative = alternativeFromLiveResult({
@@ -333,7 +334,12 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const transcript = alternative?.transcript?.trim() || "";
           if (staleDraft()) return;
           const cumulative = correctTranscript(`${session.current.finals} ${transcript}`.trim());
-          const code = utteranceLanguage(cumulative, { final: payload.is_final === true, picker: pickerLanguage() });
+          const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
+          const code = utteranceLanguage(cumulative, {
+            final: payload.is_final === true || payload.speech_final === true,
+            picker: pickerLanguage(),
+            heard,
+          });
           session.current.noteStreak = { code, count: code ? 1 : 0 };
           session.current.interimLanguage = code;
           setMicNote(noteFor(code));

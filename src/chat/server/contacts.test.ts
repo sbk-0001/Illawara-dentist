@@ -850,5 +850,14 @@ describe("contact footer", () => {
     expect(text).toContain("Shellharbour Dentists:");
     expect(text).toContain(url);
     expect(text).toContain("02 4216 9911");
+    expect(chooseContactFooter({
+      question: "¿Puedo reservar en Dapto?",
+      sourceCount: 2,
+      topScore: 2,
+      replyText: "Puede reservar en línea a través de este sitio web o llamar a Dapto Dentists.",
+      statusTag: "A",
+      index,
+      focus: { kind: "one", clinic: "dapto" },
+    })).toBe("none");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getKnowledgeIndex } from "./index-store";
-import { prepareTurn } from "./chat-route";
+import { messagesAfterLanguageSwitch, prepareTurn } from "./chat-route";
 
 const index = getKnowledgeIndex();
 
@@ -14,7 +14,7 @@ describe("spoken language on a voice turn", () => {
     );
     expect(turn.reply.code).toBe("bn");
     expect(turn.reply.script).toBe("Bengali");
-    expect(turn.langOverride).toBe(true);
+    expect(turn.langOverride).toBe(false);
     expect(turn.inputMode).toBe("voice");
     expect(turn.spokenLanguage).toBe("bn");
     expect(turn.transcriptScript).toBe("Latin");
@@ -46,7 +46,7 @@ describe("spoken language on a voice turn", () => {
     expect(english.spokenLanguage).toBe("en");
 
     const rejected = prepareTurn(
-      [{ role: "user", content: "Dapto clinic Saturday kokhon khola thake?" }],
+      [{ role: "user", content: "What time does Woonona open on Saturday?" }],
       "auto",
       index,
       { inputMode: "voice", spokenLanguage: "not-a-language" },
@@ -122,6 +122,19 @@ describe("spoken language on a voice turn", () => {
     expect(banglish.reply.script).toBe("Bengali");
     expect(banglish.instructions).toMatch(/Reply ONLY in বাংলা \(Bengali\) for this message, regardless of earlier messages/);
     expect(followed.instructions).toMatch(/Reply ONLY in English \(Latin\) for this message, regardless of earlier messages/);
+    const switched = messagesAfterLanguageSwitch(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ, ডাপ্টো খোলা।" },
+        { role: "user", content: "Woonona phone?" },
+      ],
+      "en",
+    );
+    expect(String(switched[0]?.content)).toContain("switched to en");
+    expect(String(switched[0]?.content)).not.toMatch(/[\u0980-\u09FF]/);
+
+    const freshBanglish = prepareTurn([{ role: "user", content: "dapto kokhon khola" }], "auto", index);
+    expect(freshBanglish.reply.code).toBe("bn");
+    expect(freshBanglish.instructions).toContain("Write in Bengali, using Bengali script.");
 
     const spanish = prepareTurn([{ role: "user", content: "Woonona phone?" }], "es", index, { inputMode: "voice" });
     expect(spanish.reply.code).toBe("es");

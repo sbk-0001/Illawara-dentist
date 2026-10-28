@@ -8,7 +8,8 @@ describe("Deepgram Nova-3 keyterms", () => {
       expect(params.get("model")).toBe("nova-3");
       expect(params.get("language")).toBe("multi");
       expect(params.getAll("language_hint")).toEqual(["en"]);
-      expect(params.getAll("keyterm")).toEqual([...STT_KEYTERMS]);
+      expect(params.getAll("keyterm")).toEqual(["Dapto", "Woonona", "Shellharbour"]);
+      expect(params.getAll("keyterm").join(" ")).not.toMatch(/[\u0980-\u09FF\u0900-\u097F]/);
       expect(url).not.toMatch(/keywords=/);
       expect(url).not.toMatch(/keyterm=[^&]*:/);
     }
@@ -97,15 +98,18 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "Dapto clinic", { hint: "bn" })).toBe("");
     expect(interimMicLanguage({ languages: ["te"], words: [{ language: "te" }] }, "", { previous: "bn" })).toBe("");
     expect(interimMicLanguage({ languages: ["hi"] }, "কল")).toBe("");
-    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "কলি")).toBe("bn");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "কলি")).toBe("");
     expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.95 }] }, "ক্লিনিক", { hint: "bn" })).toBe("bn");
     expect(interimMicLanguage({ words: [{ language: "te", confidence: 0.99 }] }, "ক্লিনিক")).toBe("bn");
-    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "আমি Dapto")).toBe("bn");
+    expect(interimMicLanguage({ words: [{ language: "hi", confidence: 0.99 }] }, "আমি Dapto")).toBe("");
     expect(interimMicLanguage({ languages: ["bn"] }, "\u0926")).toBe("");
-    expect(interimMicLanguage({ languages: ["bn"] }, "\u0926\u093e\u0902\u0924")).toBe("hi");
-    const locked = { code: "", count: 0 };
-    expect(interimMicLanguage(undefined, "কলি", { streak: locked })).toBe("bn");
-    expect(interimMicLanguage({ languages: ["hi"] }, "teeth whitening", { streak: locked, seen: "কলি" })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["bn"] }, "\u0926\u093e\u0902\u0924")).toBe("");
+    const locked = { code: "bn", count: 6 };
+    expect(interimMicLanguage(undefined, "ক্লিনিক", { streak: locked })).toBe("bn");
+    expect(interimMicLanguage({ languages: ["hi"] }, "क्या आप दांत सफेद करते हैं", { streak: locked, final: true })).toBe("hi");
+    expect(utteranceLanguage("¿Puedo reservar en Shellharbour el sábado?", { final: true })).toBe("es");
+    expect(utteranceLanguage("¿Puedo reservar en Shellharbour el sábado?", { heard: "es" })).toBe("es");
+    expect(micListeningNote(utteranceLanguage("¿Puedo reservar en Shellharbour el sábado?", { final: true }))).toContain("Español");
     expect(interimMicLanguage({ languages: ["bn"] }, "mujhe dard hai")).toBe("");
     expect(interimMicLanguage({ languages: ["bn"] }, "mujhe dard hai", { final: true, hint: "bn" })).toBe("hi");
     expect(votesFromAlternative({ language: { language: "es" } })).toEqual(["es"]);

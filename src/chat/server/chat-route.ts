@@ -50,6 +50,26 @@ export type VoiceTurn = {
   spokenLanguage?: string;
 };
 
+/** Drop earlier assistant text when this turn's language is different, so the model cannot continue it. */
+export function messagesAfterLanguageSwitch<T extends { role?: string; parts?: unknown; content?: unknown; metadata?: { language?: string } }>(
+  messages: T[],
+  replyCode: string,
+): T[] {
+  const normalized = normalizeSpokenLanguage(replyCode) || replyCode;
+  let prior: string | null = null;
+  for (let i = messages.length - 2; i >= 0; i -= 1) {
+    if (messages[i]?.role !== "assistant") continue;
+    prior = normalizeSpokenLanguage(messages[i]?.metadata?.language);
+    if (prior) break;
+  }
+  if (!prior || prior === normalized) return messages;
+  const note = `The visitor has switched to ${normalized}. Earlier replies were in ${prior} and do not decide this answer.`;
+  return messages.map((message) => {
+    if (message.role !== "assistant") return message;
+    return { ...message, parts: [{ type: "text", text: note }], content: note };
+  });
+}
+
 export function messageText(message: { parts?: unknown; content?: unknown }): string {
   if (Array.isArray(message.parts)) {
     return message.parts
@@ -246,7 +266,7 @@ export async function POST(request: Request): Promise<Response> {
     question: lexical.text,
     chunks: sources.length ? chunks : [],
   });
-  const modelMessages = await convertToModelMessages(messages);
+  const modelMessages = await convertToModelMessages(messagesAfterLanguageSwitch(messages, lexical.reply.code));
 
   const replyStatus: { tag: StatusTag | null; missing: boolean } = { tag: null, missing: true };
   const textStream = createRetryingTextStream({

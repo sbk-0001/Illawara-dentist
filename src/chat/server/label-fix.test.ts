@@ -234,5 +234,6 @@ describe("contact label rewrite", () => {
     expect(once).toBe("Woonona Dentists의 전화번호는 02 4284 4486입니다.");
     expect(once.match(/02 4284 4486/g)).toHaveLength(1);
     expect(once).not.toContain("울로나");
+    expect(restoreClinicNames("ড্যাপ্টো ডেন্টিস্টস এবং উনোনা ডেন্টিস্টস")).toBe("Dapto Dentists এবং Woonona Dentists");
   });
 });

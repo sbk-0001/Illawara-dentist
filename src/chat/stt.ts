@@ -142,10 +142,13 @@ export function deepgramLanguageHints(preferred: string | null | undefined): str
 
 const LATIN_CLINIC_KEYTERMS = ["Dapto", "Woonona", "Shellharbour"] as const;
 
-/** Native names plus the Latin clinic names, for every hint. Spanish otherwise hears "Buona". */
+/**
+ * Auto sends only the Latin clinic names. A picked language may add that
+ * script's names. Bengali keyterms on Auto make Hindi speech come back in Bengali.
+ */
 export function keytermsForHints(hints: readonly string[]): string[] {
   const nonEnglish = hints.filter((hint) => hint !== "en");
-  if (!nonEnglish.length) return [...STT_KEYTERMS];
+  if (!nonEnglish.length) return [...LATIN_CLINIC_KEYTERMS];
   return [...new Set([...LATIN_CLINIC_KEYTERMS, ...nonEnglish.flatMap((hint) => NATIVE_KEYTERMS[hint] ?? [])])];
 }
 
@@ -385,7 +388,7 @@ function wordLanguageVotes(alternative: DeepgramAlternative | undefined): { code
 
 export type MicLanguageStreak = { code: string; count: number };
 
-const NOTE_SCRIPT_MIN = 3;
+const NOTE_SCRIPT_MIN = 6;
 
 function scriptCount(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0;
@@ -427,19 +430,33 @@ function scriptNoteLanguage(text: string): string {
  * The previous turn, a Deepgram tag, and a language hint are not inputs.
  * An explicit picker still wins, because the visitor chose it.
  */
-export function utteranceLanguage(transcript: string, options?: { final?: boolean; picker?: string | null }): string {
+export function utteranceLanguage(transcript: string, options?: { final?: boolean; picker?: string | null; heard?: string | null }): string {
   const picked = normalizeSpokenLanguage(options?.picker);
   if (picked) return picked;
   const text = transcript.replace(/\s+/g, " ").trim();
   const fromScript = scriptNoteLanguage(text);
   if (fromScript) return fromScript;
   if (/[\u0980-\u09FF\u0900-\u097F]/.test(text)) return "";
-  if (!options?.final || !text) return "";
+  if (!text) return "";
   const detected = detectLanguage(text);
+  const detectedCode = detected.code === "bn-Latn" ? "bn" : detected.code === "hi-Latn" ? "hi" : detected.code;
+  const heard = normalizeSpokenLanguage(options?.heard);
+  const latinHeard = heard && !replyScriptWouldBeNative(heard) ? heard : null;
+  if (!options?.final) {
+    if (latinHeard && latinHeard !== "en" && (detectedCode === latinHeard || detectedCode === "und")) return latinHeard;
+    return "";
+  }
   if (detected.code === "bn-Latn") return "bn";
   if (detected.code === "hi-Latn") return "hi";
-  if (detected.code === "und" || detected.fallback) return isDictionaryEnglish(text) ? "en" : "";
+  if (detected.code === "und" || detected.fallback) {
+    if (latinHeard && latinHeard !== "en") return latinHeard;
+    return isDictionaryEnglish(text) ? "en" : "";
+  }
   return detected.code;
+}
+
+function replyScriptWouldBeNative(code: string): boolean {
+  return /^(?:bn|hi|ne|ar|ur|fa|he|zh|ja|ko|el|ru|th|pa|ta|te)$/.test(code);
 }
 
 /**
@@ -449,10 +466,10 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
 export function interimMicLanguage(
   _alternative: DeepgramAlternative | undefined,
   transcript: string,
-  context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak; picker?: string | null },
+  context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak; picker?: string | null; heard?: string | null },
 ): string {
   const current = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
-  const code = utteranceLanguage(current, { final: context?.final, picker: context?.picker });
+  const code = utteranceLanguage(current, { final: context?.final, picker: context?.picker, heard: context?.heard });
   if (context?.streak) {
     context.streak.code = code;
     context.streak.count = code ? NOTE_SCRIPT_MIN : 0;

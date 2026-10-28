@@ -23,6 +23,9 @@ describe("detectLanguage", () => {
     expect(detectLanguage("amar daat e byatha, Dapto te appointment kobe pabo?")).toMatchObject({ code: "bn-Latn", script: "Latin" });
     expect(detectLanguage("mujhe Dapto me kal appointment chahiye, fees kitni hai?")).toMatchObject({ code: "hi-Latn", script: "Latin" });
     expect(detectLanguage("Woonona clinic er address ar phone number ki?")).toMatchObject({ code: "bn-Latn", script: "Latin" });
+    expect(detectLanguage("dapto kokhon khola")).toMatchObject({ code: "bn-Latn", script: "Latin" });
+    expect(detectLanguage("dapto kab khula hai")).toMatchObject({ code: "hi-Latn", script: "Latin" });
+    expect(detectLanguage("Woonona phone?")).not.toMatchObject({ code: "bn-Latn" });
     expect(detectLanguage("What is the clinic address?")).toMatchObject({ code: "en" });
   });
 
