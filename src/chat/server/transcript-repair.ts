@@ -118,3 +118,52 @@ export async function transliterateToNativeScript(input: {
     return null;
   }
 }
+
+export type ScriptRewriteLog = { event: "scriptRewrite"; before: string; after: string };
+
+/**
+ * Picker or voice text in the wrong script is rewritten before it is shown
+ * and before it is answered. `scriptRewrite` records the text on both sides.
+ * A timeout or a failed rewrite keeps the original so the turn is not empty.
+ */
+export async function rewriteTranscriptScript(input: {
+  text: string;
+  language: string;
+  timeoutMs?: number;
+  generate?: (prompt: string, signal: AbortSignal) => Promise<string | null>;
+  log?: (entry: ScriptRewriteLog) => void;
+}): Promise<string> {
+  const before = input.text.trim();
+  const language = normalizeSpokenLanguage(input.language);
+  if (!before || !language || !requiresNativeScript(language)) return before;
+  if (hasNativeScript(language, before) && languageFromNativeScript(before) === language) return before;
+  const timeoutMs = input.timeoutMs ?? SCRIPT_CONVERT_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const converted = await Promise.race([
+    transliterateToNativeScript({
+      text: before,
+      language,
+      timeoutMs,
+      generate: input.generate,
+    }),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+  const after = converted || before;
+  const entry: ScriptRewriteLog = { event: "scriptRewrite", before, after };
+  if (input.log) input.log(entry);
+  else console.log(JSON.stringify(entry));
+  return after;
+}
+
+/** Longest text any pass actually returned. An empty winner must not drop these. */
+export function longestNonEmptyTranscript(...candidates: (string | null | undefined)[]): string {
+  let best = "";
+  for (const candidate of candidates) {
+    const value = (candidate || "").trim();
+    if (value.length > best.length) best = value;
+  }
+  return best;
+}

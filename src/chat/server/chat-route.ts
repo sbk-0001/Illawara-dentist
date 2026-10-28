@@ -11,7 +11,7 @@ import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } f
 import { addressFocus } from "./address";
 import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
 import { malayalamMarkersWin } from "../language/indic";
-import { languageFromNativeScript, normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
+import { languageFromNativeScript, normalizeSpokenLanguage, requiresNativeScript, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
@@ -26,6 +26,7 @@ import { attachScriptFix } from "./script-fix";
 import type { StatusTag } from "./status-tag";
 import { tryAgainMessage } from "./system-text";
 import { FIRST_TOKEN_TIMEOUT_MS, OVERALL_DEADLINE_MS, chatGenerationSettings, createRetryingTextStream, firstTokenBudget, type ChatTimingEvent } from "./stream-timing";
+import { SCRIPT_CONVERT_TIMEOUT_MS, rewriteTranscriptScript } from "./transcript-repair";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -90,6 +91,19 @@ export function messageText(message: { parts?: unknown; content?: unknown }): st
       .trim();
   }
   return typeof message.content === "string" ? message.content.trim() : "";
+}
+
+function replaceLastUserText<T extends { role?: string; parts?: unknown; content?: unknown }>(messages: T[], from: string, to: string): T[] {
+  let replaced = false;
+  const next = messages.map((message) => ({ ...message }));
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const message = next[i];
+    if (!message || message.role !== "user" || replaced) continue;
+    if (messageText(message) !== from) continue;
+    replaced = true;
+    next[i] = { ...message, content: to, parts: [{ type: "text", text: to }] };
+  }
+  return next;
 }
 
 function userTexts(messages: { role?: string; parts?: unknown; content?: unknown }[]): string[] {
@@ -275,14 +289,31 @@ export async function POST(request: Request): Promise<Response> {
     return withCors(request, Response.json({ error: "Invalid chat request." }, { status: 400 }));
   }
 
-  const messages = parsed.data.messages as unknown as ClinicUIMessage[];
+  let messages = parsed.data.messages as unknown as ClinicUIMessage[];
   const startedAt = Date.now();
   const index = getKnowledgeIndex();
   const liveDrop = cleanLiveDrop(parsed.data.liveDrop);
-  const lexical = prepareTurn(messages, parsed.data.language, index, {
+  let lexical = prepareTurn(messages, parsed.data.language, index, {
     inputMode: parsed.data.inputMode,
     spokenLanguage: parsed.data.spokenLanguage,
   });
+  if (parsed.data.inputMode === "voice" && requiresNativeScript(lexical.reply.code) && languageFromNativeScript(lexical.text) !== lexical.reply.code) {
+    const remaining = OVERALL_DEADLINE_MS - (Date.now() - startedAt);
+    if (remaining > 400) {
+      const rewritten = await rewriteTranscriptScript({
+        text: lexical.text,
+        language: lexical.reply.code,
+        timeoutMs: Math.min(SCRIPT_CONVERT_TIMEOUT_MS, remaining - 200),
+      });
+      if (rewritten && rewritten !== lexical.text) {
+        messages = replaceLastUserText(messages, lexical.text, rewritten);
+        lexical = prepareTurn(messages, parsed.data.language, index, {
+          inputMode: parsed.data.inputMode,
+          spokenLanguage: parsed.data.spokenLanguage,
+        });
+      }
+    }
+  }
   if (!lexical.text) {
     return withCors(request, Response.json({ error: "Type a message to start." }, { status: 400 }));
   }

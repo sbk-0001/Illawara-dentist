@@ -1,7 +1,7 @@
 import { judgeIndicPair } from "../language/indic";
 import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, hasNativeScript, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
-import { INDIC_PAIR_TIMEOUT_MS, TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, repairNativeTranscript, shouldRetryShortTranscript, transcribeLanguagePair, transliterateToNativeScript } from "./transcript-repair";
+import { INDIC_PAIR_TIMEOUT_MS, SCRIPT_CONVERT_TIMEOUT_MS, TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, longestNonEmptyTranscript, repairNativeTranscript, rewriteTranscriptScript, shouldRetryShortTranscript, transcribeLanguagePair } from "./transcript-repair";
 
 export const runtime = "nodejs";
 
@@ -71,6 +71,8 @@ export async function POST(request: Request): Promise<Response> {
     const started = Date.now();
     let judgedLanguage = "";
     let next = "";
+    let malayalamPass = "";
+    let tamilPass = "";
     if (unconstrained) {
       const [malayalam, tamil] = await transcribeLanguagePair((language) =>
         repairNativeTranscript({
@@ -80,12 +82,13 @@ export async function POST(request: Request): Promise<Response> {
           timeoutMs: INDIC_PAIR_TIMEOUT_MS,
         }),
       );
+      malayalamPass = malayalam || "";
+      tamilPass = tamil || "";
       const choice = judgeIndicPair({ deepgram: liveTranscript, malayalam, tamil });
       judgedLanguage = choice.language || "";
       next = choice.transcript || "";
-      if (choice.language && choice.needsScript) {
-        const converted = await transliterateToNativeScript({ text: next || liveTranscript, language: choice.language });
-        if (converted) next = converted;
+      if (choice.language && (choice.needsScript || !hasNativeScript(choice.language, next))) {
+        next = await rewriteTranscriptScript({ text: next || liveTranscript, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
       }
     } else {
       next =
@@ -112,9 +115,9 @@ export async function POST(request: Request): Promise<Response> {
       if (again && !transcriptTooShort(again)) next = again;
     }
     let checked = direct ? chooseCheckedTranscript(liveTranscript, next || null) : next || "";
+    if (!checked) checked = longestNonEmptyTranscript(liveTranscript, next, malayalamPass, tamilPass);
     if (requestedRepair && checked && !hasNativeScript(requestedRepair, checked)) {
-      const converted = await transliterateToNativeScript({ text: checked, language: requestedRepair });
-      if (converted) checked = converted;
+      checked = await rewriteTranscriptScript({ text: checked, language: requestedRepair, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
     }
     if (judgedLanguage && checked && !hasNativeScript(judgedLanguage, checked) && liveTranscript && hasNativeScript(judgedLanguage, liveTranscript)) {
       checked = liveTranscript;

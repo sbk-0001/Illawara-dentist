@@ -239,9 +239,17 @@ export function createRetryingTextStream<T extends TextPart>(input: {
     const remaining = Math.max(0, deadlineMs - (Date.now() - origin));
     deadlineTimer = setTimeout(() => {
       const error = deadlineError();
-      activeAbort?.abort(error);
-      onDeadline();
+      try {
+        activeAbort?.abort(error);
+      } catch {
+        // Aborting a finished attempt is not a reason to skip the deadline.
+      }
       reject(error);
+      try {
+        onDeadline();
+      } catch {
+        // The stream may already be closed. The rejection still unblocks the reader.
+      }
     }, remaining);
   });
   deadlinePromise.catch(() => undefined);
@@ -518,6 +526,27 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         return "first-token";
       };
 
+      const runBounded = async (scriptRetry: boolean): Promise<"ok" | "timeout" | "script" | "deadline" | "error"> => {
+        const remaining = deadlineMs - (Date.now() - origin);
+        if (remaining <= 0) return "deadline";
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const gate = new Promise<"deadline">((resolve) => {
+          timer = setTimeout(() => {
+            try {
+              activeAbort?.abort(deadlineError());
+            } catch {
+              // The attempt may already have finished.
+            }
+            resolve("deadline");
+          }, remaining);
+        });
+        try {
+          return await Promise.race([consume(scriptRetry), gate]);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      };
+
       try {
         let scriptRetried = false;
         for (attempt = 0; attempt < 2; attempt += 1) {
@@ -527,7 +556,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           }
           const attemptStarted = Date.now();
           resetTag();
-          const result = await consume(false);
+          const result = await runBounded(false);
           if (result === "deadline") {
             emitFallback(deadlineStage());
             return;
@@ -540,7 +569,19 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             const firstDraft = heldScript;
             heldScript = null;
             resetTag();
-            const again = await consume(true);
+            const regenBudget = deadlineMs - (Date.now() - origin);
+            if (pastDeadline() || regenBudget < 1_500) {
+              if (pastDeadline() || !firstDraft?.text) {
+                emitFallback("script");
+                return;
+              }
+              publishSaved(firstDraft.text);
+              clearDeadline();
+              finish("done");
+              controller.close();
+              return;
+            }
+            const again = await runBounded(true);
             const secondDraft = heldScript as { text: string; ratio: number | null } | null;
             const firstRatio = firstDraft?.ratio ?? -1;
             const secondRatio = secondDraft?.ratio ?? -1;

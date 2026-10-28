@@ -425,7 +425,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             session.current.langVotes.push(...votesFromAlternative(alternative));
             session.current.finals = longerTranscript(session.current.finals, cumulative);
           }
-          if (!best || bengaliTranscriptGarbled(best) || malayalamMishear(best)) {
+          if (!best || bengaliTranscriptGarbled(best) || malayalamMishear(best) || shouldHoldLiveTranscript(best, pickerLanguage())) {
             voiceRequest.current = null;
             setInput("");
             return;

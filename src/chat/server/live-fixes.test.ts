@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { detectLanguage, confidentIndonesian } from "../language/detect";
 import { judgeIndicPair, malayalamMarkersWin } from "../language/indic";
-import { replyScriptGate, sanitizeForeignScript, unexpectedLatinWords } from "../language/reply-script";
+import { foreignScriptCount, replyScriptGate, sanitizeForeignScript, unexpectedLatinWords } from "../language/reply-script";
 import { finishedMicLanguage, hasNativeScript, noteAfterRecheck, shouldHoldLiveTranscript } from "../stt";
 import { prepareTurn } from "./chat-route";
 import { canonicalKnownUrls, ensureBookingReply, expandBookTokens } from "./contacts";
 import { applyGlossary } from "./glossary";
 import { getKnowledgeIndex } from "./index-store";
-import { attachContactLabels, dedupeSentenceFinal } from "./label-fix";
+import { attachContactLabels, dedupeSentenceFinal, stripInteriorContactStop } from "./label-fix";
+import { createRetryingTextStream } from "./stream-timing";
 import {
   INDIC_PAIR_TIMEOUT_MS,
   SCRIPT_CONVERT_TIMEOUT_MS,
   TRANSCRIPT_FULL_MODEL,
   indicVoiceBudgetMs,
+  longestNonEmptyTranscript,
+  rewriteTranscriptScript,
   shouldRetryShortTranscript,
   transcribeLanguagePair,
   transliterateToNativeScript,
@@ -26,7 +29,7 @@ async function readText(stream: ReadableStream<{ type: string; delta?: string }>
   for (;;) {
     const next = await reader.read();
     if (next.done) return text;
-    if (next.value.type === "text-delta" && next.value.delta) text += next.value.delta;
+    if (next.value.type === "text-delta") text += next.value.delta || (next.value as { text?: string }).text || "";
   }
 }
 
@@ -218,5 +221,97 @@ describe("live reply and voice fixes", () => {
     });
     expect(peak).toBe(2);
     expect(pair).toEqual(["ml", "ta"]);
+  });
+
+  it("ends a held reply with the try-again line and phone numbers when the model never finishes", async () => {
+    const hung = () => ({
+      [Symbol.asyncIterator](): AsyncIterator<{ type: string; text?: string }> {
+        let sent = false;
+        return {
+          next(): Promise<IteratorResult<{ type: string; text?: string }>> {
+            if (!sent) {
+              sent = true;
+              return Promise.resolve({
+                done: false,
+                value: { type: "text-delta", text: "Please book a whitening appointment at the clinic today for your tooth." },
+              });
+            }
+            return new Promise(() => undefined);
+          },
+          return: () => Promise.resolve({ done: true as const, value: undefined }),
+        };
+      },
+    });
+    const stream = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 30_000,
+      deadlineMs: 250,
+      fallbackText: "আবার চেষ্টা করুন\nDapto Dentists: 02 4288 0737",
+      run: hung,
+    });
+    const text = await readText(stream);
+    expect(text).toContain("আবার চেষ্টা করুন");
+    expect(text).toContain("02 4288 0737");
+  });
+
+  it("treats Georgian letters as a foreign script in a Malayalam reply", () => {
+    const reply = "Woonona Dentists-ის വിലാസം";
+    expect(foreignScriptCount(reply, "ml")).toBeGreaterThan(0);
+    expect(replyScriptGate(reply, "ml", true)).toBe("conflict");
+    const cleaned = sanitizeForeignScript(reply, "ml");
+    expect(cleaned).not.toMatch(/\p{Script=Georgian}/u);
+    expect(cleaned).toContain("വിലാസം");
+    expect(cleaned).toContain("Woonona Dentists");
+  });
+
+  it("does not leave a full stop between a phone number and the rest of the sentence", () => {
+    expect(stripInteriorContactStop("Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737.ആണ്.")).toBe(
+      "Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737 ആണ്.",
+    );
+    expect(stripInteriorContactStop("The phone number is 02 4288 0737.")).toBe("The phone number is 02 4288 0737.");
+    expect(stripInteriorContactStop("Call 02 4288 0737. Then visit.")).toBe("Call 02 4288 0737. Then visit.");
+    expect(dedupeSentenceFinal("El teléfono es 02 4216 9911. Luego llama.")).toBe("El teléfono es 02 4216 9911. Luego llama.");
+  });
+
+  it("hides a wrong-script picker transcript until it is rewritten, and logs before and after", async () => {
+    const tamil = "நீங்கள் பல் வெளுப்பிக்கல் சிகிச்சை செய்யாருந்தோ?";
+    const hours = "டாப்டோக் இனிக்கி சனியார்ச்சையே பொல்துறக்கும்.";
+    const cyrillic = "Dapto клиникасынен арчаепол туракум.";
+    expect(shouldHoldLiveTranscript(tamil, "ml")).toBe(true);
+    expect(shouldHoldLiveTranscript(hours, "ml")).toBe(true);
+    expect(shouldHoldLiveTranscript(cyrillic, "ml")).toBe(true);
+    const logs: { before: string; after: string }[] = [];
+    const after = await rewriteTranscriptScript({
+      text: cyrillic,
+      language: "ml",
+      generate: async () => "Dapto ക്ലിനിക്ക് ശനിയാഴ്ച എപ്പോൾ തുറക്കും?",
+      log: (entry) => logs.push(entry),
+    });
+    expect(logs[0]).toMatchObject({ event: "scriptRewrite", before: cyrillic });
+    expect(after).toContain("ശനിയാഴ്ച");
+    expect(logs[0]?.after).toContain("ശനിയാഴ്ച");
+    const turn = prepareTurn([{ role: "user", content: after }], "ml", index, { inputMode: "voice", spokenLanguage: "ml" });
+    expect(turn.text).toContain("ശനിയാഴ്ച");
+    expect(turn.text).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(turn.focus).toEqual({ kind: "one", clinic: "dapto" });
+  });
+
+  it("counts Tamil spellings of Malayalam questions as Malayalam", () => {
+    const samples = [
+      "நீங்கள் பல் வெளுப்பிக்கல் சிகிச்சை செய்யாருந்தோ?",
+      "செய்யாருண்டோ",
+      "செய்யாறுண்டோ",
+      "டாப்டோக் இனிக்கி சனியார்ச்சையே பொல்துறக்கும்.",
+      "சனியாய்ச்ச எப்போல் துறக்கும்",
+      "எப்போள்",
+      "எனிக்கு",
+      "வெளுப்பிக்கில்",
+    ];
+    for (const sample of samples) expect(malayalamMarkersWin(sample), sample).toBe(true);
+  });
+
+  it("keeps the longest non-empty transcript when every pass would otherwise be empty", () => {
+    expect(longestNonEmptyTranscript("", null, "டாப்டோ", "டாப்டோ கிளினிக்கின் தொலைபேசி")).toBe("டாப்டோ கிளினிக்கின் தொலைபேசி");
+    expect(longestNonEmptyTranscript("", "  ", null)).toBe("");
   });
 });

@@ -8,11 +8,15 @@ const ML_LATIN =
   /\b(?:klinikinde|vilasem|vilasam|endan|endal|ethra|entha|entaan|entān|entāṇ|kittumo|pattumo|inde)\b/gi;
 const TA_LATIN = /\b(?:venum|enna|evvalavu|eppo|oda)\b/gi;
 
-/** Malayalam words, including the ones Deepgram spells with Tamil letters. */
-const ML_SCRIPT = /ഉണ്ട്|എന്താണ്|ആണോ|ഇന്ന്|പറ്റുമോ|കിട്ടുമോ|എത്ര|உண்டு|கிட்டுமോ|க்கிட்டு|எத்ர/g;
+/**
+ * Malayalam words, including the ones Deepgram spells with Tamil letters.
+ * உண்டோ covers ചെയ്യാറുണ്ടോ written as செய்யாருண்டோ or செய்யாறுண்டோ.
+ */
+const ML_SCRIPT =
+  /ഉണ്ട്|എന്താണ്|ആണോ|ഇന്ന്|പറ്റുമോ|കിട്ടുമോ|എത്ര|உண்டு|உண்டோ|றுண்டோ|ருந்தோ|கிட்டுமோ|க்கிட்டு|எத்ர|செய்யாருண்டோ|செய்யாறுண்டோ|செய்யாருந்தோ|வெளுப்பிக்கல்|வெளுப்பிக்கில்|சனியாய்ச்ச|சனியார்ச்ச|எப்போல்|எப்போள்|துறக்கும்|இனிக்கி|எனிக்கு/g;
 /** "ഇന്ന്" written as இன்ன, but not the Tamil இன்னைக்கு. */
 const ML_INNA = /(^|[^\u0B80-\u0BFF])இன்ன(?!ை)/g;
-const TA_SCRIPT = /என்ன|இருக்கா|வேணும்|எப்போ|உடைய|கிடைக்குமா|எப்படி/g;
+const TA_SCRIPT = /என்ன|இருக்கா|வேணும்|எப்போ(?![ல்ள])|உடைய|கிடைக்குமா|எப்படி/g;
 
 function hits(text: string, re: RegExp): number {
   return text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))?.length ?? 0;

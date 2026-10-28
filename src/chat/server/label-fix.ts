@@ -51,13 +51,26 @@ export function dedupePhoneLines(text: string): string {
   return dedupeSentenceFinal(kept.join("\n"));
 }
 
+/**
+ * A full stop glued after a phone number or URL is sentence punctuation only
+ * at the end. "02 4288 0737.ആണ്" and the same shape in every other script lose the dot.
+ * "02 4288 0737. The clinic" keeps it.
+ */
+export function stripInteriorContactStop(text: string): string {
+  return text
+    .replace(/(\d)\.(?=\s*[^\sA-Za-z0-9])/gu, "$1 ")
+    .replace(/(https?:\/\/[^\s]*[A-Za-z0-9/])\.(?=\s*[^\sA-Za-z0-9\s])/gu, "$1 ");
+}
+
 /** Repeated sentence-final particles and dandas, including है।है। glued across chunks. */
 export function dedupeSentenceFinal(text: string): string {
-  return text
-    .replace(/(?:है।\s*){2,}/g, "है।")
-    .replace(/(?:हैं।\s*){2,}/g, "हैं।")
-    .replace(/।{2,}/g, "।")
-    .replace(/(?<!\d)\.{2,}(?!\d)/g, ".");
+  return stripInteriorContactStop(
+    text
+      .replace(/(?:है।\s*){2,}/g, "है।")
+      .replace(/(?:हैं।\s*){2,}/g, "हैं।")
+      .replace(/।{2,}/g, "।")
+      .replace(/(?<!\d)\.{2,}(?!\d)/g, "."),
+  );
 }
 
 /** An English reply that still contains another script becomes the English phone sentence. */
@@ -248,12 +261,19 @@ export function attachContactLabels<T extends LabelChunk>(
   let lineHold = "";
   let sealed = false;
   let particleHold = "";
+  let stopHold = "";
   const seenPhones = new Set<string>();
 
   const settleParticles = (delta: string, final = false): string => {
-    const cleaned = dedupeSentenceFinal(particleHold + delta);
+    const cleaned = dedupeSentenceFinal(stopHold + particleHold + delta);
     particleHold = "";
+    stopHold = "";
     if (final || !cleaned) return cleaned;
+    const stop = cleaned.match(/\d\.$/);
+    if (stop) {
+      stopHold = ".";
+      return cleaned.slice(0, -1);
+    }
     const match = cleaned.match(/(?:है।|हैं।|।)$/);
     if (!match) return cleaned;
     particleHold = match[0];
