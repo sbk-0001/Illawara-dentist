@@ -5,7 +5,8 @@ import { getKnowledgeIndex } from "../server/index-store";
 import { applyGlossary } from "../server/glossary";
 import { dedupePhoneLines, scrubForeignEnglish } from "../server/label-fix";
 import { rewriteEnglishHours } from "../server/hours";
-import { languageFromNativeScript, malayalamMishear, speechEngineFor } from "../stt";
+import { chooseCheckedTranscript, finishedMicLanguage, languageFromNativeScript, malayalamMishear, needsOpenTranscribe, speechEngineFor, spokenLanguageForTranscript, transcriptTooShort } from "../stt";
+import { confidentIndonesian } from "../language/detect";
 
 const index = getKnowledgeIndex();
 const cases = JSON.parse(readFileSync(new URL("./typed-cases.json", import.meta.url), "utf8")) as { id: string; lang: string; q: string }[];
@@ -55,6 +56,34 @@ describe("live typed cases", () => {
   it("drops a glued Hindi copula and replaces an English reply that still has Bengali", () => {
     expect(dedupePhoneLines("Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।है।")).toBe("Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।");
     expect(scrubForeignEnglish("Woonona Dentists ফোন: 02 4284 4486।")).toBe("The phone number for Woonona Dentists is 02 4284 4486.");
+  });
+
+  it("shows Bangla after one finished Bengali utterance and checks Tamil with an open transcription", () => {
+    expect(finishedMicLanguage("আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?")).toBe("bn");
+    expect(needsOpenTranscribe("வூனோனா கிளினிக்கின் முகவரி என்ன?")).toBe(true);
+    expect(needsOpenTranscribe("What time does the Dapto clinic open on Saturday?")).toBe(false);
+    expect(needsOpenTranscribe("¿A qué hora abre la clínica de Dapto el sábado?")).toBe(false);
+    expect(needsOpenTranscribe("apakah dokter gigi di Dapto buka?")).toBe(false);
+    expect(confidentIndonesian("apakah dokter gigi di Dapto buka?")).toBe(true);
+    expect(spokenLanguageForTranscript("id", "Woonona kliniker chikana")).not.toBe("id");
+    expect(needsOpenTranscribe("Woonona kliniker chikana")).toBe(true);
+    const tamil = "வூனோனா கிளினிக்";
+    const malayalam = "വൂണോണ ക്ലിനിക്ക് എവിടെയാണ്";
+    expect(chooseCheckedTranscript(tamil, malayalam)).toBe(malayalam);
+    expect(chooseCheckedTranscript(tamil, tamil)).toBe(tamil);
+    expect(chooseCheckedTranscript(tamil, null)).toBe("");
+    expect(transcriptTooShort("")).toBe(true);
+    expect(transcriptTooShort("What time does the Dapto clinic open?")).toBe(false);
+    const forced = prepareTurn([{ role: "user", content: "What time does the Dapto clinic open on Saturday?" }], "ml", index, {
+      inputMode: "voice",
+      spokenLanguage: "en",
+    });
+    expect(forced.reply.code).toBe("ml");
+    const indonesian = prepareTurn([{ role: "user", content: "Woonona kliniker chikana" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "id",
+    });
+    expect(indonesian.reply.code).not.toBe("id");
   });
 
   it("sends Telugu and Kannada script to the Malayalam transcriber", () => {

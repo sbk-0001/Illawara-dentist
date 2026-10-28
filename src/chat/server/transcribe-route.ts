@@ -1,4 +1,4 @@
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
 import { TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, repairNativeTranscript } from "./transcript-repair";
 
@@ -56,28 +56,48 @@ export async function POST(request: Request): Promise<Response> {
   const hint = typeof form.get("languageHint") === "string" ? String(form.get("languageHint")) : "";
   const hints = deepgramLanguageHints(hint);
   const requestedRepair = normalizeSpokenLanguage(typeof form.get("repairLanguage") === "string" ? String(form.get("repairLanguage")) : "");
-  const garbled = form.get("garbled") === "1" || form.get("direct") === "1" || form.get("repairOnly") === "1";
+  const direct = form.get("direct") === "1";
+  const liveTranscript = typeof form.get("liveTranscript") === "string" ? String(form.get("liveTranscript")) : "";
+  const garbled = form.get("garbled") === "1" || direct || form.get("repairOnly") === "1";
   const bytes = await audio.arrayBuffer();
   if (garbled) {
     if (!process.env.AI_GATEWAY_API_KEY) {
       logTranscribe({ outcome: "error", error: "repair_unconfigured", ...(liveDrop ? { liveDrop } : {}) });
       return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 503 }));
     }
-    const model = repairModelFor(requestedRepair, "");
-    const next = await repairNativeTranscript({
+    const unconstrained = direct && !requestedRepair;
+    const model = direct ? TRANSCRIPT_FULL_MODEL : repairModelFor(requestedRepair, liveTranscript);
+    const started = Date.now();
+    let next = await repairNativeTranscript({
       audio: new Uint8Array(bytes),
       ...(requestedRepair ? { language: requestedRepair } : {}),
       model,
+      acceptAny: unconstrained,
       timeoutMs: model === TRANSCRIPT_FULL_MODEL ? TRANSCRIPT_FULL_TIMEOUT_MS : undefined,
     });
-    if (!next) {
-      logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, ...(liveDrop ? { liveDrop } : {}) });
-      return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 502 }));
+    let repairMs = Date.now() - started;
+    let retried = false;
+    if (requestedRepair && transcriptTooShort(next)) {
+      const retryStarted = Date.now();
+      const again = await repairNativeTranscript({
+        audio: new Uint8Array(bytes),
+        model: TRANSCRIPT_FULL_MODEL,
+        acceptAny: true,
+        timeoutMs: TRANSCRIPT_FULL_TIMEOUT_MS,
+      });
+      repairMs += Date.now() - retryStarted;
+      retried = true;
+      if (again && !transcriptTooShort(again)) next = again;
     }
-    const transcript = correctTranscript(next);
+    const checked = direct ? chooseCheckedTranscript(liveTranscript, next) : next || "";
+    if (!checked) {
+      logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs, retried, ...(liveDrop ? { liveDrop } : {}) });
+      return withCors(request, Response.json({ error: "Could not transcribe that.", repairMs }, { status: 502 }));
+    }
+    const transcript = correctTranscript(checked);
     const detected = spokenLanguageAfterSecondPass(transcript, hint);
-    logTranscribe({ outcome: "ok", language: detected, repaired: true, repairLanguage: requestedRepair, ...(liveDrop ? { liveDrop } : {}) });
-    return withCors(request, Response.json({ transcript, language: detected }));
+    logTranscribe({ outcome: "ok", language: detected, repaired: true, repairLanguage: requestedRepair || null, repairMs, retried, model, ...(liveDrop ? { liveDrop } : {}) });
+    return withCors(request, Response.json({ transcript, language: detected, repairMs }));
   }
   let upstream: Response;
   try {

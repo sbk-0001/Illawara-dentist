@@ -30,6 +30,8 @@ export async function repairNativeTranscript(input: {
   language?: string;
   model?: string;
   timeoutMs?: number;
+  /** Unconstrained pass: keep English or any other script the model returns. */
+  acceptAny?: boolean;
   transcribe?: RepairCall;
 }): Promise<string | null> {
   const language = normalizeSpokenLanguage(input.language);
@@ -50,6 +52,7 @@ export async function repairNativeTranscript(input: {
       if (!hasNativeScript(language, text) && !languageFromNativeScript(text)) return null;
       return text;
     }
+    if (input.acceptAny) return /\p{L}/u.test(text) ? text : null;
     if (!languageFromNativeScript(text)) return null;
     return text;
   } catch {

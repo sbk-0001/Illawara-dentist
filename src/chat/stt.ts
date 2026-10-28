@@ -1,6 +1,6 @@
 import { mentionedClinics } from "./intent";
 import { languageOption } from "./language/catalog";
-import { detectLanguage, isDictionaryEnglish } from "./language/detect";
+import { confidentIndonesian, confidentLatinLanguage, detectLanguage, isDictionaryEnglish } from "./language/detect";
 
 /**
  * Deepgram Nova-3 keyterm prompting.
@@ -340,8 +340,59 @@ export function spokenLanguageForTranscript(
   const picked = normalizeSpokenLanguage(picker);
   if (picked) return picked;
   const fromScript = languageFromNativeScript(text);
+  if (fromScript === "ml" || fromScript === "bn" || fromScript === "hi" || fromScript === "ta" || fromScript === "ar" || fromScript === "zh") return fromScript;
   if (fromScript) return fromScript;
-  return normalizeSpokenLanguage(heard);
+  const heardCode = normalizeSpokenLanguage(heard);
+  if (heardCode === "id" && !confidentIndonesian(text)) {
+    const latin = confidentLatinLanguage(text);
+    return latin === "id" ? null : latin;
+  }
+  return heardCode;
+}
+
+/** A forced-language transcript that did not capture the words. */
+export function transcriptTooShort(text: string | null | undefined): boolean {
+  const value = (text || "").trim();
+  if (!value) return true;
+  const words = value.split(/\s+/).filter(Boolean);
+  const letters = value.match(/\p{L}/gu)?.length ?? 0;
+  return letters < 8 || words.length < 2;
+}
+
+/**
+ * Auto only. Tamil, Telugu, or Kannada from Deepgram, or Latin that is not
+ * clearly English, Spanish, or Indonesian, needs gpt-4o-transcribe with no
+ * language parameter. That pass is what separates Malayalam from Tamil.
+ */
+export function needsOpenTranscribe(text: string, picker?: string | null): boolean {
+  if (normalizeSpokenLanguage(picker)) return false;
+  const value = text.trim();
+  if (!value) return false;
+  if (malayalamMishear(value)) return true;
+  const script = languageFromNativeScript(value);
+  if (script === "ta") return true;
+  if (script === "ml" || script === "bn" || script === "hi" || script === "ar" || script === "zh") return false;
+  if (script) return false;
+  return confidentLatinLanguage(value) === null;
+}
+
+/** Prefer the open transcription. Keep Deepgram's Tamil only when that pass also returns Tamil. */
+export function chooseCheckedTranscript(deepgram: string, open: string | null): string {
+  const deepgramScript = languageFromNativeScript(deepgram);
+  if (!open) {
+    if (deepgramScript === "ta" || malayalamMishear(deepgram)) return "";
+    return deepgram;
+  }
+  const openScript = languageFromNativeScript(open);
+  if (deepgramScript === "ta" && openScript !== "ta") return open;
+  return open;
+}
+
+/** Language of a finished utterance. One final is enough; the note does not wait for a second one. */
+export function finishedMicLanguage(text: string, picker?: string | null): string {
+  const picked = normalizeSpokenLanguage(picker);
+  if (picked && picked !== "en" && picked !== "te") return picked;
+  return scriptNoteLanguage(text) || languageFromNativeScript(text) || "";
 }
 
 /** Language for the gpt-4o-mini-transcribe pass. A Bengali hint wins over a Hindi tag. */
@@ -409,6 +460,7 @@ export function speechEngineFor(input: { picker?: string | null; transcript?: st
   if (picked === "ml") return "gpt-4o-transcribe";
   const text = input.transcript || "";
   if (!text) return "deepgram";
+  if (needsOpenTranscribe(text, picked)) return "gpt-4o-transcribe";
   if (malayalamMishear(text) || languageFromNativeScript(text) === "ml") return "gpt-4o-transcribe";
   const detected = detectLanguage(text).code;
   if (detected === "ml" || detected === "ml-Latn") return "gpt-4o-transcribe";

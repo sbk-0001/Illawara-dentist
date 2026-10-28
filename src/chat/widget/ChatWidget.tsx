@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, malayalamMishear, micListeningNote, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, finishedMicLanguage, formatLiveDrop, majoritySpokenLanguage, malayalamMishear, micListeningNote, needsOpenTranscribe, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -193,7 +193,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
 
   useEffect(() => () => releaseMic(), []);
 
-  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { repairLanguage?: string; garbled?: boolean; direct?: boolean }): Promise<boolean> {
+  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { repairLanguage?: string; garbled?: boolean; direct?: boolean; liveTranscript?: string }): Promise<boolean> {
     const generation = draftGeneration.current;
     setMic("transcribing");
     setMicNote("Transcribing…");
@@ -215,6 +215,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       if (repair?.repairLanguage) body.set("repairLanguage", repair.repairLanguage);
       if (repair?.garbled) body.set("garbled", "1");
       if (repair?.direct) body.set("direct", "1");
+      if (repair?.liveTranscript) body.set("liveTranscript", repair.liveTranscript);
       body.set("repairOnly", "1");
       if (liveDrop) body.set("liveDrop", liveDrop);
       const response = await fetch("/api/chat/transcribe", { method: "POST", body });
@@ -276,16 +277,19 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         voiceRequest.current = null;
         setInput("");
       }
-      const direct = speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
+      const open = needsOpenTranscribe(finals, pickerLanguage());
+      const direct = open || speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
+      if (finals && !open) setMicNote(noteFor(finishedMicLanguage(finals, pickerLanguage())));
       const needsRepair = garbled || direct || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
       if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled || direct ? "" : finals, socketOpened: hadSocket, needsRepair })) {
         const uploaded = await uploadFallback(blob, liveDrop, {
-          repairLanguage: repairLanguage || (malayalamMishear(finals) ? "ml" : ""),
+          repairLanguage: open ? "" : repairLanguage,
           garbled,
-          direct: direct || malayalamMishear(finals),
+          direct,
+          liveTranscript: finals,
         });
         if (uploaded) return;
-        if (finals && !malayalamMishear(finals)) {
+        if (finals && !open) {
           bindVoice(finals, spokenLanguage || utteranceLanguage(finals, { final: true, picker: pickerLanguage() }));
           setMic("idle");
           return;
@@ -410,7 +414,9 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           const code = noteCode === "te" ? "" : noteCode;
           if (code && code === session.current.noteStreak.code) session.current.noteStreak.count += 1;
           else session.current.noteStreak = { code, count: code ? 1 : 0 };
-          const shown = pickerLanguage() || (session.current.noteStreak.count >= 2 ? code : "");
+          const open = needsOpenTranscribe(best, pickerLanguage());
+          const shown = pickerLanguage()
+            || (open ? "" : settled ? finishedMicLanguage(best) : session.current.noteStreak.count >= 2 ? code : "");
           session.current.interimLanguage = shown;
           setMicNote(noteFor(shown));
           if (payload.is_final || payload.speech_final) {

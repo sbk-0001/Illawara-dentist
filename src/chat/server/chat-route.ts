@@ -9,7 +9,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { addressFocus } from "./address";
-import { hasLetters, detectLanguage, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
+import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
 import { languageFromNativeScript, normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
@@ -167,9 +167,11 @@ export function prepareTurn(
   if (inputMode === "voice" && !pickerLocked) {
     const scriptCode = languageFromNativeScript(text);
     if (scriptCode) spokenLanguage = scriptCode;
+    else if (textDetection.code === "id" && !confidentIndonesian(text)) spokenLanguage = null;
     else if (textDetection.code !== "und" && !textDetection.fallback) {
       spokenLanguage = romanToNative[textDetection.code] || textDetection.code;
     }
+    if (spokenLanguage === "id" && !confidentIndonesian(text)) spokenLanguage = null;
   }
   // A picker locks the reply. Auto voice uses this utterance's script or its own
   // spoken language. An earlier turn may break a typed Banglish/Hinglish tie only.
@@ -193,9 +195,14 @@ export function prepareTurn(
   }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
   let langOverride = false;
+  if (!pickerLocked && (reply.code === "id" || spokenLanguage === "id") && !confidentIndonesian(text)) {
+    const englishReply = languageOption("en");
+    if (textDetection.code === "es" && languageOption("es")) reply = replyFromOption(languageOption("es")!, "detected", false);
+    else if (englishReply && !languageFromNativeScript(text)) reply = replyFromOption(englishReply, "detected", false);
+  }
   if (inputMode === "voice" && !pickerLocked) {
     const scriptCode = languageFromNativeScript(text);
-    const voiced = scriptCode || (spokenLanguage && spokenLanguage !== "en" && softText ? spokenLanguage : null);
+    const voiced = scriptCode || (spokenLanguage && spokenLanguage !== "en" && spokenLanguage !== "id" && softText ? spokenLanguage : null);
     const option = voiced ? languageOption(voiced) : undefined;
     if (option) {
       const forced = { ...replyFromOption(option, "detected" as const, false), confidence: "high" as const };

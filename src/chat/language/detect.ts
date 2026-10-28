@@ -285,6 +285,24 @@ export function romanisedIndic(text: string): "bn-Latn" | "hi-Latn" | null {
   return null;
 }
 
+const CLINIC_WORD = /\b(?:dapto|woonona|shellharbour|illawarra|gigi|klinik|dokter|clinic|dentist|dentists)\b/i;
+
+/** Indonesian only when the words say so and a clinic word is present. A Deepgram `id` tag is not enough. */
+export function confidentIndonesian(text: string): boolean {
+  const detected = detectLanguage(text);
+  if (detected.code !== "id" || detected.fallback || detected.confidence !== "high") return false;
+  return CLINIC_WORD.test(text);
+}
+
+/** Latin that is clearly English, Spanish, or Indonesian-with-a-clinic-word. */
+export function confidentLatinLanguage(text: string): "en" | "es" | "id" | null {
+  const detected = detectLanguage(text);
+  if (detected.fallback || detected.confidence !== "high") return null;
+  if (detected.code === "en" || detected.code === "es") return detected.code;
+  if (detected.code === "id" && CLINIC_WORD.test(text)) return "id";
+  return null;
+}
+
 export function resolveReplyLanguage(text: string, picker: string | null | undefined): Detection {
   const selected = (picker || "auto").trim();
   if (selected && selected !== "auto") {
