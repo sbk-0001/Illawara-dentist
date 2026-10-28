@@ -169,6 +169,12 @@ export function deepgramListenQuery(options?: { interim?: boolean; endpointing?:
   return params.toString();
 }
 
+/**
+ * Nova-3 here is the multilingual model, so the socket stays `language=multi`.
+ * Auto passes no preferred language: English hint and Latin clinic keyterms only.
+ * A picked language adds that `language_hint` and its native keyterms.
+ * A previous turn is never a preferred language.
+ */
 export function deepgramListenUrl(kind: "stream" | "prerecorded", preferredLanguage?: string | null): string {
   const hints = deepgramLanguageHints(preferredLanguage);
   const query = kind === "stream" ? deepgramListenQuery({ interim: true, endpointing: true, hints }) : deepgramListenQuery({ hints });
@@ -308,27 +314,21 @@ export function mixedIndicScripts(text: string): boolean {
 }
 
 /**
- * Do not keep an English or Indonesian Deepgram tag once the transcript contains
- * Bengali, Devanagari, Arabic, Han, or another non-Latin script.
- * Mixed Devanagari and Bengali, or a Bengali session hint, does not settle on Hindi.
+ * Language of this transcript only. A picker wins. Otherwise the script in the
+ * text wins, including Hindi after a Bengali turn. `hint` is ignored: Auto
+ * must not inherit the previous turn.
  */
 export function spokenLanguageForTranscript(
   heard: string | null | undefined,
   text: string,
-  hint?: string | null,
+  _hint?: string | null,
   picker?: string | null,
 ): string | null {
   const picked = normalizeSpokenLanguage(picker);
   if (picked) return picked;
-  const normalized = normalizeSpokenLanguage(heard);
-  const hinted = normalizeSpokenLanguage(hint);
   const fromScript = languageFromNativeScript(text);
-  if (mixedIndicScripts(text) || (hinted === "bn" && (normalized === "hi" || fromScript === "hi"))) return "bn";
-  if (!fromScript) return normalized;
-  if (!normalized || normalized === "en" || normalized === "id") return fromScript;
-  if (scriptFamily(normalized) === scriptFamily(fromScript)) return normalized;
-  if (!requiresNativeScript(normalized)) return fromScript;
-  return fromScript;
+  if (fromScript) return fromScript;
+  return normalizeSpokenLanguage(heard);
 }
 
 /** Language for the gpt-4o-mini-transcribe pass. A Bengali hint wins over a Hindi tag. */
@@ -355,25 +355,33 @@ export function spokenLanguageAtSubmit(input: {
   return spokenLanguageForTranscript(heard, input.text, input.hint) || languageFromNativeScript(input.text) || heard;
 }
 
-/**
- * After the second pass, pure Hindi can stand when this turn was not hinted as Bengali.
- * A bn hint does not settle on hi.
- */
-/** Language after the gpt-4o-mini-transcribe pass. Any Bengali interim forces Bangla. */
-export function spokenLanguageAfterSecondPass(text: string, sawBengali: boolean): string {
-  if (sawBengali) return "bn";
-  const bengali = text.match(/[\u0980-\u09FF]/g)?.length ?? 0;
-  const letters = text.match(/\p{L}/gu)?.length ?? 0;
-  if (bengali >= 6 && letters > 0 && bengali / letters >= 0.5) return "bn";
+/** Language after the second pass. The repaired text's script decides. A picker still wins. */
+export function spokenLanguageAfterSecondPass(text: string, picker?: string | null): string {
+  const picked = normalizeSpokenLanguage(picker);
+  if (picked) return picked;
   return languageFromNativeScript(text) || "";
 }
 
 export function languageAfterRepair(requested: string | null | undefined, repaired: string, hint?: string | null): string | null {
-  const hinted = normalizeSpokenLanguage(hint);
   const script = languageFromNativeScript(repaired);
-  if (hinted === "bn") return "bn";
-  if (script === "hi" && !mixedIndicScripts(repaired)) return "hi";
-  return spokenLanguageForTranscript(requested, repaired, hint) || script;
+  if (script) return script;
+  return spokenLanguageForTranscript(requested, repaired, hint) || null;
+}
+
+/**
+ * Language for gpt-4o-mini-transcribe. A picker is always sent. On Auto, send a
+ * language only when this utterance's own text is at least 80% one native script.
+ * A previous turn is not an input.
+ */
+export function secondPassLanguage(transcript: string, picker?: string | null): string | null {
+  const picked = normalizeSpokenLanguage(picker);
+  if (picked && picked !== "en") return picked;
+  return scriptNoteLanguage(transcript) || null;
+}
+
+/** Deepgram language for this utterance. Auto is null: multi, Latin keyterms, no history. */
+export function utteranceSpeechLanguage(picker?: string | null): string | null {
+  return normalizeSpokenLanguage(picker);
 }
 
 function numericConfidence(value: unknown): number | undefined {
@@ -455,12 +463,6 @@ export function bengaliTranscriptGarbled(text: string): boolean {
   if (families >= 2) return true;
   if (bengali > 0 && (devanagari > 0 || latinWords.length > 0)) return true;
   return ROMAN_BENGALI.test(trimmed);
-}
-
-/** Last user message only. Auto does not inherit the assistant's language. */
-export function priorUserSpeechHint(text: string): "bn" | "hi" | null {
-  const code = utteranceLanguage(text, { final: true });
-  return code === "bn" || code === "hi" ? code : null;
 }
 
 /**

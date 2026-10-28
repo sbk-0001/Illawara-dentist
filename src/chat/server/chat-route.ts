@@ -10,7 +10,7 @@ import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { addressFocus } from "./address";
 import { hasLetters, detectLanguage, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
-import { normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
+import { languageFromNativeScript, normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
 import { searchIndex, sourcesFromChunks } from "../retrieval/search";
@@ -153,12 +153,18 @@ export function prepareTurn(
   let reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
-  const spokenLanguage = inputMode === "voice"
-    ? spokenLanguageForTranscript(voice?.spokenLanguage, text, priorReplyLanguage(messages), pickerLocked ? language : null)
+  let spokenLanguage = inputMode === "voice"
+    ? spokenLanguageForTranscript(voice?.spokenLanguage, text, null, pickerLocked ? language : null)
     : null;
-  // Reply language comes only from this request: the latest text, an explicit picker,
-  // a voice language on this turn, or an earlier turn in the same message list.
-  // Nothing here is cached between requests.
+  if (inputMode === "voice" && !pickerLocked) {
+    const scriptCode = languageFromNativeScript(text);
+    if (scriptCode) spokenLanguage = scriptCode;
+    else if (textDetection.code !== "und" && !textDetection.fallback) {
+      spokenLanguage = textDetection.code === "bn-Latn" ? "bn" : textDetection.code === "hi-Latn" ? "hi" : textDetection.code;
+    }
+  }
+  // A picker locks the reply. Auto voice uses this utterance's script or its own
+  // spoken language. An earlier turn may break a typed Banglish/Hinglish tie only.
   const english = languageOption("en");
   if (!pickerLocked && inputMode !== "voice" && english && isDictionaryEnglish(text)) {
     reply = replyFromOption(english, "detected", false);
@@ -178,10 +184,11 @@ export function prepareTurn(
     if (native) reply = replyFromOption(native, "detected", false);
   }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";
-  const hindiOnBengali = spokenLanguage === "bn" && (reply.code === "hi" || reply.code === "hi-Latn");
   let langOverride = false;
-  if (inputMode === "voice" && spokenLanguage && spokenLanguage !== "en" && !pickerLocked && (softText || hindiOnBengali)) {
-    const option = languageOption(spokenLanguage);
+  if (inputMode === "voice" && !pickerLocked) {
+    const scriptCode = languageFromNativeScript(text);
+    const voiced = scriptCode || (spokenLanguage && spokenLanguage !== "en" && softText ? spokenLanguage : null);
+    const option = voiced ? languageOption(voiced) : undefined;
     if (option) {
       const forced = { ...replyFromOption(option, "detected" as const, false), confidence: "high" as const };
       langOverride = forced.code !== reply.code;

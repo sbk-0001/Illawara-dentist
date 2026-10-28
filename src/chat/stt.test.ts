@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, priorUserSpeechHint, spokenLanguageAfterSecondPass, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, secondPassLanguage, spokenLanguageAfterSecondPass, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -77,9 +77,10 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(spokenLanguageForTranscript("hi", "डाप्टो क्लिनिक कब खुलेगा?")).toBe("hi");
     expect(spokenLanguageForTranscript("hi", "डाप्टো ক্লিনিকের ঠিকানা absentment", "bn")).toBe("bn");
     expect(spokenLanguageForTranscript("hi", "डाप्टो ক্লিনিকের চিকানা")).toBe("bn");
-    expect(spokenLanguageForTranscript("hi", "डाप्टो क्लिनिक कब खुलेगा?", "bn")).toBe("bn");
+    expect(spokenLanguageForTranscript("hi", "डाप्टो क्लिनिक कब खुलेगा?", "bn")).toBe("hi");
+    expect(spokenLanguageForTranscript("bn", "मेरे दांत में दर्द है", "bn")).toBe("hi");
     expect(transcriptNeedsRepair("hi", "डाप्टো ক্লিনিকের ঠিকানা absentment", "bn")).toBe(true);
-    expect(languageAfterRepair("bn", "डाप्टो क्लिनिक कब खुलेगा?", "bn")).toBe("bn");
+    expect(languageAfterRepair("bn", "डाप्टो क्लिनिक कब खुलेगा?", "bn")).toBe("hi");
     expect(languageAfterRepair("bn", "डाप्टो क्लिनिक कब खुलेगा?")).toBe("hi");
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "hi" }, { language: "hi" }] }, "\u0921\u093e\u092a\u094d\u091f\u094b \u0915\u094d\u0932\u093f\u0928\u093f\u0915")).toBe("hi");
     expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto?")).toBe("");
@@ -160,26 +161,36 @@ describe("Deepgram Nova-3 keyterms", () => {
   });
 
   it("sends a Bengali hint only after a Bengali user turn, and catches a garbled final", () => {
-    const address = "উনোনা ক্লিনিকের ঠিকানা কি";
-    expect(priorUserSpeechHint(address)).toBe("bn");
-    expect(priorUserSpeechHint("मेरे दांत में दर्द है")).toBe("hi");
-    expect(priorUserSpeechHint("Woonona phone?")).toBeNull();
-    const hinted = new URL(deepgramListenUrl("stream", priorUserSpeechHint(address)).replace(/^wss:/, "https:")).searchParams;
-    expect(hinted.getAll("language_hint")).toEqual(["bn", "en"]);
-    expect(hinted.getAll("keyterm")).toContain("ঠিকানা");
-    expect(deepgramListenUrl("stream")).not.toMatch(/[\u0980-\u09FF]/);
+    expect(utteranceSpeechLanguage(null)).toBeNull();
+    expect(utteranceSpeechLanguage("auto")).toBeNull();
+    const autoUrl = deepgramListenUrl("stream", utteranceSpeechLanguage(null));
+    expect(autoUrl).not.toMatch(/[\u0980-\u09FF\u0900-\u097F]/);
+    expect(new URL(autoUrl.replace(/^wss:/, "https:")).searchParams.getAll("language_hint")).toEqual(["en"]);
+    const picked = new URL(deepgramListenUrl("stream", utteranceSpeechLanguage("bn")).replace(/^wss:/, "https:")).searchParams;
+    expect(picked.get("language")).toBe("multi");
+    expect(picked.getAll("language_hint")).toEqual(["bn", "en"]);
+    expect(picked.getAll("keyterm")).toContain("ঠিকানা");
 
     const court = "दाते बैठा court से आज की क्या absentment পাওয়া যাবে?";
     const woonona = "Woonona kliniker চkanaki.";
+    const cleanBengali = "আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?";
+    const cleanHindi = "मेरे दांत में दर्द है आज अपॉइंटमेंट मिलेगा";
     expect(bengaliTranscriptGarbled(court)).toBe(true);
     expect(bengaliTranscriptGarbled(woonona)).toBe(true);
     expect(bengaliTranscriptGarbled("Woonona clinic দাঁত court दात")).toBe(true);
-    expect(bengaliTranscriptGarbled("আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?")).toBe(false);
+    expect(bengaliTranscriptGarbled(cleanBengali)).toBe(false);
     expect(transcriptNeedsRepair("", court)).toBe(true);
     expect(transcriptNeedsRepair("en", woonona)).toBe(true);
-    expect(spokenLanguageAfterSecondPass("উনোনা ক্লিনিকের ঠিকানা কি", false)).toBe("bn");
-    expect(spokenLanguageAfterSecondPass("Woonona clinic", true)).toBe("bn");
+    expect(secondPassLanguage(court)).toBeNull();
+    expect(secondPassLanguage(woonona)).toBeNull();
+    expect(secondPassLanguage(cleanBengali)).toBe("bn");
+    expect(secondPassLanguage(cleanHindi)).toBe("hi");
+    expect(secondPassLanguage(cleanHindi, "bn")).toBe("bn");
+    expect(spokenLanguageAfterSecondPass(cleanBengali)).toBe("bn");
+    expect(spokenLanguageAfterSecondPass(cleanHindi)).toBe("hi");
+    expect(spokenLanguageAfterSecondPass("Woonona clinic")).toBe("");
 
+    const address = "উনোনা ক্লিনিকের ঠিকানা কি";
     expect(utteranceLanguage(address, { heard: "te", final: true })).toBe("bn");
     expect(micListeningNote("te")).toBe("Listening…");
     expect(micListeningNote(utteranceLanguage(address, { heard: "te" }))).toBe("শুনছি · বাংলা");

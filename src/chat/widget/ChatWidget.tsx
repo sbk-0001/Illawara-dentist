@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, priorUserSpeechHint, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, secondPassLanguage, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -23,7 +23,6 @@ function freshMicSession(generation: number) {
     audio: createMicAudioQueue(),
     finals: "",
     longest: "",
-    sawBengali: false,
     utteranceEnded: false,
     endWait: null as (() => void) | null,
     langVotes: [] as string[],
@@ -138,12 +137,9 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     return language !== "auto" ? language : null;
   }
 
-  /**
-   * Picker wins. Otherwise a prior user turn that was Bengali or Hindi sends
-   * that hint. Auto with no such turn stays on Latin keyterms.
-   */
+  /** Picker only. Auto does not send the previous turn to Deepgram. */
   function preferredSpeechLanguage(): string | null {
-    return pickerLanguage() || priorUserSpeechHint(lastUser ? textOf(lastUser) : "");
+    return utteranceSpeechLanguage(pickerLanguage());
   }
 
   function noteFor(code: string): string {
@@ -166,11 +162,11 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     });
   }
 
-  function captureRecording(): Promise<{ blob: Blob; hadSocket: boolean; finals: string; spokenLanguage: string; liveDrop: string; sawBengali: boolean; garbled: boolean }> {
+  function captureRecording(): Promise<{ blob: Blob; hadSocket: boolean; finals: string; spokenLanguage: string; liveDrop: string; repairLanguage: string; garbled: boolean }> {
     const current = session.current;
     const hadSocket = current.socket?.readyState === WebSocket.OPEN;
     const finals = longerTranscript(current.finals, current.longest);
-    const sawBengali = current.sawBengali || /[\u0980-\u09FF]/.test(finals);
+    const repairLanguage = secondPassLanguage(finals, pickerLanguage()) || "";
     const garbled = bengaliTranscriptGarbled(finals);
     const spokenLanguage = garbled ? "" : utteranceLanguage(finals, { final: true, picker: pickerLanguage() });
     const liveDrop = current.liveDrop;
@@ -182,7 +178,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         const blob = new Blob(current.chunks, { type: current.chunks[0]?.type || "audio/webm" });
         current.stream?.getTracks().forEach((track) => track.stop());
         session.current = freshMicSession(draftGeneration.current);
-        resolve({ blob, hadSocket, finals, spokenLanguage, liveDrop, sawBengali, garbled });
+        resolve({ blob, hadSocket, finals, spokenLanguage, liveDrop, repairLanguage, garbled });
       };
       if (!recorder || recorder.state === "inactive") {
         finish();
@@ -196,7 +192,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
 
   useEffect(() => () => releaseMic(), []);
 
-  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { sawBengali?: boolean; garbled?: boolean }): Promise<boolean> {
+  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { repairLanguage?: string; garbled?: boolean }): Promise<boolean> {
     const generation = draftGeneration.current;
     setMic("transcribing");
     setMicNote("Transcribing…");
@@ -215,7 +211,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       const body = new FormData();
       body.set("audio", blob, "speech.webm");
       if (hint) body.set("languageHint", hint);
-      if (repair?.sawBengali) body.set("sawBengali", "1");
+      if (repair?.repairLanguage) body.set("repairLanguage", repair.repairLanguage);
       if (repair?.garbled) body.set("garbled", "1");
       if (liveDrop) body.set("liveDrop", liveDrop);
       const response = await fetch("/api/chat/transcribe", { method: "POST", body });
@@ -230,9 +226,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         return false;
       }
       const transcript = correctTranscript(payload.transcript);
-      const spoken = repair?.sawBengali || /[\u0980-\u09FF]/.test(transcript)
-        ? "bn"
-        : utteranceLanguage(transcript, { final: true, picker: pickerLanguage() });
+      const spoken = utteranceLanguage(transcript, { final: true, picker: pickerLanguage() });
       voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop };
       setInput(transcript);
       finishNote(noteFor(spoken));
@@ -266,7 +260,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         setMicNote("");
         return;
       }
-      const { blob, hadSocket, finals, spokenLanguage, liveDrop, sawBengali, garbled } = await captureRecording();
+      const { blob, hadSocket, finals, spokenLanguage, liveDrop, repairLanguage, garbled } = await captureRecording();
       if (draftGeneration.current !== generation) {
         setMic("idle");
         setMicNote("");
@@ -281,7 +275,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       }
       const needsRepair = garbled || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
       if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled ? "" : finals, socketOpened: hadSocket, needsRepair })) {
-        const uploaded = await uploadFallback(blob, liveDrop, { sawBengali, garbled });
+        const uploaded = await uploadFallback(blob, liveDrop, { repairLanguage, garbled });
         if (uploaded || !finals || garbled) return;
       }
       if (draftGeneration.current !== generation) {
@@ -312,6 +306,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     }
     session.current = { ...freshMicSession(draftGeneration.current), stream };
     voiceRequest.current = null;
+    setMicNote(noteFor(pickerLanguage() || ""));
 
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
     const recorder = new MediaRecorder(stream, { mimeType });
@@ -382,10 +377,8 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             session.current.endWait?.();
           }
           if (staleDraft()) return;
-          if (/[\u0980-\u09FF]/.test(transcript)) session.current.sawBengali = true;
           const cumulative = correctTranscript(`${session.current.finals} ${transcript}`.trim());
           session.current.longest = longerTranscript(session.current.longest, cumulative);
-          if (/[\u0980-\u09FF]/.test(session.current.longest)) session.current.sawBengali = true;
           const best = session.current.longest;
           const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
           const noteCode = utteranceLanguage(best, {
@@ -393,7 +386,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
             picker: pickerLanguage(),
             heard,
           });
-          const code = noteCode === "te" || (session.current.sawBengali && noteCode === "hi") ? "" : noteCode;
+          const code = noteCode === "te" ? "" : noteCode;
           session.current.noteStreak = { code, count: code ? 1 : 0 };
           session.current.interimLanguage = code;
           setMicNote(noteFor(code));

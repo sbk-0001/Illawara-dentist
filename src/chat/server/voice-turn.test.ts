@@ -52,7 +52,7 @@ describe("spoken language on a voice turn", () => {
       { inputMode: "voice", spokenLanguage: "not-a-language" },
     );
     expect(rejected.reply.code).toBe("en");
-    expect(rejected.spokenLanguage).toBeNull();
+    expect(rejected.spokenLanguage).toBe("en");
     expect(rejected.langOverride).toBe(false);
   });
 
@@ -74,20 +74,84 @@ describe("spoken language on a voice turn", () => {
     expect(address.reply.code).toBe("bn");
   });
 
-  it("does not answer a mixed Devanagari and Bengali voice clip in Hindi", () => {
-    const turn = prepareTurn(
+  it("detects each Auto voice turn from its own script", () => {
+    const bengali = "আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?";
+    const hindi = "मेरे दांत में दर्द है आज अपॉइंटमेंट मिलेगा?";
+    const afterBengali = prepareTurn(
       [
-        { role: "assistant", metadata: { language: "bn" }, content: "ডাপ্টো শনিবার খোলা থাকে।" },
-        { role: "user", content: "डाप्टो क्लिनिक का पता क्या है ক absentment" },
+        { role: "user", content: bengali },
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ, অ্যাপয়েন্টমেন্ট পাওয়া যাবে।" },
+        { role: "user", content: hindi },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "bn" },
+    );
+    expect(afterBengali.spokenLanguage).toBe("hi");
+    expect(afterBengali.reply.code).toBe("hi");
+    expect(afterBengali.reply.script).toBe("Devanagari");
+    expect(afterBengali.instructions).toContain("Write in Hindi, using Devanagari script.");
+
+    const afterHindi = prepareTurn(
+      [
+        { role: "user", content: hindi },
+        { role: "assistant", metadata: { language: "hi" }, content: "हाँ, अपॉइंटमेंट मिल सकता है।" },
+        { role: "user", content: bengali },
       ],
       "auto",
       index,
       { inputMode: "voice", spokenLanguage: "hi" },
     );
-    expect(turn.spokenLanguage).toBe("bn");
-    expect(turn.reply.code).toBe("bn");
-    expect(turn.reply.script).toBe("Bengali");
-    expect(turn.langOverride).toBe(true);
+    expect(afterHindi.spokenLanguage).toBe("bn");
+    expect(afterHindi.reply.code).toBe("bn");
+    expect(afterHindi.reply.script).toBe("Bengali");
+
+    const english = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ।" },
+        { role: "user", content: "What time does the Dapto clinic open on Saturday?" },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "bn" },
+    );
+    expect(english.spokenLanguage).toBe("en");
+    expect(english.reply.code).toBe("en");
+    expect(english.instructions).toContain("Write in English.");
+
+    const spanish = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "bn" }, content: "হ্যাঁ।" },
+        { role: "user", content: "¿Puedo reservar en Shellharbour el sábado?" },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "bn" },
+    );
+    expect(spanish.spokenLanguage).toBe("es");
+    expect(spanish.reply.code).toBe("es");
+    expect(spanish.instructions).toContain("Write in Spanish.");
+
+    const pickedHindi = prepareTurn(
+      [{ role: "user", content: "What time does the Dapto clinic open on Saturday?" }],
+      "hi",
+      index,
+      { inputMode: "voice", spokenLanguage: "en" },
+    );
+    expect(pickedHindi.reply.code).toBe("hi");
+    expect(pickedHindi.reply.script).toBe("Devanagari");
+    expect(pickedHindi.spokenLanguage).toBe("hi");
+    expect(pickedHindi.instructions).toContain("Write in Hindi, using Devanagari script.");
+
+    const pickedBengali = prepareTurn(
+      [{ role: "user", content: bengali }],
+      "bn",
+      index,
+      { inputMode: "voice", spokenLanguage: "bn" },
+    );
+    expect(pickedBengali.reply.code).toBe("bn");
+    expect(pickedBengali.reply.script).toBe("Bengali");
+    expect(pickedBengali.instructions).toContain("Write in Bengali, using Bengali script.");
   });
 
   it("answers a short unidentified Latin question in English when nothing earlier was another language", () => {
