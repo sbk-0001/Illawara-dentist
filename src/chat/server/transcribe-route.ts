@@ -56,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
   const hint = typeof form.get("languageHint") === "string" ? String(form.get("languageHint")) : "";
   const hints = deepgramLanguageHints(hint);
   const requestedRepair = normalizeSpokenLanguage(typeof form.get("repairLanguage") === "string" ? String(form.get("repairLanguage")) : "");
-  const garbled = form.get("garbled") === "1" || form.get("direct") === "1";
+  const garbled = form.get("garbled") === "1" || form.get("direct") === "1" || form.get("repairOnly") === "1";
   const bytes = await audio.arrayBuffer();
   if (garbled) {
     if (!process.env.AI_GATEWAY_API_KEY) {

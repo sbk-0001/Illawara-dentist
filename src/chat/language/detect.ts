@@ -23,7 +23,7 @@ const SCRIPT_TESTS: { script: string; code: string; re: RegExp }[] = [
   { script: "Latin", code: "en", re: /[A-Za-z\u00C0-\u024F]/g },
 ];
 
-const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "kotha", "kivabe", "nombor", "bolben", "tumi", "apni", "apnar", "bhalo", "hocche", "daktar", "dakter", "byatha", "bytha", "ekhon", "korbo", "koto", "kokhon", "shonibar", "thaken", "pabo", "daat", "dant", "kobe", "amar", "valo", "korte", "dam"];
+const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "kotha", "kivabe", "nombor", "bolben", "tumi", "apni", "apnar", "apnara", "bhalo", "hocche", "daktar", "dakter", "byatha", "bytha", "ekhon", "korbo", "koto", "kokhon", "shonibar", "thaken", "pabo", "pawa", "daat", "dant", "dante", "kobe", "amar", "valo", "korte", "korche", "dam", "shada", "koren", "chikitsha", "thikana", "khole", "khoroch", "jabe"];
 const BANGLISH_WEAK = ["chai", "chan", "ashen", "asbo", "ajke", "kalke", "taka", "khula", "khola", "hobe", "keno", "kene", "ki", "er", "ar", "ache", "ase", "nai", "din"];
 const HINGLISH_STRONG = ["kya", "kaise", "mujhe", "chahiye", "kitna", "kitne", "kitni", "aapka", "kahan", "kab", "nahi", "nahin", "daant", "dard", "baje", "khulti", "khulta", "khula", "shaniwar", "samay"];
 const HINGLISH_WEAK = ["hai", "hain", "kal", "aaj", "mera", "meri", "aap", "karo", "karna", "wala", "wali", "baat"];
@@ -45,10 +45,10 @@ const INDONESIAN = ["apakah", "dokter", "bisa", "saya", "buka", "berapa", "gigi"
 const INDONESIAN_FUNCTION = ["ada", "di", "yang", "untuk", "ini", "jam"];
 const MALAY = ["adakah", "doktor", "boleh", "awak", "pukul", "buka", "berapa", "gigi", "anak", "klinik", "rawatan", "sakit"];
 const MALAY_FUNCTION = ["ada", "di", "yang", "untuk", "ini"];
-const MANGLISH_STRONG = ["evide", "enthu", "ethra", "aanu", "undo", "enth", "engane", "venam", "vedana"];
-const TANGLISH_STRONG = ["irukku", "iruka", "eppo", "evvalavu", "enge", "eppadi", "evlo", "venum", "vali"];
-const ARABIZI = /\b(?:3iyada|maw3ed|tabyeed|alam)\b/gi;
-const PINYIN = /\b(?:zhensuo|yuyue|dianhua|yasui|meibai)\b/gi;
+const MANGLISH_STRONG = ["evide", "enthu", "entha", "enthaanu", "ethra", "aanu", "undo", "enth", "engane", "venam", "vedana", "enikku", "pallu", "clinicinte", "shaniyazhcha", "eppol", "thurakkum", "innu", "kittumo", "ningal", "veluppikkal", "cheyyarundo", "chilavakum", "implantinu"];
+const TANGLISH_STRONG = ["irukku", "iruka", "eppo", "evvalavu", "enge", "eppadi", "evlo", "venum", "vali", "enna", "sanikizhamai", "thirakkum", "enakku", "inniku", "kidaikkuma", "neenga", "pannuveengala", "selavu", "aagum"];
+const ARABIZI = /\b(?:3iyada\w*|3iyadet\w*|3enwan|3andi|3andkom|maw3ed|tabyeed|waja3|ra2am|tefta7|asnan|zera3et)\b/gi;
+const PINYIN = /\b(?:zhensuo|yuyue|dianhua|yasui|meibai|dizhi|kaimen|yatong|zhongzhiya|xingqiliu|jidian)\b/gi;
 
 const ARABIC_WORDS = ["ما", "هي", "ساعات", "العمل", "عيادة", "السبت", "ألم", "سن", "رسوم", "موعد", "كم"];
 const URDU_WORDS = ["کیا", "ہے", "ہیں", "کلینک", "بجے", "کھلتا", "ہفتہ", "درد", "دانت", "کتنے", "میں"];

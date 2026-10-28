@@ -6,12 +6,13 @@
 const PHRASES: Record<string, readonly [string, string][]> = {
   ml: [
     ["opening hours", "പ്രവർത്തന സമയം"],
-    ["teeth whitening", "പല്ല് വെളുപ്പിക്കൽ"],
+    ["പല്ല് സഫെദകരണം", "പല്ലുകൾ വെളുപ്പിക്കൽ"],
+    ["teeth whitening", "പല്ലുകൾ വെളുപ്പിക്കൽ"],
     ["check-up", "പരിശോധന"],
     ["toothache", "പല്ലുവേദന"],
     ["appointment", "അപ്പോയിന്റ്മെന്റ്"],
     ["emergency", "അടിയന്തരം"],
-    ["whitening", "പല്ല് വെളുപ്പിക്കൽ"],
+    ["whitening", "പല്ലുകൾ വെളുപ്പിക്കൽ"],
     ["implant", "ഇംപ്ലാന്റ്"],
     ["crown", "ക്രൗൺ"],
     ["cleaning", "പല്ല് വൃത്തിയാക്കൽ"],
@@ -214,10 +215,9 @@ function replacePhrases(text: string, code: string): string {
   if (!phrases.length || !text) return text;
   let out = text;
   for (const [from, to] of phrases) {
-    const pattern = /^[\u0900-\u097F]/.test(from)
-      ? escapeRegExp(from)
-      : `(?<![A-Za-z])${escapeRegExp(from)}(?![A-Za-z])`;
-    out = out.replace(new RegExp(pattern, /^[\u0900-\u097F]/.test(from) ? "g" : "gi"), to);
+    const latin = /^[A-Za-z]/.test(from);
+    const pattern = latin ? `(?<![A-Za-z])${escapeRegExp(from)}(?![A-Za-z])` : escapeRegExp(from);
+    out = out.replace(new RegExp(pattern, latin ? "gi" : "g"), to);
   }
   return out;
 }

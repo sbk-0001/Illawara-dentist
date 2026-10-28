@@ -1,7 +1,7 @@
 import type { ClinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
 import { ensureAddressReply, isAddressQuestion } from "./address";
-import { directoryLabels } from "./contacts";
+import { directoryLabels, englishPhoneFallback } from "./contacts";
 import { guardBareHoursReply, mayBeBareHours } from "./hours";
 
 const ENGLISH_LABEL = "(?:phone|booking|email|address|hours|website)";
@@ -48,7 +48,16 @@ export function dedupePhoneLines(text: string): string {
     for (const key of keys) seen.add(key);
     kept.push(line);
   }
-  return kept.join("\n");
+  return kept
+    .join("\n")
+    .replace(/(?:है।\s*){2,}/g, "है।")
+    .replace(/(?:हैं।\s*){2,}/g, "हैं।");
+}
+
+/** An English reply that still contains another script becomes the English phone sentence. */
+export function scrubForeignEnglish(text: string): string {
+  if (!/[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\u0B80-\u0BFF\u0D00-\u0D7F]/.test(text)) return text;
+  return englishPhoneFallback(text);
 }
 
 function phoneAlreadyStated(text: string, phone: string, _code: string): boolean {
@@ -284,9 +293,10 @@ export function attachContactLabels<T extends LabelChunk>(
       isOnlyContactLine(raw);
     if (bare) {
       const sentence = bareContactPreface(input.code, body, input.index, true) || bareContactPreface(input.code, raw, input.index, true);
-      if (sentence) return sentence;
+      if (sentence) return input.code === "en" ? scrubForeignEnglish(sentence) : sentence;
     }
-    return dedupePhoneLines(body);
+    const deduped = dedupePhoneLines(body);
+    return input.code === "en" ? scrubForeignEnglish(deduped) : deduped;
   };
 
   const enqueueLabeled = (controller: TransformStreamDefaultController<T>, chunk: T, delta: string) => {

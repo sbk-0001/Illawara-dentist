@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, malayalamMishear, micListeningNote, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -166,8 +166,9 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     const current = session.current;
     const hadSocket = current.socket?.readyState === WebSocket.OPEN;
     const finals = longerTranscript(current.finals, current.longest);
-    const repairLanguage = secondPassLanguage(finals, pickerLanguage()) || "";
-    const garbled = bengaliTranscriptGarbled(finals);
+    const mishear = malayalamMishear(finals);
+    const repairLanguage = mishear ? "ml" : secondPassLanguage(finals, pickerLanguage()) || "";
+    const garbled = bengaliTranscriptGarbled(finals) || mishear;
     const spokenLanguage = garbled ? "" : utteranceLanguage(finals, { final: true, picker: pickerLanguage() });
     const liveDrop = current.liveDrop;
     const recorder = current.recorder;
@@ -214,6 +215,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       if (repair?.repairLanguage) body.set("repairLanguage", repair.repairLanguage);
       if (repair?.garbled) body.set("garbled", "1");
       if (repair?.direct) body.set("direct", "1");
+      body.set("repairOnly", "1");
       if (liveDrop) body.set("liveDrop", liveDrop);
       const response = await fetch("/api/chat/transcribe", { method: "POST", body });
       const payload = (await response.json()) as { transcript?: string; language?: string; error?: string };
@@ -277,8 +279,18 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       const direct = speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
       const needsRepair = garbled || direct || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
       if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled || direct ? "" : finals, socketOpened: hadSocket, needsRepair })) {
-        const uploaded = await uploadFallback(blob, liveDrop, { repairLanguage: direct ? repairLanguage || "ml" : repairLanguage, garbled, direct });
-        if (uploaded || !finals || garbled) return;
+        const uploaded = await uploadFallback(blob, liveDrop, {
+          repairLanguage: repairLanguage || (malayalamMishear(finals) ? "ml" : ""),
+          garbled,
+          direct: direct || malayalamMishear(finals),
+        });
+        if (uploaded) return;
+        if (finals && !malayalamMishear(finals)) {
+          bindVoice(finals, spokenLanguage || utteranceLanguage(finals, { final: true, picker: pickerLanguage() }));
+          setMic("idle");
+          return;
+        }
+        return;
       }
       if (draftGeneration.current !== generation) {
         setMic("idle");
@@ -389,20 +401,23 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           session.current.longest = longerTranscript(session.current.longest, cumulative);
           const best = session.current.longest;
           const heard = majoritySpokenLanguage(votesFromAlternative(alternative));
+          const settled = payload.is_final === true || payload.speech_final === true;
           const noteCode = utteranceLanguage(best, {
-            final: payload.is_final === true || payload.speech_final === true,
+            final: settled,
             picker: pickerLanguage(),
             heard,
           });
           const code = noteCode === "te" ? "" : noteCode;
-          session.current.noteStreak = { code, count: code ? 1 : 0 };
-          session.current.interimLanguage = code;
-          setMicNote(noteFor(code));
+          if (code && code === session.current.noteStreak.code) session.current.noteStreak.count += 1;
+          else session.current.noteStreak = { code, count: code ? 1 : 0 };
+          const shown = pickerLanguage() || (session.current.noteStreak.count >= 2 ? code : "");
+          session.current.interimLanguage = shown;
+          setMicNote(noteFor(shown));
           if (payload.is_final || payload.speech_final) {
             session.current.langVotes.push(...votesFromAlternative(alternative));
             session.current.finals = longerTranscript(session.current.finals, cumulative);
           }
-          if (!best || bengaliTranscriptGarbled(best)) {
+          if (!best || bengaliTranscriptGarbled(best) || malayalamMishear(best)) {
             voiceRequest.current = null;
             setInput("");
             return;

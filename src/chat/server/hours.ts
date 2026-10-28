@@ -483,8 +483,9 @@ const SKIP_REWRITE = new Set(["en", "bn-Latn", "hi-Latn"]);
 /** Replace leftover English day names and AM/PM. Banglish, Hinglish and English are left as written. */
 export function rewriteEnglishHours(text: string, code: string): string {
   if (!code || SKIP_REWRITE.has(code)) return text;
+  const lead = text.replace(/\b((?:Dapto|Shellharbour|Woonona) Dentists)\s+is open\b/gi, (_all, name: string) => hoursLeadIn(code, name).replace(/:\s*$/u, ""));
   const names = dayNames(code);
-  const days = text.replace(new RegExp(`\\b${ENGLISH_DAYS}\\b`, "gi"), (word) => names[DAY_INDEX[word.toLowerCase()] ?? 0] ?? word);
+  const days = lead.replace(new RegExp(`\\b${ENGLISH_DAYS}\\b`, "gi"), (word) => names[DAY_INDEX[word.toLowerCase()] ?? 0] ?? word);
   return days.replace(new RegExp(`\\b${ENGLISH_CLOCK}\\b`, "gi"), (_all, hour: string, minute: string | undefined, suffix: string) => {
     let h = Number(hour);
     const pm = /^p/i.test(suffix);

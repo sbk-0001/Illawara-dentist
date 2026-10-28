@@ -295,6 +295,9 @@ export function languageFromNativeScript(text: string): string | null {
     .filter((item) => item.count >= 2)
     .sort((a, b) => b.count - a.count);
   const best = counted[0];
+  const telugu = countScript(text, /[\u0C00-\u0C7F]/g);
+  const kannada = countScript(text, /[\u0C80-\u0CFF]/g);
+  if (best?.code === "te" || best?.code === "kn" || (telugu + kannada >= 2 && telugu + kannada > (best?.count ?? 0))) return "ml";
   if (!best) return null;
   const second = counted[1];
   if (second && second.count === best.count && second.family !== best.family) return null;
@@ -309,6 +312,13 @@ export function languageFromNativeScript(text: string): string | null {
   }
   if (best.code === "hi" && /हुन्छ|खुल्छ|तपाईं/.test(text)) return "ne";
   return best.code;
+}
+
+/** Telugu or Kannada on Auto is a Malayalam miss, not a language we expect. */
+export function malayalamMishear(text: string): boolean {
+  const telugu = countScript(text, /[\u0C00-\u0C7F]/g);
+  const kannada = countScript(text, /[\u0C80-\u0CFF]/g);
+  return telugu + kannada >= 2;
 }
 
 /** Devanagari and Bengali in the same utterance. One stray character of either is enough. */
@@ -399,7 +409,7 @@ export function speechEngineFor(input: { picker?: string | null; transcript?: st
   if (picked === "ml") return "gpt-4o-transcribe";
   const text = input.transcript || "";
   if (!text) return "deepgram";
-  if (languageFromNativeScript(text) === "ml") return "gpt-4o-transcribe";
+  if (malayalamMishear(text) || languageFromNativeScript(text) === "ml") return "gpt-4o-transcribe";
   const detected = detectLanguage(text).code;
   if (detected === "ml" || detected === "ml-Latn") return "gpt-4o-transcribe";
   return "deepgram";
@@ -470,7 +480,10 @@ function scriptNoteLanguage(text: string): string {
   const han = scriptCount(text, /[\u4E00-\u9FFF]/g);
   if (kana >= NOTE_SCRIPT_MIN) counts.push({ code: "ja", count: kana + han });
   else if (han >= NOTE_SCRIPT_MIN) counts.push({ code: "zh", count: han });
-  const nativeTotal = counts.reduce((sum, block) => sum + block.count, 0);
+  const telugu = scriptCount(text, /[\u0C00-\u0C7F]/g);
+  const kannada = scriptCount(text, /[\u0C80-\u0CFF]/g);
+  const nativeTotal = counts.reduce((sum, block) => sum + block.count, 0) + telugu + kannada;
+  if (telugu + kannada >= NOTE_SCRIPT_MIN && (telugu + kannada) / Math.max(nativeTotal, 1) >= NOTE_SCRIPT_SHARE) return "ml";
   const qualified = counts.filter((block) => block.count >= NOTE_SCRIPT_MIN && block.count / Math.max(nativeTotal, 1) >= NOTE_SCRIPT_SHARE);
   if (qualified.length !== 1) return "";
   const winner = qualified[0];
