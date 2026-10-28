@@ -379,6 +379,23 @@ export function needsOpenTranscribe(text: string, picker?: string | null): boole
   return confidentLatinLanguage(value) === null;
 }
 
+/**
+ * Deepgram keeps a final only when it is confidently English, Spanish, Chinese, or Arabic.
+ * Indic, Manglish, and every other script go to the server final-transcript path.
+ * A Malayalam, Tamil, Hindi, or Bengali picker always does, even if the live text looks native.
+ */
+export function needsServerFinalTranscript(text: string, picker?: string | null): boolean {
+  const picked = normalizeSpokenLanguage(picker);
+  if (picked === "ml" || picked === "ta" || picked === "hi" || picked === "bn") return true;
+  if (picked) return false;
+  const value = text.trim();
+  if (!value) return true;
+  const script = languageFromNativeScript(value);
+  if (script === "zh" || script === "ar") return false;
+  const latin = confidentLatinLanguage(value);
+  return latin !== "en" && latin !== "es";
+}
+
 /** Prefer the open transcription. Keep Deepgram's Tamil only when that pass also returns Tamil. */
 export function chooseCheckedTranscript(deepgram: string, open: string | null): string {
   const deepgramScript = languageFromNativeScript(deepgram);

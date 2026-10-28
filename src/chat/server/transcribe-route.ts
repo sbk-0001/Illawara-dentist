@@ -1,7 +1,7 @@
-import { judgeIndicPair } from "../language/indic";
-import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, hasNativeScript, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, hasNativeScript, languageAfterRepair, majoritySpokenLanguage, needsServerFinalTranscript, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { resolveFinalTranscript } from "./final-transcript";
 import { guardRequest, withCors } from "./guard";
-import { INDIC_PAIR_TIMEOUT_MS, SCRIPT_CONVERT_TIMEOUT_MS, TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, longestNonEmptyTranscript, repairNativeTranscript, rewriteTranscriptScript, shouldRetryShortTranscript, transcribeLanguagePair } from "./transcript-repair";
+import { SCRIPT_CONVERT_TIMEOUT_MS, TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, longestNonEmptyTranscript, repairNativeTranscript, rewriteTranscriptScript, shouldRetryShortTranscript } from "./transcript-repair";
 
 export const runtime = "nodejs";
 
@@ -66,40 +66,50 @@ export async function POST(request: Request): Promise<Response> {
       logTranscribe({ outcome: "error", error: "repair_unconfigured", ...(liveDrop ? { liveDrop } : {}) });
       return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 503 }));
     }
-    const unconstrained = direct && !requestedRepair;
     const model = direct ? TRANSCRIPT_FULL_MODEL : repairModelFor(requestedRepair, liveTranscript);
     const started = Date.now();
-    let judgedLanguage = "";
-    let next = "";
-    let malayalamPass = "";
-    let tamilPass = "";
-    if (unconstrained) {
-      const [malayalam, tamil] = await transcribeLanguagePair((language) =>
-        repairNativeTranscript({
-          audio: new Uint8Array(bytes),
-          language,
-          model: TRANSCRIPT_FULL_MODEL,
-          timeoutMs: INDIC_PAIR_TIMEOUT_MS,
-        }),
-      );
-      malayalamPass = malayalam || "";
-      tamilPass = tamil || "";
-      const choice = judgeIndicPair({ deepgram: liveTranscript, malayalam, tamil });
-      judgedLanguage = choice.language || "";
-      next = choice.transcript || "";
-      if (choice.language && (choice.needsScript || !hasNativeScript(choice.language, next))) {
-        next = await rewriteTranscriptScript({ text: next || liveTranscript, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+    const indicPicker = requestedRepair === "ml" || requestedRepair === "ta" || requestedRepair === "hi" || requestedRepair === "bn";
+    const autoFuse = !requestedRepair && needsServerFinalTranscript(liveTranscript, null);
+    if (indicPicker || autoFuse) {
+      const choice = await resolveFinalTranscript({
+        audio: new Uint8Array(bytes),
+        mediaType: audio.type || "audio/webm",
+        picker: requestedRepair || null,
+        deepgram: liveTranscript,
+      });
+      const sttMs = Date.now() - started;
+      let checked = choice.transcript.trim();
+      if (!checked) checked = longestNonEmptyTranscript(liveTranscript, choice.transcript);
+      if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
+        checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
       }
-    } else {
-      next =
-        (await repairNativeTranscript({
-          audio: new Uint8Array(bytes),
-          ...(requestedRepair ? { language: requestedRepair } : {}),
-          model,
-          acceptAny: false,
-          timeoutMs: model === TRANSCRIPT_FULL_MODEL ? TRANSCRIPT_FULL_TIMEOUT_MS : undefined,
-        })) || "";
+      if (!checked) {
+        logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs: sttMs, sttEngine: choice.sttEngine, sttFallback: choice.sttFallback, sttMs, ...(liveDrop ? { liveDrop } : {}) });
+        return withCors(request, Response.json({ error: "Could not transcribe that.", repairMs: sttMs }, { status: 502 }));
+      }
+      const transcript = correctTranscript(checked);
+      const detected = choice.language || spokenLanguageAfterSecondPass(transcript, hint);
+      logTranscribe({
+        outcome: "ok",
+        language: detected,
+        repaired: true,
+        repairLanguage: requestedRepair || null,
+        repairMs: sttMs,
+        sttEngine: choice.sttEngine,
+        sttFallback: choice.sttFallback,
+        sttMs,
+        ...(liveDrop ? { liveDrop } : {}),
+      });
+      return withCors(request, Response.json({ transcript, language: detected, repairMs: sttMs }));
     }
+    let next =
+      (await repairNativeTranscript({
+        audio: new Uint8Array(bytes),
+        ...(requestedRepair ? { language: requestedRepair } : {}),
+        model,
+        acceptAny: false,
+        timeoutMs: model === TRANSCRIPT_FULL_MODEL ? TRANSCRIPT_FULL_TIMEOUT_MS : undefined,
+      })) || "";
     let repairMs = Date.now() - started;
     let retried = false;
     if (requestedRepair && shouldRetryShortTranscript(model) && transcriptTooShort(next)) {
@@ -115,20 +125,17 @@ export async function POST(request: Request): Promise<Response> {
       if (again && !transcriptTooShort(again)) next = again;
     }
     let checked = direct ? chooseCheckedTranscript(liveTranscript, next || null) : next || "";
-    if (!checked) checked = longestNonEmptyTranscript(liveTranscript, next, malayalamPass, tamilPass);
+    if (!checked) checked = longestNonEmptyTranscript(liveTranscript, next);
     if (requestedRepair && checked && !hasNativeScript(requestedRepair, checked)) {
       checked = await rewriteTranscriptScript({ text: checked, language: requestedRepair, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
     }
-    if (judgedLanguage && checked && !hasNativeScript(judgedLanguage, checked) && liveTranscript && hasNativeScript(judgedLanguage, liveTranscript)) {
-      checked = liveTranscript;
-    }
     if (!checked) {
-      logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs, retried, ...(liveDrop ? { liveDrop } : {}) });
+      logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs, retried, sttEngine: "deepgram", sttFallback: true, sttMs: repairMs, ...(liveDrop ? { liveDrop } : {}) });
       return withCors(request, Response.json({ error: "Could not transcribe that.", repairMs }, { status: 502 }));
     }
     const transcript = correctTranscript(checked);
-    const detected = judgedLanguage || spokenLanguageAfterSecondPass(transcript, hint);
-    logTranscribe({ outcome: "ok", language: detected, repaired: true, repairLanguage: requestedRepair || null, repairMs, retried, model, ...(liveDrop ? { liveDrop } : {}) });
+    const detected = spokenLanguageAfterSecondPass(transcript, hint);
+    logTranscribe({ outcome: "ok", language: detected, repaired: true, repairLanguage: requestedRepair || null, repairMs, retried, model, sttEngine: "deepgram", sttFallback: retried, sttMs: repairMs, ...(liveDrop ? { liveDrop } : {}) });
     return withCors(request, Response.json({ transcript, language: detected, repairMs }));
   }
   let upstream: Response;
@@ -162,6 +169,27 @@ export async function POST(request: Request): Promise<Response> {
   });
   let transcript = correctTranscript(alternative.transcript?.trim() || "");
   const heard = majoritySpokenLanguage(votesFromAlternative(alternative)) || "";
+  const picked = normalizeSpokenLanguage(hint);
+  if (process.env.AI_GATEWAY_API_KEY && needsServerFinalTranscript(transcript, picked)) {
+    const started = Date.now();
+    const choice = await resolveFinalTranscript({
+      audio: new Uint8Array(bytes),
+      mediaType: audio.type || "audio/webm",
+      picker: picked === "ml" || picked === "ta" || picked === "hi" || picked === "bn" ? picked : null,
+      deepgram: transcript,
+    });
+    const sttMs = Date.now() - started;
+    let checked = choice.transcript.trim() || longestNonEmptyTranscript(transcript, choice.transcript);
+    if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
+      checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+    }
+    if (checked) {
+      const finalText = correctTranscript(checked);
+      const detected = choice.language || spokenLanguageAfterSecondPass(finalText, hint);
+      logTranscribe({ outcome: "ok", language: detected, repaired: true, hints, sttEngine: choice.sttEngine, sttFallback: choice.sttFallback, sttMs, ...(liveDrop ? { liveDrop } : {}) });
+      return withCors(request, Response.json({ transcript: finalText, language: detected, repairMs: sttMs }));
+    }
+  }
   let detected = repairLanguageForTranscript(heard, transcript, hint) || spokenLanguageForTranscript(heard, transcript, hint) || heard;
   let repaired = false;
   if (transcript && transcriptNeedsRepair(detected, transcript, hint) && process.env.AI_GATEWAY_API_KEY) {
@@ -193,6 +221,9 @@ export async function POST(request: Request): Promise<Response> {
     language: detected,
     repaired,
     hints,
+    sttEngine: "deepgram",
+    sttFallback: false,
+    sttMs: 0,
     ...(liveDrop ? { liveDrop } : {}),
   });
   return withCors(request, Response.json({ transcript, language: detected }));
