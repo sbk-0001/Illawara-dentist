@@ -55,7 +55,7 @@ const NATIVE_REPLY: Record<string, RegExp> = {
  * words may not. URLs and email addresses are not service words either.
  */
 const PROPER_LATIN =
-  /\b(?:illawarra dentists|dapto dentists|shellharbour dentists|woonona dentists|barrack heights|shell cove|oak flats|albion park|lake heights|fairy meadow|mount pleasant|baan baan|captain cook|princes highway|zavy ?360|shellharbour|shell harbor|woonona|illawarra|dapto|warilla|kiama|windang|blackbutt|tullimbar|warrawong|calderwood|bulli|thirroul|corrimal|balgownie|helensburgh|fernhill|nsw|suite|street|drive|highway)\b/gi;
+  /\b(?:illawarra dentists|dapto dentists|shellharbour dentists|woonona dentists|barrack heights|shell cove|oak flats|albion park|lake heights|fairy meadow|mount pleasant|baan baan|captain cook|princes highway|zavy ?360|shellharbour|shell harbor|woonona|illawarra|dapto|warilla|kiama|windang|blackbutt|tullimbar|warrawong|calderwood|bulli|thirroul|corrimal|balgownie|helensburgh|fernhill|nsw|suite|street|drive|highway|philips|zoom)\b/gi;
 
 const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/;
 

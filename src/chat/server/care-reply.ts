@@ -47,75 +47,67 @@ const ACHE_ONE: Record<string, AcheLine> = {
 };
 
 const ACHE_GROUP: Record<string, string> = {
-  en: "Sorry about the pain. All three clinics keep emergency appointments and will try to see you today. Please call now.",
-  ml: "വേദനയിൽ ഖേദിക്കുന്നു. മൂന്ന് ക്ലിനിക്കുകളും അടിയന്തര സമയം വെച്ചിട്ടുണ്ട്, ഇന്ന് കാണാൻ ശ്രമിക്കാം. ദയവായി ഇപ്പോൾ വിളിക്കൂ.",
-  ta: "வலிக்கு வருந்துகிறோம். மூன்று கிளினிக்குகளும் அவசர நேரம் வைத்திருக்கின்றன, இன்று பார்க்க முயற்சிப்போம். தயவுசெய்து இப்போது அழைக்கவும்.",
-  hi: "दर्द के लिए खेद है। तीनों क्लिनिक इमरजेंसी अपॉइंटमेंट रखते हैं और आज देखने की कोशिश करेंगे। कृपया अभी कॉल करें।",
-  bn: "ব্যথার জন্য দুঃখিত। তিনটি ক্লিনিকই জরুরি অ্যাপয়েন্টমেন্ট রাখে এবং আজ দেখার চেষ্টা করবে। দয়া করে এখনই কল করুন।",
-  zh: "牙痛很难受，对不起。三家诊所都有急诊号，会尽量安排今天看诊。请马上打电话。",
-  ar: "نأسف على الألم. العيادات الثلاث لديها مواعيد طارئة وسنحاول رؤيتك اليوم. اتصل الآن.",
-  es: "Lamentamos el dolor. Las tres clínicas guardan citas de urgencia e intentarán verle hoy. Llame ahora.",
+  en: "All three clinics keep same-day emergency appointments. Please call now:",
+  ml: "മൂന്ന് ക്ലിനിക്കുകളിലും ഇന്നുതന്നെ അടിയന്തര സമയം ഉണ്ട്. ദയവായി ഇപ്പോൾ വിളിക്കൂ:",
+  ta: "மூன்று கிளினிக்குகளிலும் இன்றே அவசர நேரம் உண்டு. தயவுசெய்து இப்போது அழைக்கவும்:",
+  hi: "तीनों क्लिनिक में आज का इमरजेंसी अपॉइंटमेंट रहता है। कृपया अभी कॉल करें:",
+  bn: "তিনটি ক্লিনিকেই আজকের জরুরি অ্যাপয়েন্টমেন্ট থাকে। দয়া করে এখনই কল করুন:",
+  zh: "三家诊所都有当天的急诊号。请马上打：",
+  ar: "العيادات الثلاث تبقي مواعيد طوارئ في نفس اليوم. اتصل الآن:",
+  es: "Las tres clínicas tienen citas de urgencia para el mismo día. Llame ahora:",
 };
 
-const WHITE_YES: Record<string, string> = {
-  en: "Yes, we offer teeth whitening.",
-  ml: "അതെ, ഞങ്ങൾ പല്ല് വെളുപ്പിക്കൽ ചെയ്യുന്നു.",
-  ta: "ஆம், நாங்கள் பல் வெண்மையாக்குதல் செய்கிறோம்.",
-  hi: "हाँ, हम दांत सफ़ेद करना करते हैं।",
-  bn: "হ্যাঁ, আমরা দাঁত সাদা করা করি।",
-  zh: "有的，我们做牙齿美白。",
-  ar: "نعم، نقدم تبييض الأسنان.",
-  es: "Sí, ofrecemos blanqueamiento dental.",
+const WHITE_ALL: Record<string, string> = {
+  en: "Yes, all three clinics offer teeth whitening. At Woonona Dentists, in-chair Philips Zoom whitening is $650 and takes about an hour; Shellharbour Dentists also offers in-chair Philips Zoom; at Dapto Dentists we check your teeth and existing work first.",
+  ml: "അതെ, മൂന്ന് ക്ലിനിക്കുകളിലും പല്ല് വെളുപ്പിക്കൽ ഉണ്ട്. Woonona Dentists-ൽ കസേരയിലെ Philips Zoom പല്ല് വെളുപ്പിക്കൽ $650 ആണ്, ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും. Shellharbour Dentists-ലും കസേരയിൽ Philips Zoom ഉണ്ട്. Dapto Dentists-ൽ ആദ്യം പല്ലും നിലവിലുള്ള ചികിത്സയും നോക്കും.",
+  ta: "ஆம், மூன்று கிளினிக்குகளிலும் பல் வெண்மையாக்குதல் உண்டு. Woonona Dentists-இல் நாற்காலியில் Philips Zoom பல் வெண்மையாக்குதல் $650, சுமார் ஒரு மணி நேரம். Shellharbour Dentists-இலும் நாற்காலியில் Philips Zoom உண்டு. Dapto Dentists-இல் முதலில் பற்களையும் ஏற்கனவே உள்ள சிகிச்சையையும் பார்ப்போம்.",
+  hi: "हाँ, तीनों क्लिनिक में दांत सफ़ेद करना होता है। Woonona Dentists में कुर्सी पर Philips Zoom से दांत सफ़ेद करना $650 है और करीब एक घंटा लगता है। Shellharbour Dentists में भी कुर्सी पर Philips Zoom होता है। Dapto Dentists में पहले दाँत और मौजूदा इलाज देख लेते हैं।",
+  bn: "হ্যাঁ, তিনটি ক্লিনিকেই দাঁত সাদা করা হয়। Woonona Dentists-এ চেয়ারে Philips Zoom দিয়ে দাঁত সাদা করা $650 এবং প্রায় এক ঘণ্টা। Shellharbour Dentists-এও চেয়ারে Philips Zoom আছে। Dapto Dentists-এ আগে দাঁত ও আগের চিকিৎসা দেখে নিই।",
+  zh: "有的，三家诊所都做牙齿美白。Woonona Dentists 诊椅上的 Philips Zoom 美白是 $650，大约一小时。Shellharbour Dentists 也有诊椅上的 Philips Zoom。Dapto Dentists 会先检查牙齿和现有治疗。",
+  ar: "نعم، العيادات الثلاث تقدم تبييض الأسنان. في Woonona Dentists تبييض Philips Zoom على الكرسي بـ $650 ويستغرق نحو ساعة. Shellharbour Dentists يقدم أيضًا Philips Zoom على الكرسي. في Dapto Dentists نفحص الأسنان والعلاج الموجود أولًا.",
+  es: "Sí, las tres clínicas ofrecen blanqueamiento dental. En Woonona Dentists, el blanqueamiento en el sillón con Philips Zoom cuesta $650 y dura cerca de una hora. Shellharbour Dentists también ofrece Philips Zoom en el sillón. En Dapto Dentists revisamos primero los dientes y el tratamiento que ya tiene.",
 };
 
-const WHITE_DETAIL: Record<string, Record<ClinicId | "all", string>> = {
+const WHITE_ONE: Record<string, Record<ClinicId, string>> = {
   en: {
-    dapto: "It is done after a check of your teeth and any existing dental work.",
-    shellharbour: "In-chair whitening with Philips Zoom takes about an hour, after the dentist checks that it suits your teeth.",
-    woonona: "Chair-side Philips Zoom takes about an hour and the page lists it at $650.",
-    all: "It is done after a check of your teeth.",
+    dapto: "Yes. At Dapto Dentists we check your teeth and existing work first, then do the whitening.",
+    shellharbour: "Yes. Shellharbour Dentists offers in-chair Philips Zoom whitening, and it takes about an hour.",
+    woonona: "Yes. At Woonona Dentists, in-chair Philips Zoom whitening is $650 and takes about an hour.",
   },
   ml: {
-    dapto: "പല്ലുകളും നിലവിലുള്ള ചികിത്സയും നോക്കിയ ശേഷമാണ്.",
-    shellharbour: "കസേരയിൽ Philips Zoom കൊണ്ട് ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും. പല്ലിന് ചേരുമോ എന്ന് ഡോക്ടർ നോക്കും.",
-    woonona: "കസേരയിൽ Philips Zoom ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും. പേജിൽ $650 എന്ന് കാണുന്നു.",
-    all: "പല്ലുകൾ നോക്കിയ ശേഷമാണ് ചെയ്യുന്നത്.",
+    dapto: "അതെ. Dapto Dentists-ൽ ആദ്യം പല്ലും നിലവിലുള്ള ചികിത്സയും നോക്കി പല്ല് വെളുപ്പിക്കൽ ചെയ്യും.",
+    shellharbour: "അതെ. Shellharbour Dentists-ൽ കസേരയിൽ Philips Zoom പല്ല് വെളുപ്പിക്കൽ ഉണ്ട്. ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും.",
+    woonona: "അതെ. Woonona Dentists-ൽ കസേരയിലെ Philips Zoom പല്ല് വെളുപ്പിക്കൽ $650 ആണ്, ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും.",
   },
   ta: {
-    dapto: "பற்களையும் ஏற்கனவே உள்ள சிகிச்சையையும் பார்த்த பிறகுதான்.",
-    shellharbour: "நாற்காலியில் Philips Zoom சுமார் ஒரு மணி நேரம். பல்லுக்கு ஏறுமா என்று பல் மருத்துவர் பார்ப்பார்.",
-    woonona: "நாற்காலியில் Philips Zoom சுமார் ஒரு மணி நேரம். பக்கத்தில் $650 என்று உள்ளது.",
-    all: "பற்களைப் பார்த்த பிறகுதான் செய்கிறோம்.",
+    dapto: "ஆம். Dapto Dentists-இல் முதலில் பற்களையும் ஏற்கனவே உள்ள சிகிச்சையையும் பார்த்து பல் வெண்மையாக்குதல் செய்வோம்.",
+    shellharbour: "ஆம். Shellharbour Dentists-இல் நாற்காலியில் Philips Zoom பல் வெண்மையாக்குதல் உண்டு. சுமார் ஒரு மணி நேரம் ஆகும்.",
+    woonona: "ஆம். Woonona Dentists-இல் நாற்காலியில் Philips Zoom பல் வெண்மையாக்குதல் $650, சுமார் ஒரு மணி நேரம்.",
   },
   hi: {
-    dapto: "दांतों और मौजूदा इलाज को देखने के बाद किया जाता है।",
-    shellharbour: "कुर्सी पर Philips Zoom करीब एक घंटे का है। दांत के लिए सही है या नहीं, दंत चिकित्सक देखता है।",
-    woonona: "कुर्सी पर Philips Zoom करीब एक घंटे का है। पेज पर $650 लिखा है।",
-    all: "दांतों की जाँच के बाद किया जाता है।",
+    dapto: "हाँ। Dapto Dentists में पहले दाँत और मौजूदा इलाज देखकर दांत सफ़ेद करना करते हैं।",
+    shellharbour: "हाँ। Shellharbour Dentists में कुर्सी पर Philips Zoom से दांत सफ़ेद करना होता है, करीब एक घंटा लगता है।",
+    woonona: "हाँ। Woonona Dentists में कुर्सी पर Philips Zoom से दांत सफ़ेद करना $650 है और करीब एक घंटा लगता है।",
   },
   bn: {
-    dapto: "দাঁত ও আগের চিকিৎসা দেখে তারপর করা হয়।",
-    shellharbour: "চেয়ারে Philips Zoom প্রায় এক ঘণ্টা। দাঁতের জন্য ঠিক কিনা ডেন্টিস্ট দেখেন।",
-    woonona: "চেয়ারে Philips Zoom প্রায় এক ঘণ্টা। পেজে $650 লেখা আছে।",
-    all: "দাঁত দেখে তারপর করা হয়।",
+    dapto: "হ্যাঁ। Dapto Dentists-এ আগে দাঁত ও আগের চিকিৎসা দেখে দাঁত সাদা করা হয়।",
+    shellharbour: "হ্যাঁ। Shellharbour Dentists-এ চেয়ারে Philips Zoom দিয়ে দাঁত সাদা করা হয়, প্রায় এক ঘণ্টা লাগে।",
+    woonona: "হ্যাঁ। Woonona Dentists-এ চেয়ারে Philips Zoom দিয়ে দাঁত সাদা করা $650 এবং প্রায় এক ঘণ্টা।",
   },
   zh: {
-    dapto: "会先检查牙齿和现有治疗，再做美白。",
-    shellharbour: "诊椅上的 Philips Zoom 大约一小时，牙医会先看是否适合你的牙齿。",
-    woonona: "诊椅上的 Philips Zoom 大约一小时，页面写的是 $650。",
-    all: "会先检查牙齿再做。",
+    dapto: "有的。Dapto Dentists 会先检查牙齿和现有治疗，再做牙齿美白。",
+    shellharbour: "有的。Shellharbour Dentists 有诊椅上的 Philips Zoom 牙齿美白，大约一小时。",
+    woonona: "有的。Woonona Dentists 诊椅上的 Philips Zoom 牙齿美白是 $650，大约一小时。",
   },
   ar: {
-    dapto: "يُجرى بعد فحص الأسنان وأي علاج موجود.",
-    shellharbour: "التبييض على الكرسي بـ Philips Zoom يستغرق نحو ساعة، بعد أن يتحقق الطبيب من ملاءمته.",
-    woonona: "Philips Zoom على الكرسي يستغرق نحو ساعة، والصفحة تذكر $650.",
-    all: "يُجرى بعد فحص الأسنان.",
+    dapto: "نعم. في Dapto Dentists نفحص الأسنان والعلاج الموجود أولًا، ثم نقوم بتبييض الأسنان.",
+    shellharbour: "نعم. يقدم Shellharbour Dentists تبييض Philips Zoom على الكرسي، ويستغرق نحو ساعة.",
+    woonona: "نعم. في Woonona Dentists تبييض Philips Zoom على الكرسي بـ $650 ويستغرق نحو ساعة.",
   },
   es: {
-    dapto: "Se hace después de revisar los dientes y el tratamiento que ya tiene.",
-    shellharbour: "El blanqueamiento en el sillón con Philips Zoom dura cerca de una hora, después de comprobar que conviene.",
-    woonona: "Philips Zoom en el sillón dura cerca de una hora y la página indica $650.",
-    all: "Se hace después de revisar los dientes.",
+    dapto: "Sí. En Dapto Dentists revisamos primero los dientes y el tratamiento que ya tiene, y después hacemos el blanqueamiento.",
+    shellharbour: "Sí. Shellharbour Dentists ofrece blanqueamiento en el sillón con Philips Zoom, y dura cerca de una hora.",
+    woonona: "Sí. En Woonona Dentists, el blanqueamiento en el sillón con Philips Zoom cuesta $650 y dura cerca de una hora.",
   },
 };
 
@@ -140,7 +132,7 @@ function phones(index: KnowledgeIndex, ids: ClinicId[]): string {
       return card ? `${card.name} ${card.phone}` : "";
     })
     .filter(Boolean)
-    .join(" · ");
+    .join("\n");
 }
 
 function bookings(index: KnowledgeIndex, ids: ClinicId[]): string {
@@ -167,10 +159,12 @@ export function acheReply(code: string, focus: ClinicFocus, index: KnowledgeInde
 
 export function whiteningReply(code: string, focus: ClinicFocus, index: KnowledgeIndex): string {
   const ids = idsFor(focus);
-  const yes = WHITE_YES[code] ?? WHITE_YES.en ?? "";
-  const details = WHITE_DETAIL[code] ?? WHITE_DETAIL.en;
-  const detail = ids.length === 1 ? details?.[ids[0]] : details?.all;
-  return `${yes} ${detail ?? ""}\n${bookings(index, ids)}`.trim();
+  const one = WHITE_ONE[code] ?? WHITE_ONE.en;
+  const body =
+    focus.kind === "any" || ids.length >= 3
+      ? (WHITE_ALL[code] ?? WHITE_ALL.en ?? "")
+      : ids.map((id) => one?.[id] ?? "").filter(Boolean).join("\n");
+  return `${body}\n${bookings(index, ids)}`.trim();
 }
 
 function hasConcreteAnswer(text: string): boolean {

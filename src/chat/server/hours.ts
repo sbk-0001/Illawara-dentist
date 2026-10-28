@@ -530,6 +530,10 @@ function hoursSentence(code: string, id: ClinicId, question = ""): string {
 }
 
 /** One natural sentence per clinic. Not a `Clinic:` label, and the hours are not quoted. */
+export function hoursReply(code: string, focus: ClinicFocus, question = ""): string {
+  return renderHours(code, hoursIds(focus), question);
+}
+
 function renderHours(code: string, ids: ClinicId[], question = ""): string {
   const lines = ids.map((id) => hoursSentence(code, id, question));
   if (ids.length === 1) return lines[0] ?? "";

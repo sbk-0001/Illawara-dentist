@@ -1,33 +1,22 @@
 import type { ClinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
-import { acheReply, dropDenialBesideAnswer, isToothacheQuestion, isWhiteningQuestion, whiteningReply } from "./care-reply";
-import { enforceGroupReply } from "./group-reply";
-import { guardUnclearDay, questionAsksHours } from "./hours";
-import { guardImplantPrice, isImplantPriceQuestion } from "./implant-price";
+import { dropDenialBesideAnswer } from "./care-reply";
+import { coreTemplate } from "./core-reply";
 
 type PostChunk = { type: string; id?: string; delta?: string; text?: string };
 
-/** Finished-reply fixes that have to see the whole answer. */
+/** Finished-reply fixes that have to see the whole answer. Core intents replace the model text. Nothing is deleted from an off-script reply. */
 export function postCheckReply(text: string, code: string, question: string, focus: ClinicFocus, index: KnowledgeIndex): string {
-  if (isToothacheQuestion(question)) return acheReply(code, focus, index);
-  if (isWhiteningQuestion(question)) return whiteningReply(code, focus, index);
-  const priced = guardImplantPrice(text, question, code, focus);
-  const body = priced !== text ? priced : guardUnclearDay(text, question, code);
-  const grouped = body === text ? enforceGroupReply(text, code, focus, index) : body;
-  return dropDenialBesideAnswer(grouped);
+  const templated = coreTemplate(question, code, focus, index);
+  if (templated) return dropDenialBesideAnswer(templated);
+  return dropDenialBesideAnswer(text);
 }
 
 export function attachReplyPostCheck<T extends PostChunk>(
   stream: ReadableStream<T>,
   input: { code: string; question: string; focus: ClinicFocus; index: KnowledgeIndex },
 ): ReadableStream<T> {
-  const hold =
-    input.focus.kind === "any" ||
-    isImplantPriceQuestion(input.question) ||
-    questionAsksHours(input.question) ||
-    isToothacheQuestion(input.question) ||
-    isWhiteningQuestion(input.question);
-  if (!hold) return stream;
+  if (!coreTemplate(input.question, input.code, input.focus, input.index)) return stream;
   let textId: string | undefined;
   let held = "";
   let sealed = false;

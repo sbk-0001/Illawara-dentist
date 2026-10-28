@@ -1,78 +1,76 @@
 import type { ClinicFocus } from "../intent";
 
 /**
- * Indexed prices for a singular implant with a crown. The asterisk is printed
- * on the Shellharbour homepage offers and is not defined anywhere in the index.
- *
- * Shellharbour homepage, "Free Dental Implant Consult": from $4500*.
- * Shellharbour homepage, "Free Smile Makeover": with $5000*.
- * Shellharbour /dental-implants/, "Implant-Retained dentures": $5000, about $30 a week.
- * Woonona /smile-gallery/, "Book your FREE Consultation Today": from $5000, about $30 a week.
- * Dapto does not list a singular implant dollar price.
+ * Shellharbour homepage: "Singular Implant with Crown from: $4500*".
+ * The asterisk means terms and conditions apply and are discussed at the appointment.
+ * Shellharbour implants page and Woonona smile gallery: "$5000 – $30 a week through payment plans".
+ * Dapto dental-implants page: complimentary consultation, $50 refundable deposit. No implant price.
  */
 const SENTENCE: Record<string, { shellharbour: string; woonona: string; dapto: string; all: string }> = {
   en: {
+    all: "A single implant with crown starts from $4500* at Shellharbour Dentists and $5000 at Woonona Dentists, with payment plans from about $30 a week. *Conditions apply and are explained at your consultation. At Dapto Dentists, book a free implant consult to get your price. A $50 deposit confirms it and is refunded when you attend.",
     shellharbour:
-      "Shellharbour Dentists lists a singular implant with crown from $4500* on the homepage, and $5000 (about $30 a week) on the implants page. The page does not say what * means.",
-    woonona: "Woonona Dentists lists a singular implant and crown from $5000, about $30 a week.",
-    dapto: "Dapto Dentists does not list a singular implant price.",
-    all: "Shellharbour Dentists: singular implant with crown from $4500* on the homepage, and $5000 (about $30 a week) on the implants page. The page does not say what * means. Woonona Dentists: from $5000, about $30 a week. Dapto Dentists does not list a singular implant price.",
+      "At Shellharbour Dentists a single implant with crown starts from $4500*. Payment plans from about $30 a week are listed with the $5000 figure. *Conditions apply and are explained at your consultation.",
+    woonona: "At Woonona Dentists a single implant with crown is $5000, with payment plans from about $30 a week.",
+    dapto: "At Dapto Dentists, book a free implant consult to get your price. A $50 deposit confirms it and is refunded when you attend.",
   },
   ml: {
+    all: "ഒറ്റ ഇംപ്ലാന്റും ക്രൗണും Shellharbour Dentists-ൽ $4500* മുതലും Woonona Dentists-ൽ $5000 ഉം ആണ്. തവണയായി ആഴ്ചയിൽ ഏകദേശം $30 മുതൽ. *നിബന്ധനകൾ കൂടിക്കാഴ്ചയിൽ പറയും. Dapto Dentists-ൽ വില അറിയാൻ സൗജന്യ ഇംപ്ലാന്റ് കൂടിക്കാഴ്ച ബുക്ക് ചെയ്യൂ. $50 ഡെപ്പോസിറ്റ് മടക്കി തരും.",
     shellharbour:
-      "Shellharbour Dentists ഹോംപേജിൽ സിംഗുലർ ഇംപ്ലാന്റും ക്രൗണും $4500* മുതൽ എന്ന് പറയുന്നു. ഇംപ്ലാന്റ് പേജിൽ $5000, ആഴ്ചയിൽ ഏകദേശം $30. * എന്താണെന്ന് പേജിൽ ഇല്ല.",
-    woonona: "Woonona Dentists സിംഗുലർ ഇംപ്ലാന്റും ക്രൗണും $5000 മുതൽ, ആഴ്ചയിൽ ഏകദേശം $30.",
-    dapto: "Dapto Dentists സിംഗുലർ ഇംപ്ലാന്റിന്റെ വില പേജിൽ ഇല്ല.",
-    all: "Shellharbour Dentists: ഹോംപേജിൽ $4500* മുതൽ, ഇംപ്ലാന്റ് പേജിൽ $5000 (ആഴ്ചയിൽ ഏകദേശം $30). * എന്താണെന്ന് പേജിൽ ഇല്ല. Woonona Dentists: $5000 മുതൽ. Dapto Dentists വില പറയുന്നില്ല.",
+      "Shellharbour Dentists-ൽ ഒറ്റ ഇംപ്ലാന്റും ക്രൗണും $4500* മുതലാണ്. $5000 ന് ആഴ്ചയിൽ ഏകദേശം $30 മുതൽ തവണയുണ്ട്. *നിബന്ധനകൾ കൂടിക്കാഴ്ചയിൽ പറയും.",
+    woonona: "Woonona Dentists-ൽ ഒറ്റ ഇംപ്ലാന്റും ക്രൗണും $5000 ആണ്. ആഴ്ചയിൽ ഏകദേശം $30 മുതൽ തവണയുണ്ട്.",
+    dapto: "Dapto Dentists-ൽ വില അറിയാൻ സൗജന്യ ഇംപ്ലാന്റ് കൂടിക്കാഴ്ച ബുക്ക് ചെയ്യൂ. $50 ഡെപ്പോസിറ്റ് വന്നാൽ മടക്കി തരും.",
   },
   ta: {
+    all: "ஒற்றை இம்ப்ளாண்ட் மற்றும் கிரவுன் Shellharbour Dentists-இல் $4500* முதல், Woonona Dentists-இல் $5000. தவணை வாரத்திற்கு சுமார் $30 முதல். *நிபந்தனைகள் ஆலோசனையில் சொல்லப்படும். Dapto Dentists-இல் விலை தெரிய இலவச இம்ப்ளாண்ட் ஆலோசனையை பதிவு செய்யுங்கள். $50 வைப்புத் தொகை வந்தால் திரும்பும்.",
     shellharbour:
-      "Shellharbour Dentists முகப்பில் சிங்கிள் இம்ப்ளாண்ட் மற்றும் கிரவுன் $4500* முதல். இம்ப்ளாண்ட் பக்கத்தில் $5000, வாரத்திற்கு சுமார் $30. * என்றால் என்ன என்று பக்கத்தில் இல்லை.",
-    woonona: "Woonona Dentists சிங்கிள் இம்ப்ளாண்ட் மற்றும் கிரவுன் $5000 முதல், வாரத்திற்கு சுமார் $30.",
-    dapto: "Dapto Dentists சிங்கிள் இம்ப்ளாண்ட் கட்டணத்தை பக்கத்தில் குறிப்பிடவில்லை.",
-    all: "Shellharbour Dentists: முகப்பில் $4500* முதல், இம்ப்ளாண்ட் பக்கத்தில் $5000 (வாரத்திற்கு சுமார் $30). * விளக்கம் இல்லை. Woonona Dentists: $5000 முதல். Dapto Dentists கட்டணம் இல்லை.",
+      "Shellharbour Dentists-இல் ஒற்றை இம்ப்ளாண்ட் மற்றும் கிரவுன் $4500* முதல். $5000 உடன் வாரத்திற்கு சுமார் $30 தவணை உண்டு. *நிபந்தனைகள் ஆலோசனையில் சொல்லப்படும்.",
+    woonona: "Woonona Dentists-இல் ஒற்றை இம்ப்ளாண்ட் மற்றும் கிரவுன் $5000. வாரத்திற்கு சுமார் $30 முதல் தவணை உண்டு.",
+    dapto: "Dapto Dentists-இல் விலை தெரிய இலவச இம்ப்ளாண்ட் ஆலோசனையை பதிவு செய்யுங்கள். $50 வைப்புத் தொகை வந்தால் திரும்பும்.",
   },
   hi: {
+    all: "एक इम्प्लांट और क्राउन Shellharbour Dentists में $4500* से और Woonona Dentists में $5000 से शुरू होता है। किस्त लगभग $30 प्रति सप्ताह से। *शर्तें सलाह के समय बताई जाती हैं। Dapto Dentists में कीमत जानने के लिए मुफ़्त इम्प्लांट सलाह बुक करें। $50 जमा आकर वापस मिलता है।",
     shellharbour:
-      "Shellharbour Dentists के होमपेज पर सिंगल इम्प्लांट और क्राउन $4500* से है। इम्प्लांट पेज पर $5000, लगभग $30 प्रति सप्ताह। पेज * का अर्थ नहीं बताता।",
-    woonona: "Woonona Dentists पर सिंगल इम्प्लांट और क्राउन $5000 से, लगभग $30 प्रति सप्ताह।",
-    dapto: "Dapto Dentists सिंगल इम्प्लांट की कीमत नहीं लिखता।",
-    all: "Shellharbour Dentists: होमपेज पर $4500* से, इम्प्लांट पेज पर $5000 (लगभग $30 प्रति सप्ताह)। * का अर्थ पेज पर नहीं है। Woonona Dentists: $5000 से। Dapto Dentists कीमत नहीं लिखता।",
+      "Shellharbour Dentists में एक इम्प्लांट और क्राउन $4500* से शुरू होता है। $5000 के साथ लगभग $30 प्रति सप्ताह की किस्त है। *शर्तें सलाह के समय बताई जाती हैं।",
+    woonona: "Woonona Dentists में एक इम्प्लांट और क्राउन $5000 है, किस्त लगभग $30 प्रति सप्ताह से।",
+    dapto: "Dapto Dentists में कीमत जानने के लिए मुफ़्त इम्प्लांट सलाह बुक करें। $50 जमा आकर वापस मिलता है।",
   },
   bn: {
+    all: "একটি ইমপ্ল্যান্ট ও ক্রাউন Shellharbour Dentists-এ $4500* থেকে এবং Woonona Dentists-এ $5000। কিস্তি সপ্তাহে প্রায় $30 থেকে। *শর্ত পরামর্শের সময় বলা হবে। Dapto Dentists-এ দাম জানতে ফ্রি ইমপ্ল্যান্ট পরামর্শ বুক করুন। $50 জমা এলে ফেরত হয়।",
     shellharbour:
-      "Shellharbour Dentists-এর হোমপেজে সিঙ্গল ইমপ্ল্যান্ট ও ক্রাউন $4500* থেকে। ইমপ্ল্যান্ট পেজে $5000, সপ্তাহে প্রায় $30। * মানে কী, পেজে নেই।",
-    woonona: "Woonona Dentists-এ সিঙ্গল ইমপ্ল্যান্ট ও ক্রাউন $5000 থেকে, সপ্তাহে প্রায় $30।",
-    dapto: "Dapto Dentists সিঙ্গল ইমপ্ল্যান্টের দাম লেখেনি।",
-    all: "Shellharbour Dentists: হোমপেজে $4500* থেকে, ইমপ্ল্যান্ট পেজে $5000 (সপ্তাহে প্রায় $30)। * ব্যাখ্যা নেই। Woonona Dentists: $5000 থেকে। Dapto Dentists দাম লেখেনি।",
+      "Shellharbour Dentists-এ একটি ইমপ্ল্যান্ট ও ক্রাউন $4500* থেকে। $5000-এর সাথে সপ্তাহে প্রায় $30 কিস্তি আছে। *শর্ত পরামর্শের সময় বলা হবে।",
+    woonona: "Woonona Dentists-এ একটি ইমপ্ল্যান্ট ও ক্রাউন $5000, কিস্তি সপ্তাহে প্রায় $30 থেকে।",
+    dapto: "Dapto Dentists-এ দাম জানতে ফ্রি ইমপ্ল্যান্ট পরামর্শ বুক করুন। $50 জমা এলে ফেরত হয়।",
   },
   zh: {
-    shellharbour: "Shellharbour Dentists 首页写单颗种植牙加牙冠 $4500* 起。种植页写 $5000，每周约 $30。页面没有解释 *。",
-    woonona: "Woonona Dentists 的单颗种植牙加牙冠 $5000 起，每周约 $30。",
-    dapto: "Dapto Dentists 没有列出单颗种植牙价格。",
-    all: "Shellharbour Dentists：首页 $4500* 起，种植页 $5000（每周约 $30）。页面没有解释 *。Woonona Dentists：$5000 起。Dapto Dentists 没有标价。",
+    all: "单颗种植牙加牙冠，Shellharbour Dentists 从 $4500* 起，Woonona Dentists 是 $5000，分期大约每周 $30 起。*条件在咨询时说明。想知道 Dapto Dentists 的价格，请预约免费种植咨询。$50 订金到诊后退还。",
+    shellharbour: "在 Shellharbour Dentists，单颗种植牙加牙冠从 $4500* 起。$5000 可分期，大约每周 $30。*条件在咨询时说明。",
+    woonona: "在 Woonona Dentists，单颗种植牙加牙冠是 $5000，分期大约每周 $30 起。",
+    dapto: "想知道 Dapto Dentists 的种植价格，请预约免费种植咨询。$50 订金到诊后退还。",
   },
   ar: {
+    all: "زراعة واحدة مع تاج تبدأ من $4500* في Shellharbour Dentists ومن $5000 في Woonona Dentists، والأقساط من نحو $30 في الأسبوع. *تُشرح الشروط في الاستشارة. في Dapto Dentists احجز استشارة زراعة مجانية لمعرفة السعر. عربون $50 يُرد عند الحضور.",
     shellharbour:
-      "يعرض موقع Shellharbour Dentists زراعة مع تاج من $4500* في الصفحة الرئيسية، و$5000 (حوالي $30 أسبوعيًا) في صفحة الزراعة. الصفحة لا تشرح *.",
-    woonona: "يعرض Woonona Dentists زراعة مع تاج من $5000، حوالي $30 أسبوعيًا.",
-    dapto: "لا يذكر Dapto Dentists سعر زراعة واحدة.",
-    all: "Shellharbour Dentists: من $4500* في الصفحة الرئيسية، و$5000 في صفحة الزراعة. لا شرح لـ *. Woonona Dentists: من $5000. Dapto Dentists لا يذكر سعرًا.",
+      "في Shellharbour Dentists تبدأ الزراعة مع التاج من $4500*. توجد أقساط لنحو $30 أسبوعيًا مع $5000. *تُشرح الشروط في الاستشارة.",
+    woonona: "في Woonona Dentists الزراعة مع التاج $5000، والأقساط من نحو $30 في الأسبوع.",
+    dapto: "في Dapto Dentists احجز استشارة زراعة مجانية لمعرفة السعر. عربون $50 يُرد عند الحضور.",
   },
   es: {
+    all: "Un implante con corona empieza desde $4500* en Shellharbour Dentists y $5000 en Woonona Dentists, con planes de pago desde unos $30 por semana. *Las condiciones se explican en la consulta. En Dapto Dentists reserve una consulta de implante gratuita para saber el precio. Un depósito de $50 se devuelve al asistir.",
     shellharbour:
-      "Shellharbour Dentists indica un implante con corona desde $4500* en la página de inicio, y $5000 (unos $30 por semana) en la página de implantes. La página no explica *.",
-    woonona: "Woonona Dentists indica un implante con corona desde $5000, unos $30 por semana.",
-    dapto: "Dapto Dentists no indica el precio de un implante.",
-    all: "Shellharbour Dentists: desde $4500* en la portada y $5000 en la página de implantes. No explica *. Woonona Dentists: desde $5000. Dapto Dentists no indica precio.",
+      "En Shellharbour Dentists un implante con corona empieza desde $4500*. Hay planes de unos $30 por semana con la cifra de $5000. *Las condiciones se explican en la consulta.",
+    woonona: "En Woonona Dentists un implante con corona cuesta $5000, con planes desde unos $30 por semana.",
+    dapto: "En Dapto Dentists reserve una consulta de implante gratuita para saber el precio. Un depósito de $50 se devuelve al asistir.",
   },
 };
 
-const IMPLANT_PRICE =
-  /implant|ഇംപ്ലാന്റ|இம்ப்ள|ইমপ্ল|इम्प्ला|种植|implante|زراعة|എത്ര|ചെലവ|எவ்வளவு|செலவு|কত|খরচ|कितन|多少|precio|cuesta|\$\s?\d/i;
+const IMPLANT_STEM = /implant|ഇംപ്ലാന്റ|இம்ப்ள|ইমপ্ল|इम्प्ला|种植|implante|زراعة/i;
+const IMPLANT_FEE =
+  /how much|\bprice\b|\bcost\b|\bfee\b|\$|എത്ര|ചെലവ|വില|எவ்வளவு|செலவு|விலை|কত|খরচ|দাম|कितन|कीमत|फीस|दाम|多少|precio|cuesta|سعر|تكلف|كم/i;
 
 export function isImplantPriceQuestion(text: string): boolean {
-  return IMPLANT_PRICE.test(text) && /implant|ഇംപ്ലാന്റ|இம்ப்ள|ইমপ্ল|इम्प्ला|种植|implante|زراعة/i.test(text);
+  if (/zirconia/i.test(text)) return false;
+  return IMPLANT_STEM.test(text) && IMPLANT_FEE.test(text);
 }
 
 export function implantPriceSentence(code: string, focus: ClinicFocus): string {

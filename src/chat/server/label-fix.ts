@@ -194,6 +194,17 @@ function clinicForPhone(index: KnowledgeIndex, text: string): { name: string; ph
   return undefined;
 }
 
+export function phoneReply(code: string, index: KnowledgeIndex, focus: ClinicFocus): string {
+  const ids = focus.kind === "one" ? [focus.clinic] : focus.kind === "many" ? focus.clinics : (["dapto", "shellharbour", "woonona"] as const);
+  return ids
+    .map((id) => {
+      const card = index.contacts[id];
+      return card ? phoneSentence(code, card.name, card.phone) : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function phoneSentence(code: string, clinic: string, phone: string): string {
   const named = clinic.length > 0;
   const table: Record<string, [string, string]> = {

@@ -106,6 +106,18 @@ function noteTagMissing(missing: boolean): number {
   return Math.round((tagStats.missing / tagStats.seen) * 1000) / 1000;
 }
 
+/** True when one clinic name is written more than twice. The reply is regenerated once, not edited. */
+function clinicRepeated(text: string): boolean {
+  const counts = new Map<string, number>();
+  for (const match of text.matchAll(/\b(Dapto|Shellharbour|Woonona) Dentists\b/gi)) {
+    const name = (match[1] ?? "").toLowerCase();
+    const next = (counts.get(name) ?? 0) + 1;
+    if (next > 2) return true;
+    counts.set(name, next);
+  }
+  return false;
+}
+
 function timeoutError(): Error {
   return Object.assign(new Error("first-token timeout"), { name: "TimeoutError" });
 }
@@ -130,7 +142,7 @@ function errorName(error: unknown): string {
  */
 export function createRetryingTextStream<T extends TextPart>(input: {
   language: string;
-  run: (attempt: number, signal: AbortSignal, mode?: { scriptRetry?: boolean }) => AsyncIterable<T>;
+  run: (attempt: number, signal: AbortSignal, mode?: { scriptRetry?: boolean; clinicRetry?: boolean }) => AsyncIterable<T>;
   log?: (event: ChatTimingEvent) => void;
   timeoutMs?: number;
   /** From request start. Defaults to 20s. */
@@ -325,8 +337,8 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         ]);
       };
 
-      const consume = async (scriptRetry: boolean): Promise<"ok" | "timeout" | "script" | "deadline" | "error"> => {
-        const budget = scriptRetry ? timeoutMs : firstTokenBudget({ attempt, timeoutMs, startedAt: input.startedAt });
+      const consume = async (scriptRetry: boolean, clinicRetry = false): Promise<"ok" | "timeout" | "script" | "clinic" | "deadline" | "error"> => {
+        const budget = scriptRetry || clinicRetry ? timeoutMs : firstTokenBudget({ attempt, timeoutMs, startedAt: input.startedAt });
         const settings = chatGenerationSettings(attempt, budget);
         model = settings.model;
         const attemptAbort = new AbortController();
@@ -340,7 +352,11 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           }, budget);
         });
         timeoutPromise.catch(() => undefined);
-        const iterator = input.run(attempt, attemptAbort.signal, scriptRetry ? { scriptRetry: true } : undefined)[Symbol.asyncIterator]();
+        const runMode =
+          scriptRetry || clinicRetry
+            ? { ...(scriptRetry ? { scriptRetry: true } : {}), ...(clinicRetry ? { clinicRetry: true } : {}) }
+            : undefined;
+        const iterator = input.run(attempt, attemptAbort.signal, runMode)[Symbol.asyncIterator]();
         const buffered: T[] = [];
         const deferred: T[] = [];
         let held = "";
@@ -463,6 +479,10 @@ export function createRetryingTextStream<T extends TextPart>(input: {
                 await stopIterator(iterator, timer);
                 return "script";
               }
+              if (!clinicRetry && !showed && clinicRepeated(held)) {
+                await stopIterator(iterator, timer);
+                return "clinic";
+              }
               if (held) {
                 rememberRatio(held);
                 show(held);
@@ -494,6 +514,10 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               held += cleaned;
               const gate = replyScriptGate(held, input.language, false);
               if (gate === "release") {
+                if (!clinicRetry && clinicRepeated(held)) {
+                  await stopIterator(iterator, timer);
+                  return "clinic";
+                }
                 rememberRatio(held);
                 show(held);
                 held = "";
@@ -526,7 +550,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
         return "first-token";
       };
 
-      const runBounded = async (scriptRetry: boolean): Promise<"ok" | "timeout" | "script" | "deadline" | "error"> => {
+      const runBounded = async (scriptRetry: boolean, clinicRetry = false): Promise<"ok" | "timeout" | "script" | "clinic" | "deadline" | "error"> => {
         const remaining = deadlineMs - (Date.now() - origin);
         if (remaining <= 0) return "deadline";
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -541,7 +565,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           }, remaining);
         });
         try {
-          return await Promise.race([consume(scriptRetry), gate]);
+          return await Promise.race([consume(scriptRetry, clinicRetry), gate]);
         } finally {
           if (timer) clearTimeout(timer);
         }
@@ -549,6 +573,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
 
       try {
         let scriptRetried = false;
+        let clinicRetried = false;
         for (attempt = 0; attempt < 2; attempt += 1) {
           if (pastDeadline()) {
             emitFallback(deadlineStage());
@@ -559,6 +584,38 @@ export function createRetryingTextStream<T extends TextPart>(input: {
           const result = await runBounded(false);
           if (result === "deadline") {
             emitFallback(deadlineStage());
+            return;
+          }
+          if (result === "clinic" && !clinicRetried) {
+            clinicRetried = true;
+            resetTag();
+            const again = await runBounded(false, true);
+            if (again === "deadline") {
+              emitFallback(deadlineStage());
+              return;
+            }
+            if (again === "ok" || again === "clinic") {
+              clearDeadline();
+              finish("done");
+              controller.close();
+              return;
+            }
+            if (again === "script" && heldScript?.text) {
+              publishSaved(heldScript.text);
+              heldScript = null;
+              clearDeadline();
+              finish("done");
+              controller.close();
+              return;
+            }
+            if (again === "timeout") {
+              stalled = "retry";
+              emitFallback("retry");
+              return;
+            }
+            clearDeadline();
+            finish("error", errorName(lastError));
+            controller.error(lastError ?? new Error("chat stream failed"));
             return;
           }
           if (result === "script" && !scriptRetried) {

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { detectLanguage } from "../language/detect";
 import { getKnowledgeIndex } from "./index-store";
 import { acheReply, dropDenialBesideAnswer, whiteningReply } from "./care-reply";
-import { enforceGroupReply } from "./group-reply";
 import { implantPriceSentence } from "./implant-price";
+import { postCheckReply } from "./post-check";
 import { buildInstructions, scriptRetryInstruction } from "./prompt";
 import { fullyEnglishReply, replyScriptGate } from "../language/reply-script";
 import { guardBareHoursReply, guardUnclearDay } from "./hours";
@@ -317,17 +317,9 @@ describe("prompt rules", () => {
     expect(garbage).toContain("at most once each");
   });
 
-  it("collapses repeated clinic names into one contact line", () => {
+  it("does not delete clinic names from an off-script reply", () => {
     const raw = "Dapto Dentists மற்றும் Woonona Dentists இரண்டிலும் உண்டு. Dapto Dentists-ல் பேசலாம். Woonona Dentists-லும் உண்டு. Shellharbour Dentists-லும் உண்டு.";
-    const out = enforceGroupReply(raw, "ta", { kind: "any" }, index);
-    expect(out.split("Dapto Dentists").length - 1).toBe(1);
-    expect(out.split("Woonona Dentists").length - 1).toBe(1);
-    expect(out.split("Shellharbour Dentists").length - 1).toBe(1);
-    expect(out).toContain("மூன்று கிளினிக்குகளிலும்");
-    expect(out).toContain("02 4288 0737");
-    expect(out).toContain("02 4216 9911");
-    expect(out).toContain("02 4284 4486");
-    expect(enforceGroupReply(raw, "ta", { kind: "one", clinic: "dapto" }, index)).toBe(raw);
+    expect(postCheckReply(raw, "ta", "Do you do check-ups?", { kind: "any" }, index)).toBe(raw);
   });
 
   it("keeps $4500* on Shellharbour and $5000 on Woonona", () => {
@@ -336,11 +328,17 @@ describe("prompt rules", () => {
     expect(unnamed).toContain("$4500*");
     expect(unnamed).toContain("Woonona Dentists");
     expect(unnamed).toContain("$5000");
-    expect(unnamed.indexOf("Shellharbour")).toBeLessThan(unnamed.indexOf("$4500*"));
-    expect(unnamed.indexOf("Woonona")).toBeLessThan(unnamed.lastIndexOf("$5000"));
+    expect(unnamed).toMatch(/Conditions apply/i);
+    expect(unnamed).toMatch(/free implant consult/i);
+    expect(unnamed).toContain("$50");
+    expect(unnamed).not.toMatch(/does not list/i);
+    expect(unnamed).toMatch(/\$4500\* at Shellharbour Dentists/);
+    expect(unnamed).toMatch(/\$5000 at Woonona Dentists/);
     expect(implantPriceSentence("en", { kind: "one", clinic: "woonona" })).not.toContain("$4500");
-    expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).toMatch(/does not list/i);
+    expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).toMatch(/free implant consult/i);
+    expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).not.toMatch(/\$4500|\$5000/);
     expect(implantPriceSentence("ml", { kind: "one", clinic: "shellharbour" })).toContain("$4500*");
+    expect(implantPriceSentence("ml", { kind: "any" })).not.toContain("പേജിൽ ഇല്ല");
     expect(implantPriceSentence("ta", { kind: "one", clinic: "woonona" })).toContain("$5000");
   });
 

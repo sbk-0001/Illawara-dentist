@@ -92,7 +92,7 @@ export function buildInstructions(input: {
 
   const question = input.question ?? "";
   const hoursIntent = questionAsksHours(question)
-    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant. If they did not name a day, ask which day. Do not guess Sunday."
+    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant. If they did not name a day, give the full published week. Do not guess Sunday."
     : "";
   const clarifyLine = needsClarification(question)
     ? "The visitor's words are unclear. Ask one short clarifying question in the reply language. Do not guess a treatment, a product, a price, or a clinic fact."

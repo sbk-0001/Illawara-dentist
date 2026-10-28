@@ -190,6 +190,48 @@ describe("first-token timeout", () => {
     expect(calls).toBe(2);
   });
 
+  it("regenerates once when a clinic name is repeated more than twice, then keeps the next reply", async () => {
+    const repeated = "[[A]]Dapto Dentists is open. Dapto Dentists takes appointments. Dapto Dentists can see you today.";
+    const once = "[[A]]Dapto Dentists is open Monday to Friday.";
+    const still = "[[A]]Woonona Dentists is here. Woonona Dentists books. Woonona Dentists calls back.";
+    let calls = 0;
+    const modes: Array<boolean | undefined> = [];
+    const stream = createRetryingTextStream({
+      language: "en",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: (_attempt, _signal, mode) => {
+        calls += 1;
+        modes.push(mode?.clinicRetry);
+        const text = calls === 1 ? repeated : once;
+        return (async function* () {
+          yield { type: "text-delta", text };
+        })();
+      },
+    });
+    const rewritten = await readText(stream);
+    expect(calls).toBe(2);
+    expect(modes).toEqual([undefined, true]);
+    expect(rewritten).toContain("Monday to Friday");
+    expect(rewritten.split("Dapto Dentists").length - 1).toBe(1);
+
+    let second = 0;
+    const accepted = createRetryingTextStream({
+      language: "en",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: () => {
+        second += 1;
+        return (async function* () {
+          yield { type: "text-delta", text: still };
+        })();
+      },
+    });
+    const kept = await readText(accepted);
+    expect(second).toBe(2);
+    expect(kept.split("Woonona Dentists").length - 1).toBe(3);
+  });
+
   it("regenerates once when a Bengali reply is English, and localizes a fee sentence inside Bengali", async () => {
     const english = "The clinic is open today for visits.";
     const bengali = "হ্যাঁ, দাঁত সাদা করার চিকিৎসা আছে। বিস্তারিত জানতে ক্লিনিকে ফোন করুন।";

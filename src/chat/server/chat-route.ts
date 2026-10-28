@@ -11,6 +11,7 @@ import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } f
 import { addressFocus } from "./address";
 import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
 import { latinManglish, malayalamMarkersWin } from "../language/indic";
+import { coreTemplate } from "./core-reply";
 import { attachReplyPostCheck } from "./post-check";
 import { lowConfidenceTranscript } from "./utterance";
 import { languageFromNativeScript, normalizeSpokenLanguage, requiresNativeScript, spokenLanguageForTranscript } from "../stt";
@@ -353,6 +354,7 @@ export async function POST(request: Request): Promise<Response> {
   const modelMessages = await convertToModelMessages(messagesAfterLanguageSwitch(messages, lexical.reply.code));
 
   const replyStatus: { tag: StatusTag | null; missing: boolean } = { tag: null, missing: true };
+  const canned = coreTemplate(lexical.text, lexical.reply.code, lexical.focus, index);
   const textStream = createRetryingTextStream({
     language: lexical.reply.code,
     startedAt,
@@ -373,16 +375,23 @@ export async function POST(request: Request): Promise<Response> {
       replyStatus.tag = status.tag;
       replyStatus.missing = status.missing;
     },
-    run: (attempt, signal, mode) =>
-      streamText({
+    run: (attempt, signal, mode) => {
+      if (canned) {
+        return (async function* () {
+          yield { type: "text-delta" as const, text: `[[A]]${canned}` };
+        })() as unknown as ReturnType<typeof streamText>["stream"];
+      }
+      const clinicLine = mode?.clinicRetry ? "\n\nMention each clinic name at most once. Do not repeat Dapto Dentists, Shellharbour Dentists, or Woonona Dentists." : "";
+      return streamText({
         ...chatGenerationSettings(
           attempt,
-          mode?.scriptRetry ? FIRST_TOKEN_TIMEOUT_MS : firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt }),
+          mode?.scriptRetry || mode?.clinicRetry ? FIRST_TOKEN_TIMEOUT_MS : firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt }),
         ),
-        instructions: mode?.scriptRetry ? `${instructions}\n\n${scriptRetryInstruction(lexical.reply)}` : instructions,
+        instructions: mode?.scriptRetry ? `${instructions}\n\n${scriptRetryInstruction(lexical.reply)}` : `${instructions}${clinicLine}`,
         messages: messagesForScriptRetry(modelMessages, lexical.reply.code, mode?.scriptRetry === true),
         abortSignal: signal,
-      }).stream,
+      }).stream;
+    },
   });
 
   const metadata = {

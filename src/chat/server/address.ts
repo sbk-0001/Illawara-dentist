@@ -104,6 +104,10 @@ function needsNativeAddress(reply: string, code: string): boolean {
   return !native.test(reply);
 }
 
+export function addressReply(code: string, index: KnowledgeIndex, focus: ClinicFocus): string {
+  return addressBlock(index, code, addressClinicIds(focus));
+}
+
 function addressBlock(index: KnowledgeIndex, code: string, ids: ClinicId[]): string {
   return ids
     .map((id) => {
