@@ -6,7 +6,7 @@ The widget answers in the visitor's language and script, including right-to-left
 
 Answers are limited to a committed index of the clinics' public pages. Source chips link to those pages. The widget does not invent prices, dentists, hours, health-fund rules or the concept phone number from the homepage mock-up.
 
-This repository does not contain the new homepage. `/` is a plain preview so the widget can be opened on Vercel. See [INTEGRATION.md](INTEGRATION.md) for how to mount `<ChatWidget />` on that homepage later.
+This repository does not contain the new homepage. `/` is a plain preview so the widget can be opened on Vercel. The clinic site is Astro, so it loads the chat from this deployment. See [INTEGRATION.md](INTEGRATION.md).
 
 The ByteVoice website that this behaviour follows is not a public repository, so the widget was built from the product spec rather than from that source tree. Nothing from ByteVoice branding is included.
 

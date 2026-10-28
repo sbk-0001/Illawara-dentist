@@ -45,6 +45,11 @@ type ChatWidgetProps = {
   api?: string;
   initialMessages?: ClinicUIMessage[];
   defaultOpen?: boolean;
+  /** `widget` floats on the page. `panel` fills an iframe. `inline` fills an iframe and stays open. */
+  presentation?: "widget" | "panel" | "inline";
+  /** When set, the parent owns whether the panel is open. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 function textOf(message: ClinicUIMessage): string {
@@ -73,8 +78,21 @@ function ensureFonts() {
   document.head.appendChild(link);
 }
 
-export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = false }: ChatWidgetProps) {
-  const [open, setOpen] = useState(defaultOpen);
+export function ChatWidget({
+  api = "/api/chat",
+  initialMessages,
+  defaultOpen = false,
+  presentation = "widget",
+  open: openProp,
+  onOpenChange,
+}: ChatWidgetProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = openProp ?? uncontrolledOpen;
+  function setOpen(next: boolean | ((value: boolean) => boolean)) {
+    const value = typeof next === "function" ? next(open) : next;
+    if (openProp === undefined) setUncontrolledOpen(value);
+    if (value !== open) onOpenChange?.(value);
+  }
   const [input, setInput] = useState("");
   const [language, setLanguage] = useState("auto");
   const [mic, setMic] = useState<MicState>("idle");
@@ -480,27 +498,34 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
     }
   }
 
+  const shown = presentation === "inline" ? true : open;
+  const panelClass = presentation === "widget" ? styles.panel : `${styles.panel} ${styles.frame}`;
+
   return (
     <>
-      <button type="button" className={styles.launcher} aria-expanded={open} data-testid="chat-launcher" onClick={() => setOpen((value) => !value)}>
-        <span className={styles.launcherMark} aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M5 6.5A3.5 3.5 0 0 1 8.5 3h7A3.5 3.5 0 0 1 19 6.5v6A3.5 3.5 0 0 1 15.5 16H12l-4.2 3.2c-.7.5-1.8 0-1.8-.9V16h-.5A3.5 3.5 0 0 1 2 12.5v-6A3.5 3.5 0 0 1 5.5 3" stroke="currentColor" strokeWidth="1.8" transform="translate(1.2 1)" />
-          </svg>
-        </span>
-        {open ? "Close chat" : "Ask the clinics"}
-      </button>
-      {open ? (
-        <section className={styles.panel} role="dialog" aria-label="Illawarra Dentists chat" dir={dir} data-testid="chat-panel">
+      {presentation === "widget" ? (
+        <button type="button" className={styles.launcher} aria-expanded={open} data-testid="chat-launcher" onClick={() => setOpen((value) => !value)}>
+          <span className={styles.launcherMark} aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M5 6.5A3.5 3.5 0 0 1 8.5 3h7A3.5 3.5 0 0 1 19 6.5v6A3.5 3.5 0 0 1 15.5 16H12l-4.2 3.2c-.7.5-1.8 0-1.8-.9V16h-.5A3.5 3.5 0 0 1 2 12.5v-6A3.5 3.5 0 0 1 5.5 3" stroke="currentColor" strokeWidth="1.8" transform="translate(1.2 1)" />
+            </svg>
+          </span>
+          {open ? "Close chat" : "Ask the clinics"}
+        </button>
+      ) : null}
+      {shown ? (
+        <section className={panelClass} role="dialog" aria-label="Illawarra Dentists chat" dir={dir} data-testid="chat-panel">
           <header className={styles.header}>
             <div>
               <p className={styles.eyebrow}>Care beyond the chair</p>
               <h2 className={styles.title}>Illawarra Dentists</h2>
               <p className={styles.clinics}>Woonona · Dapto · Shellharbour</p>
             </div>
-            <button type="button" className={styles.close} aria-label="Close chat" onClick={() => setOpen(false)}>
-              ×
-            </button>
+            {presentation === "inline" ? null : (
+              <button type="button" className={styles.close} aria-label="Close chat" onClick={() => setOpen(false)}>
+                ×
+              </button>
+            )}
           </header>
           <div className={styles.log}>
             {messages.length === 0 ? (

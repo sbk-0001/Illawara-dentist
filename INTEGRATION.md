@@ -1,47 +1,60 @@
-# Drop the chat widget into a Next.js homepage
+# Embed the chat on the Illawarra Dentists site
 
-This folder is the whole widget. The demo page at `/` is only a placeholder so the widget can be previewed. Do not treat it as the Illawarra Dentists homepage.
+The clinic site is an Astro static site (`RidwanKhalid/illawarra-dentists-website`, folder `site/`). This chat app stays on its own deployment. Copying `src/chat` into that repo will not work.
 
-## Copy
+`/` on this app is only a placeholder so the widget can be previewed. It is not the homepage. The page the clinic site should load is `/embed`, through `embed.js`.
 
-1. Copy `src/chat/` into the homepage app (same path, or another folder if you update the imports).
-2. Copy the route files:
-   - `src/app/api/chat/route.ts`
-   - `src/app/api/chat/stt-token/route.ts`
-   - `src/app/api/chat/transcribe/route.ts`
-3. Those routes re-export handlers from `src/chat/server/`. If you move `src/chat`, point the re-exports at the new path.
-4. Keep `outputFileTracingIncludes` in `next.config.ts` so the knowledge index is shipped with the chat route:
+Replace `<chat-host>` with the origin of this deployment, with no trailing slash.
 
-```ts
-const nextConfig = {
-  outputFileTracingIncludes: {
-    "/api/chat": ["./src/chat/data/**/*"],
-  },
-};
+## Beside the FAQ
+
+Put a slot where the panel should sit, then load the script in inline mode. The script reads its own `src` and mounts an iframe to `<chat-host>/embed?inline=1` inside that slot. The panel fills the frame.
+
+```astro
+<div id="chat-slot"></div>
+<script src="https://<chat-host>/embed.js" data-mode="inline" data-target="#chat-slot" defer></script>
 ```
 
-## Mount
+Give `#chat-slot` a height. The iframe is `width: 100%`, `height: 100%`, and at least 640px tall.
 
-In the root layout (a client boundary is already inside the widget):
+## Floating
 
-```tsx
-import { ChatWidget } from "@/chat";
+Omit the slot. The script adds a bottom-right "Ask the clinics" button and an iframe to `<chat-host>/embed?open=1`. The iframe stays hidden until the button opens it. On a viewport 640px wide or narrower, the open panel fills the screen.
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>
-        {children}
-        <ChatWidget />
-      </body>
-    </html>
-  );
-}
+```astro
+<script src="https://<chat-host>/embed.js" data-mode="floating" defer></script>
 ```
 
-`ChatWidget` floats at the bottom right. It does not render the homepage.
+`data-mode` defaults to `floating` when it is omitted.
 
-Import the widget from `@/chat` (or `src/chat`). That entry exports only the React component, so the browser bundle does not load the index or the filesystem. API handlers live in `src/chat/handlers.ts` and `src/chat/server/`.
+## What the iframe does
+
+The loader sets `allow="microphone"`, a title of "Illawarra Dentists chat", `loading="lazy"`, and `referrerpolicy="origin"`. The chat page calls `/api/chat` on the chat host. The clinic page does not call the API.
+
+The embed page posts `{ source: "illawarra-chat", type: "open" | "close" | "resize" }` to the parent. The loader accepts that message only when `event.origin` is the chat host. It tells the iframe to open with `{ source: "illawarra-chat-host", type: "open" }`, and the embed page accepts that only from the framing page.
+
+`/embed` is a transparent page with the widget alone. `?open=1` opens the panel so it fills the iframe. `?inline=1` keeps the panel open and hides the close button.
+
+## Who may frame `/embed`
+
+The response sets `Content-Security-Policy: frame-ancestors`. Only `/embed` can be framed. The homepage and `/api/chat` send `frame-ancestors 'none'`.
+
+Allowed ancestors are:
+
+- this chat host (`'self'`)
+- `https://daptodentists.com.au`, `https://shellharbourdentist.com.au`, and `https://woononadentists.com.au`
+- `http://localhost:*`, `https://localhost:*`, `http://127.0.0.1:*`, and `https://127.0.0.1:*`
+- `https://illawarra-dentists-website-git-faq-chat-embed-strategybyte.vercel.app`
+- each extra origin in `CHAT_ALLOWED_ORIGINS`
+- `https://*.vercel.app` for other previews of this project
+
+A preview hostname is one label, such as `illawarra-dentists-website-git-branch-team.vercel.app`. CSP can only wildcard a whole label, so those hosts are allowed as `https://*.vercel.app`. A referrer whose host is `illawarra-dentists-website` optionally followed by a deployment suffix is also written into the policy. A different Vercel project is not added from the referrer.
+
+List the live clinic origins explicitly:
+
+```bash
+CHAT_ALLOWED_ORIGINS=https://daptodentists.com.au,https://shellharbourdentist.com.au,https://woononadentists.com.au
+```
 
 ## Environment
 
