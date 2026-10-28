@@ -143,9 +143,10 @@ describe("contact label rewrite", () => {
     );
     const text = unnamed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(text.startsWith("Here are the opening hours.")).toBe(true);
-    expect(text).toContain("Dapto Dentists is open: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM");
-    expect(text).toContain("Shellharbour Dentists is open:");
-    expect(text).toContain("Woonona Dentists is open:");
+    expect(text).toContain("Dapto Dentists is open Monday to Friday from 8am to 6pm.");
+    expect(text).toContain("Dapto Dentists is open Saturday from 8am to 4pm.");
+    expect(text).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
+    expect(text).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
     expect(isShortLabelReply(text, "en")).toBe(false);
     expect(text.startsWith("Monday")).toBe(false);
 
@@ -158,9 +159,9 @@ describe("contact label rewrite", () => {
       }),
     );
     const dapto = named.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(dapto.startsWith("Dapto Dentists is open:")).toBe(true);
+    expect(dapto.startsWith("Dapto Dentists is open Monday to Friday from 8am to 6pm.")).toBe(true);
     expect(dapto).not.toContain("Dapto Dentists: ");
-    expect(dapto).toContain("Saturday 8:00 AM–4:00 PM.");
+    expect(dapto).toContain("Saturday from 8am to 4pm.");
     expect(dapto).not.toContain("Shellharbour");
 
     const sentence = await readChunks(

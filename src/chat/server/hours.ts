@@ -313,6 +313,7 @@ function spokenSpan(open: string, close: string, code: string): string {
 }
 
 const FULL_DAY: Record<string, Partial<Record<Day, string>>> = {
+  en: { sat: "Saturday", sun: "Sunday", mon: "Monday", fri: "Friday" },
   ml: { sat: "ശനിയാഴ്ച", sun: "ഞായറാഴ്ച", mon: "തിങ്കളാഴ്ച", fri: "വെള്ളിയാഴ്ച" },
   ta: { sat: "சனிக்கிழமை", sun: "ஞாயிற்றுக்கிழமை", mon: "திங்கட்கிழமை", fri: "வெள்ளிக்கிழமை" },
   hi: { sat: "शनिवार", sun: "रविवार", mon: "सोमवार", fri: "शुक्रवार" },
@@ -335,6 +336,7 @@ function askedDay(question: string): Day | null {
 }
 
 function weekdayLabel(code: string): string {
+  if (code === "en") return "Monday to Friday";
   if (code === "ml") return "തിങ്കളാഴ്ച മുതൽ വെള്ളിയാഴ്ച വരെ";
   if (code === "ta") return "திங்கள் முதல் வெள்ளி வரை";
   if (code === "hi") return "सोमवार से शुक्रवार तक";
@@ -481,7 +483,7 @@ function spokenHoursSentence(code: string, id: ClinicId, day: Day | null): strin
     else if (code === "bn") sentences.push(`${name} ${label} ${range} খোলা থাকে।`);
     else if (code === "zh") sentences.push(`${name}${label}${range}营业。`);
     else if (code === "ar") sentences.push(`يفتح ${name} ${label} ${range}.`);
-    else if (code === "es") sentences.push(`${name} abre ${label} ${range}.`);
+    else     if (code === "es") sentences.push(`${name} abre ${label} ${range}.`);
   }
   if (!sentences.length && appointment) {
     const label = dayLabel(code, day || "sat");
@@ -496,7 +498,32 @@ function spokenHoursSentence(code: string, id: ClinicId, day: Day | null): strin
   return sentences.join(" ");
 }
 
+function englishClock(hhmm: string): string {
+  const { hour, minute } = parts(hhmm);
+  const suffix = hour < 12 ? "am" : "pm";
+  const extra = minute === "00" ? "" : `:${minute}`;
+  return `${hour12(hour)}${extra}${suffix}`;
+}
+
+function englishSpokenSpan(open: string, close: string): string {
+  return `from ${englishClock(open)} to ${englishClock(close)}`;
+}
+
 function hoursSentence(code: string, id: ClinicId, question = ""): string {
+  if (code === "en") {
+    const day = askedDay(question);
+    const name = clinicName(id);
+    const schedule = CLINIC_HOURS[id];
+    const spans = day ? schedule.spans.filter((span) => span.days.includes(day)) : schedule.spans;
+    const open = spans.map((span) => {
+      const label = span.days.length > 1 && !day ? "Monday to Friday" : dayLabel("en", day && span.days.includes(day) ? day : span.days[0]);
+      return `${name} is open ${label} ${englishSpokenSpan(span.open, span.close)}.`;
+    });
+    const appointments = schedule.notes
+      .filter((note): note is { kind: "appointment"; days: Day[] } => note.kind === "appointment" && (!day || note.days.includes(day)))
+      .map((note) => `${name} is open ${dayLabel("en", day || note.days[0] || "sat")} by appointment.`);
+    return [...open, ...appointments].join(" ");
+  }
   if (SPOKEN_HOURS.has(code)) return spokenHoursSentence(code, id, askedDay(question));
   const hours = formatClinicHours(id, code).replace(/[.。]+$/u, "").trim();
   return `${hoursLeadIn(code, clinicName(id))} ${hours}.`;
@@ -559,12 +586,36 @@ export function ensureEnglishHoursStop(text: string): string {
 
 const ROBOTIC_HOURS = /തുറന്നിരിക്കുന്നു|திறந்துள்ளது|营业时间如下|上午\d+:\d+|8:00\s*[–-]\s*16:00/;
 
+const WHICH_DAY: Record<string, string> = {
+  en: "Which day do you mean?",
+  ml: "ഏത് ദിവസമാണ് അറിയേണ്ടത്?",
+  ta: "எந்த நாள் என்று சொல்லுங்களேன்?",
+  hi: "कौन सा दिन पूछ रहे हैं?",
+  bn: "কোন দিনের কথা বলছেন?",
+  zh: "您问的是哪一天？",
+  ar: "أي يوم تقصد؟",
+  es: "¿Qué día pregunta?",
+};
+
+const SUNDAY_ONLY = /sunday|ഞായ|ஞாயி|रविवार|রবিবার|周日|星期日|domingo|الأحد/i;
+const OTHER_DAY = /monday|tuesday|wednesday|thursday|friday|saturday|തിങ്ക|ശനി|திங்|சனி|सोम|शनि|সোম|শনি|周一|周六|lunes|sábado|الاثنين|السبت/i;
+
+/** A hours question that never named a day must not be answered as Sunday. */
+export function guardUnclearDay(reply: string, question: string, code: string): string {
+  if (!questionAsksHours(question) || askedDay(question)) return reply;
+  if (!SUNDAY_ONLY.test(reply) || OTHER_DAY.test(reply)) return reply;
+  return WHICH_DAY[code] ?? WHICH_DAY.en ?? reply;
+}
+
 export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }, question = ""): string {
   const cleaned = stripHoursQuotes(text).trim();
   const only = hoursOnlyClinics(cleaned, code);
   const finish = (value: string) => (code === "en" ? ensureEnglishHoursStop(value) : value);
   if (only) return finish(renderHours(code, hoursIds(focus), question));
   if (SPOKEN_HOURS.has(code) && cleaned.length > 0 && cleaned.length < 220 && ROBOTIC_HOURS.test(cleaned) && !/മണി|மணி|बजे|টা|点|صباح|mañana/.test(cleaned)) {
+    return finish(renderHours(code, hoursIds(focus), question));
+  }
+  if (code === "en" && cleaned.length > 0 && cleaned.length < 240 && /0?\d{1,2}:\d{2}\s*[–-]\s*0?\d{1,2}:\d{2}/.test(cleaned) && !/\b(?:am|pm)\b/i.test(cleaned)) {
     return finish(renderHours(code, hoursIds(focus), question));
   }
   const { first, rest } = splitFirstSentence(cleaned);
@@ -582,7 +633,7 @@ export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
 }
 
 export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string, question = ""): string {
-  const spoken = SPOKEN_HOURS.has(code);
+  const spoken = SPOKEN_HOURS.has(code) || code === "en";
   const lines = clinicIdsForHours(focus).flatMap((clinic) => {
     const stored = CLINIC_HOURS[clinic];
     const schedule = formatClinicHours(clinic, code);

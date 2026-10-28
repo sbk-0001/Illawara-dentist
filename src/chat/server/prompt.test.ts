@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { detectLanguage } from "../language/detect";
 import { getKnowledgeIndex } from "./index-store";
+import { acheReply, dropDenialBesideAnswer, whiteningReply } from "./care-reply";
+import { enforceGroupReply } from "./group-reply";
+import { implantPriceSentence } from "./implant-price";
 import { buildInstructions, scriptRetryInstruction } from "./prompt";
+import { fullyEnglishReply, replyScriptGate } from "../language/reply-script";
+import { guardBareHoursReply, guardUnclearDay } from "./hours";
 import { prepareTurn } from "./chat-route";
 import { FEE_CAVEAT_EN } from "./system-text";
 
@@ -310,5 +315,88 @@ describe("prompt rules", () => {
     });
     expect(garbage).toContain("Ask one short clarifying question");
     expect(garbage).toContain("at most once each");
+  });
+
+  it("collapses repeated clinic names into one contact line", () => {
+    const raw = "Dapto Dentists மற்றும் Woonona Dentists இரண்டிலும் உண்டு. Dapto Dentists-ல் பேசலாம். Woonona Dentists-லும் உண்டு. Shellharbour Dentists-லும் உண்டு.";
+    const out = enforceGroupReply(raw, "ta", { kind: "any" }, index);
+    expect(out.split("Dapto Dentists").length - 1).toBe(1);
+    expect(out.split("Woonona Dentists").length - 1).toBe(1);
+    expect(out.split("Shellharbour Dentists").length - 1).toBe(1);
+    expect(out).toContain("மூன்று கிளினிக்குகளிலும்");
+    expect(out).toContain("02 4288 0737");
+    expect(out).toContain("02 4216 9911");
+    expect(out).toContain("02 4284 4486");
+    expect(enforceGroupReply(raw, "ta", { kind: "one", clinic: "dapto" }, index)).toBe(raw);
+  });
+
+  it("keeps $4500* on Shellharbour and $5000 on Woonona", () => {
+    const unnamed = implantPriceSentence("en", { kind: "any" });
+    expect(unnamed).toContain("Shellharbour Dentists");
+    expect(unnamed).toContain("$4500*");
+    expect(unnamed).toContain("Woonona Dentists");
+    expect(unnamed).toContain("$5000");
+    expect(unnamed.indexOf("Shellharbour")).toBeLessThan(unnamed.indexOf("$4500*"));
+    expect(unnamed.indexOf("Woonona")).toBeLessThan(unnamed.lastIndexOf("$5000"));
+    expect(implantPriceSentence("en", { kind: "one", clinic: "woonona" })).not.toContain("$4500");
+    expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).toMatch(/does not list/i);
+    expect(implantPriceSentence("ml", { kind: "one", clinic: "shellharbour" })).toContain("$4500*");
+    expect(implantPriceSentence("ta", { kind: "one", clinic: "woonona" })).toContain("$5000");
+  });
+
+  it("asks which day instead of guessing Sunday, and regenerates a fully English Tamil reply", () => {
+    expect(guardUnclearDay("We are open on Sunday from 8.", "Dapto cliniceനി ആർച്ചൈ പോൾതുറക്കും", "ml")).toBe("ഏത് ദിവസമാണ് അറിയേണ്ടത്?");
+    expect(guardUnclearDay("Dapto Dentists ശനിയാഴ്ച തുറന്നിരിക്കും.", "ശനിയാഴ്ച എപ്പോൾ തുറക്കും?", "ml")).toContain("ശനി");
+    const english = "The clinic offers dental implants and a crown for a set fee this week.";
+    expect(fullyEnglishReply(english, "ta")).toBe(true);
+    expect(replyScriptGate(english, "ta", true)).toBe("conflict");
+    expect(replyScriptGate(english, "ta", false)).toBe("wait");
+  });
+
+  it("does not answer a mixed hours miss in English when Malayalam was the previous language", () => {
+    const turn = prepareTurn(
+      [
+        { role: "assistant", metadata: { language: "ml" }, content: "വിലാസം ഇതാണ്." },
+        { role: "user", content: "Dapto cliniceനി ആർച്ചൈ പോൾതുറക്കും" },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "en" },
+    );
+    expect(turn.reply.code).toBe("ml");
+    const first = prepareTurn([{ role: "user", content: "Dapto cliniceനി ആർച്ചൈ പോൾതുറക്കും" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "ta",
+    });
+    expect(first.reply.code).toBe("ml");
+  });
+
+  it("answers toothache and whitening with a warm sentence, and drops a denial next to a real answer", () => {
+    const ache = acheReply("ml", { kind: "one", clinic: "dapto" }, index);
+    expect(ache).toContain("വേദനയിൽ ഖേദിക്കുന്നു");
+    expect(ache).toContain("02 4288 0737");
+    expect(ache).not.toContain("ലഭ്യത");
+    const all = acheReply("en", { kind: "any" }, index);
+    expect(all).toContain("All three clinics");
+    expect(all).toContain("02 4288 0737");
+    expect(all).toContain("02 4216 9911");
+    expect(all).toContain("02 4284 4486");
+    expect(all.split("Dapto Dentists").length - 1).toBe(1);
+
+    const white = whiteningReply("ta", { kind: "one", clinic: "woonona" }, index);
+    expect(white).toContain("பல் வெண்மையாக்குதல்");
+    expect(white).not.toContain("தகவல்");
+    expect(white).toContain("$650");
+    expect(white).toContain(index.contacts.woonona.bookingUrl);
+    const mlWhite = whiteningReply("ml", { kind: "any" }, index);
+    expect(mlWhite).toContain("പല്ല് വെളുപ്പിക്കൽ");
+    expect(mlWhite).not.toContain("വിവരങ്ങൾ");
+
+    const mixed = dropDenialBesideAnswer("ওয়েবসাইটে এই বিষয়ের উত্তর নেই। ফোন 02 4288 0737।");
+    expect(mixed).toContain("02 4288 0737");
+    expect(mixed).not.toContain("উত্তর নেই");
+    expect(guardBareHoursReply("Dapto is open Saturday 08:00–16:00.", "en", { kind: "one", clinic: "dapto" }, "Saturday hours?")).toBe(
+      "Dapto Dentists is open Saturday from 8am to 4pm.",
+    );
   });
 });

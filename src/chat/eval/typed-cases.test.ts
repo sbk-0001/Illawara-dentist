@@ -48,8 +48,8 @@ describe("live typed cases", () => {
     const hours = rewriteEnglishHours("Dapto Dentists is open ശനിയാഴ്ച 08:00–16:00.", "ml");
     expect(hours).not.toContain("is open");
     expect(hours).toContain("തുറന്നിരിക്കുന്നു");
-    expect(applyGlossary("teeth whitening", "ml")).toBe("പല്ലുകൾ വെളുപ്പിക്കൽ");
-    expect(applyGlossary("പല്ല് സഫെദകരണം ചെയ്യാം", "ml")).toContain("പല്ലുകൾ വെളുപ്പിക്കൽ");
+    expect(applyGlossary("teeth whitening", "ml")).toBe("പല്ല് വെളുപ്പിക്കൽ");
+    expect(applyGlossary("പല്ല് സഫെദകരണം ചെയ്യാം", "ml")).toContain("പല്ല് വെളുപ്പിക്കൽ");
     expect(applyGlossary("പല്ല് സഫെദകരണം", "ml")).not.toContain("सफेद");
   });
 

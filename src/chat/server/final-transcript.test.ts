@@ -162,6 +162,48 @@ describe("final transcript from the bake-off", () => {
     expect(result.sttFallback).toBe(true);
   });
 
+  it("keeps gpt or the Deepgram final when Gemini is empty or throws", async () => {
+    const live = "Dental implant in etre çelevakum";
+    const gptText = "How much does a dental implant cost?";
+    const empty = await resolveFusedLiveFinal({
+      liveTranscript: live,
+      gpt: async () => gptText,
+      gemini: async () => ({ lang: "ml", transcript: "" }),
+    });
+    expect(empty.fused).toBe(true);
+    expect(empty.transcript).toBe(gptText);
+    expect(empty.language).toBe("ml");
+    const thrown = await resolveFusedLiveFinal({
+      liveTranscript: live,
+      gpt: async () => {
+        throw new Error("gpt down");
+      },
+      gemini: async () => {
+        throw new Error("gemini down");
+      },
+    });
+    expect(thrown.transcript).toBe(live);
+    expect(thrown.language).toBe("ml");
+    expect(thrown.transcript.trim().length).toBeGreaterThan(0);
+  });
+
+  it("sends the clinic prompt on the Bengali picker path", async () => {
+    let language: string | undefined;
+    const result = await resolveFinalTranscript({
+      audio: new Uint8Array(),
+      picker: "bn",
+      deepgram: "ডাক্তার ক্লিনিকের",
+      gpt: async (code) => {
+        language = code;
+        return "ডাপ্টো ক্লিনিকের ফোন নম্বর কী?";
+      },
+    });
+    expect(language).toBe("bn");
+    expect(result.transcript).toContain("ডাপ্টো");
+    expect(openAiTranscribeProviderOptions("bn").openai.prompt).toContain("Dapto");
+    expect(openAiTranscribeProviderOptions("bn").openai.prompt).toContain("Woonona");
+  });
+
   it("keeps confident English, Spanish, Chinese, and Arabic on Deepgram", () => {
     expect(needsServerFinalTranscript("What time does the Dapto clinic open on Saturday?", null)).toBe(false);
     expect(needsServerFinalTranscript("¿A qué hora abre la clínica de Dapto el sábado?", null)).toBe(false);

@@ -273,7 +273,16 @@ export function detectedReplyScript(text: string): string {
   return "latn";
 }
 
+/** A finished native-language reply that is still English must be regenerated. */
+export function fullyEnglishReply(text: string, code: string): boolean {
+  const nativeRe = NATIVE_REPLY[code];
+  if (!nativeRe) return false;
+  const native = countPattern(text, nativeRe);
+  return native < 4 && unexpectedLatinWords(text).length >= 4;
+}
+
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
+  if (fullyEnglishReply(text, code)) return final ? "conflict" : "wait";
   const foreign = foreignScriptCount(text, code);
   if (foreign >= 4 || (final && foreign >= 1)) return final ? "conflict" : "wait";
   if (STRICT_NATIVE.has(code) && unexpectedLatinWords(text).length > 0) return final ? "conflict" : "wait";

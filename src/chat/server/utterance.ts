@@ -17,3 +17,11 @@ export function needsClarification(text: string): boolean {
   const latin = value.match(/[A-Za-z]{3,}/g)?.length ?? 0;
   return native >= 4 && latin > 0;
 }
+
+/** Mixed script, or Latin noise beside Indic letters. Not a confident English utterance. */
+export function lowConfidenceTranscript(text: string): boolean {
+  if (needsClarification(text)) return true;
+  const indic = text.match(/[\u0980-\u09FF\u0900-\u097F\u0B80-\u0BFF\u0D00-\u0D7F]/g)?.length ?? 0;
+  const latin = text.match(/[A-Za-z]/g)?.length ?? 0;
+  return indic >= 2 && latin >= 4;
+}

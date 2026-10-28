@@ -676,7 +676,7 @@ const CLINIC_CONTEXT =
 
 /** Hours or place words. "ডাক্তার" itself is doctor, so it is not a cue. */
 const HOURS_OR_LOCATION =
-  /hour|hours|opening|open|close|address|where|location|saturday|ঠিকানা|কোথায়|খোলা|কখন|সময়|শনিবার|khola|kokhon|thikana|kothay|地址|哪里|哪儿|几点|营业|开门/i;
+  /hour|hours|opening|open|close|address|where|location|saturday|phone|ঠিকানা|কোথায়|খোলা|কখন|সময়|শনিবার|ফোন|নম্বর|khola|kokhon|thikana|kothay|地址|哪里|哪儿|几点|营业|开门/i;
 
 const IMPLANT_CONTEXT = /种植|植牙|种牙|implant/i;
 const ALIGNER_CONTEXT = /矫正|隐形|牙套|隐适|invisalign|aligner/i;

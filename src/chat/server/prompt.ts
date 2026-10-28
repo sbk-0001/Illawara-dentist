@@ -4,6 +4,7 @@ import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
 import type { ScoredChunk } from "../retrieval/search";
 import { clinicName } from "../retrieval/search";
 import { isAddressQuestion } from "./address";
+import { implantPriceSentence, isImplantPriceQuestion } from "./implant-price";
 import { needsClarification } from "./utterance";
 import { directoryLabels } from "./contacts";
 import { formatClinicHours, hoursRelevant, localisedHoursBlock, questionAsksHours } from "./hours";
@@ -91,7 +92,7 @@ export function buildInstructions(input: {
 
   const question = input.question ?? "";
   const hoursIntent = questionAsksHours(question)
-    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant."
+    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant. If they did not name a day, ask which day. Do not guess Sunday."
     : "";
   const clarifyLine = needsClarification(question)
     ? "The visitor's words are unclear. Ask one short clarifying question in the reply language. Do not guess a treatment, a product, a price, or a clinic fact."
@@ -152,9 +153,12 @@ Do not diagnose. Do not tell the visitor what procedure they need.
 
 PRICES
 If the context does not price the asked item, say the website does not list that exact item. If the context does contain a price, quote that same figure in every language and name its product and clinic. Do not say the fee is unlisted when a figure is in the context. Singular implants and a crown from $5000, or about $30 a week on a payment plan, is not the price of zirconia implants. A gallery caption is not a price. Then give the clinic phone and booking link.
+${isImplantPriceQuestion(question) ? `IMPLANT PRICE\nUse only this, and do not swap the figures between clinics:\n${implantPriceSentence(input.language.code, input.focus)}` : ""}
 
 OFF TOPIC
 If the question is not about these clinics, their services, fees, visits, payments or oral health on their sites, refuse it in the reply language. Start that refusal with [[N]] and do not type phone numbers yourself.
+
+Do not say that the website has no answer in the same reply that then gives the phone, address, hours, price, or booking link.
 
 WHEN YOU DO NOT KNOW
 ${

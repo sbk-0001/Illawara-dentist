@@ -271,8 +271,7 @@ describe("UI message stream validation", () => {
       },
     });
     await assertValidReply(stream, (text) => {
-      expect(text.startsWith("Dapto Dentists is open:")).toBe(true);
-      expect(text).toContain("Saturday 8:00 AM–4:00 PM.");
+      expect(text).toBe("Dapto Dentists is open Saturday from 8am to 4pm.");
     });
   });
 

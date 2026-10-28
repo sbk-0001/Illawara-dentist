@@ -11,6 +11,8 @@ import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } f
 import { addressFocus } from "./address";
 import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
 import { latinManglish, malayalamMarkersWin } from "../language/indic";
+import { attachReplyPostCheck } from "./post-check";
+import { lowConfidenceTranscript } from "./utterance";
 import { languageFromNativeScript, normalizeSpokenLanguage, requiresNativeScript, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
@@ -226,6 +228,18 @@ export function prepareTurn(
       reply = forced;
     }
   }
+  if (inputMode === "voice" && !pickerLocked && lowConfidenceTranscript(text)) {
+    const prior = priorReplyLanguage(messages);
+    const indic = malayalamMarkersWin(text) || latinManglish(text) ? "ml" : languageFromNativeScript(text);
+    const engine = spokenLanguage && /^(?:ml|ta|hi|bn|ar|zh)$/.test(spokenLanguage) ? spokenLanguage : null;
+    const best = (prior && prior !== "en" ? prior : null) || indic || engine;
+    const lowOption = best && best !== "en" ? languageOption(best) : undefined;
+    if (lowOption && best) {
+      const forced = { ...replyFromOption(lowOption, "detected" as const, false), confidence: "high" as const };
+      reply = forced;
+      spokenLanguage = best;
+    }
+  }
   const priorTexts = messages
     .slice(0, Math.max(0, messages.map((message) => message.role).lastIndexOf("user")))
     .map((message) => messageText(message));
@@ -378,22 +392,25 @@ export async function POST(request: Request): Promise<Response> {
     sources,
   } satisfies ChatMetadata;
 
-  const uiStream = attachContactLabels(
-    attachHoursWording(
-      attachScriptFix(
-        toUIMessageStream({
-          stream: textStream,
-          sendReasoning: false,
-          messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
-        }),
+  const uiStream = attachReplyPostCheck(
+    attachContactLabels(
+      attachHoursWording(
+        attachScriptFix(
+          toUIMessageStream({
+            stream: textStream,
+            sendReasoning: false,
+            messageMetadata: ({ part }) => (part.type === "start" ? metadata : undefined),
+          }),
+          lexical.reply.code,
+          lexical.text,
+        ),
         lexical.reply.code,
+        hoursRelevant(lexical.text, chunks),
         lexical.text,
       ),
-      lexical.reply.code,
-      hoursRelevant(lexical.text, chunks),
-      lexical.text,
+      { code: lexical.reply.code, index, replyStatus, focus: lexical.focus, question: lexical.text },
     ),
-    { code: lexical.reply.code, index, replyStatus, focus: lexical.focus, question: lexical.text },
+    { code: lexical.reply.code, question: lexical.text, focus: lexical.focus, index },
   );
   const stream = attachContactFooter(uiStream, {
     footer: contactFooter(index, lexical.reply, lexical.focus),

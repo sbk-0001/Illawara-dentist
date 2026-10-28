@@ -80,9 +80,11 @@ export async function POST(request: Request): Promise<Response> {
       if (!checked) checked = longestNonEmptyTranscript(liveTranscript, choice.transcript);
       let repairMs = 0;
       if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
+        const beforeRewrite = checked;
         const repairStarted = Date.now();
-        checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+        const rewritten = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
         repairMs = Date.now() - repairStarted;
+        checked = rewritten.trim() || beforeRewrite;
       }
       if (!checked) {
         logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs, sttEngine: choice.sttEngine, sttFallback: choice.sttFallback, sttMs, ...(liveDrop ? { liveDrop } : {}) });
@@ -128,7 +130,9 @@ export async function POST(request: Request): Promise<Response> {
     let checked = direct ? chooseCheckedTranscript(liveTranscript, next || null) : next || "";
     if (!checked) checked = longestNonEmptyTranscript(liveTranscript, next);
     if (requestedRepair && checked && !hasNativeScript(requestedRepair, checked)) {
-      checked = await rewriteTranscriptScript({ text: checked, language: requestedRepair, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+      const beforeRewrite = checked;
+      const rewritten = await rewriteTranscriptScript({ text: checked, language: requestedRepair, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+      checked = rewritten.trim() || beforeRewrite;
     }
     if (!checked) {
       logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, repairMs, retried, sttEngine: "deepgram", sttFallback: true, sttMs: repairMs, ...(liveDrop ? { liveDrop } : {}) });
@@ -184,9 +188,11 @@ export async function POST(request: Request): Promise<Response> {
       let checked = choice.transcript.trim() || longestNonEmptyTranscript(transcript, choice.transcript);
       let repairMs = 0;
       if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
+        const beforeRewrite = checked;
         const repairStarted = Date.now();
-        checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+        const rewritten = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
         repairMs = Date.now() - repairStarted;
+        checked = rewritten.trim() || beforeRewrite;
       }
       if (checked) {
         const finalText = correctTranscript(checked);

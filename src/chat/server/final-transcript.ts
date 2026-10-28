@@ -1,6 +1,6 @@
 import { experimental_transcribe } from "ai";
 import { confidentLatinLanguage, detectLanguage } from "../language/detect";
-import { judgeIndicPair, latinManglish, malayalamMarkersWin } from "../language/indic";
+import { latinManglish, malayalamMarkersWin } from "../language/indic";
 import { needsServerFinalTranscript, normalizeSpokenLanguage } from "../stt";
 
 /**
@@ -144,12 +144,14 @@ export function openAiTranscribeProviderOptions(language?: string): { openai: { 
 }
 
 async function defaultGpt(audio: Uint8Array, language: string | undefined, signal: AbortSignal): Promise<string> {
+  const options = openAiTranscribeProviderOptions(language);
+  console.log(JSON.stringify({ event: "transcribe-prompt", model: GPT_TRANSCRIBE_MODEL, language: language || null, prompt: options.openai.prompt }));
   const result = await experimental_transcribe({
     model: GPT_TRANSCRIBE_MODEL,
     audio,
     maxRetries: 0,
     abortSignal: signal,
-    providerOptions: openAiTranscribeProviderOptions(language),
+    providerOptions: options,
   });
   return result.text?.trim() || "";
 }
@@ -190,6 +192,15 @@ async function defaultGemini(audio: Uint8Array, mediaType: string, hint: "ml" | 
 function malayalamRescue(value: GeminiStt | null): string {
   if (!value || value.lang !== "ml") return "";
   return value.transcript.trim();
+}
+
+/** First non-empty transcript. Gemini Malayalam, then gpt-transcribe, then Deepgram. */
+export function firstTranscript(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    const trimmed = (value || "").trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
 }
 
 /**
@@ -306,28 +317,19 @@ async function resolveAuto(deepgram: string, gpt: GptCall, gemini: GeminiCall): 
   }
   const rescued = await geminiTask;
   const rescuedText = malayalamRescue(rescued);
+  const transcript = firstTranscript(rescuedText, gptText, deepgram);
   if (rescuedText) {
     return { transcript: rescuedText, language: "ml", sttEngine: "gemini", sttFallback: true };
   }
-  const judged = judgeIndicPair({
-    deepgram: deepgram || gptText,
-    malayalam: null,
-    tamil: countScript(gptText, /[\u0B80-\u0BFF]/g) > 0 && !malayalamMarkersWin(gptText) ? gptText : null,
-  });
-  if (judged.language && judged.transcript.trim()) {
-    const fromGemini = Boolean(rescued && judged.transcript.trim() === rescued.transcript.trim());
+  if (transcript) {
+    const manglish = deepgramManglish || latinManglish(transcript);
+    const markers = malayalamMarkersWin(transcript) || transcriptAnomaly(gptText) === "tamil-markers" || transcriptAnomaly(deepgram) === "tamil-markers";
     return {
-      transcript: judged.transcript.trim(),
-      language: judged.language,
-      sttEngine: fromGemini ? "gemini" : gptText ? "gpt-transcribe" : "deepgram",
+      transcript,
+      language: manglish || markers ? "ml" : "",
+      sttEngine: gptText.trim() ? "gpt-transcribe" : "deepgram",
       sttFallback: true,
     };
   }
-  const fallback = [gptText, rescued?.transcript || "", deepgram].map((value) => value.trim()).sort((a, b) => b.length - a.length)[0] || "";
-  return {
-    transcript: fallback,
-    language: "",
-    sttEngine: gptText ? "gpt-transcribe" : "deepgram",
-    sttFallback: true,
-  };
+  return { transcript: "", language: "", sttEngine: "deepgram", sttFallback: true };
 }

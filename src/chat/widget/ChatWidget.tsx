@@ -294,7 +294,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
           liveTranscript: finals,
         });
         if (uploaded) return;
-        if (finals && !open) {
+        if (finals) {
           bindVoice(finals, spokenLanguage || utteranceLanguage(finals, { final: true, picker: pickerLanguage() }));
           setMic("idle");
           return;

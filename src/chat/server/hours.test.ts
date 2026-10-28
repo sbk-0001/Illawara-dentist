@@ -71,18 +71,18 @@ describe("localised opening hours", () => {
     expect(mayBeBareHours("Dapto is open Monday–Friday 8:00 AM–6:00 PM.", "en")).toBe(false);
     const unnamed = guardBareHoursReply(line, "en", { kind: "ask" });
     expect(unnamed.startsWith("Here are the opening hours.")).toBe(true);
-    expect(unnamed).toContain("Dapto Dentists is open:");
-    expect(unnamed).toContain("Shellharbour Dentists is open:");
-    expect(unnamed).toContain("Woonona Dentists is open:");
+    expect(unnamed).toContain("Dapto Dentists is open Monday to Friday from 8am to 6pm.");
+    expect(unnamed).toContain("Dapto Dentists is open Saturday from 8am to 4pm.");
+    expect(unnamed).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
+    expect(unnamed).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
     expect(unnamed).not.toMatch(/Dentists:\s/);
     const named = guardBareHoursReply(line, "en", { kind: "one", clinic: "dapto" });
-    expect(named.startsWith("Dapto Dentists is open:")).toBe(true);
-    expect(named).toContain("Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM.");
+    expect(named).toBe("Dapto Dentists is open Monday to Friday from 8am to 6pm. Dapto Dentists is open Saturday from 8am to 4pm.");
     expect(named.trimEnd().endsWith(".")).toBe(true);
     const copied = "Dapto Dentists is open: Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM";
     expect(ensureEnglishHoursStop(copied).endsWith(".")).toBe(true);
     expect(guardBareHoursReply(copied, "en", { kind: "one", clinic: "dapto" }).trimEnd().endsWith(".")).toBe(true);
-    expect(named.split("Monday–Friday").length - 1).toBe(1);
+    expect(named.split("Monday to Friday").length - 1).toBe(1);
     expect(named).not.toContain("Dapto Dentists: ");
     expect(guardBareHoursReply("We are open on Saturday.", "en", { kind: "ask" })).toBe("We are open on Saturday.");
   });
@@ -101,16 +101,15 @@ describe("localised opening hours", () => {
   it("puts the clinic before hours when the model names it only in a later sentence", () => {
     const english = "Monday–Friday 8:00 AM–6:00 PM, Saturday 8:00 AM–4:00 PM. You can contact Dapto Dentists for an appointment.";
     const guarded = guardBareHoursReply(english, "en", { kind: "one", clinic: "dapto" });
-    expect(guarded.startsWith("Dapto Dentists is open:")).toBe(true);
-    expect(guarded.indexOf("is open:")).toBeLessThan(guarded.indexOf("Monday–Friday"));
-    expect(guarded.split("Monday–Friday").length - 1).toBe(1);
+    expect(guarded.startsWith("Dapto Dentists is open Monday to Friday from 8am to 6pm.")).toBe(true);
+    expect(guarded).toContain("Saturday from 8am to 4pm");
     expect(guarded).toContain("You can contact Dapto Dentists");
     expect(guarded).not.toContain('"');
 
     const unnamed = guardBareHoursReply(english, "en", { kind: "ask" });
     expect(unnamed.startsWith("Here are the opening hours.")).toBe(true);
-    expect(unnamed).toContain("Shellharbour Dentists is open:");
-    expect(unnamed).toContain("Woonona Dentists is open:");
+    expect(unnamed).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
+    expect(unnamed).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
 
     const chinese = `${formatClinicHours("dapto", "zh")}。Dapto Dentists 的营业时间就是这样。`;
     const zh = guardBareHoursReply(chinese, "zh", { kind: "one", clinic: "dapto" });
@@ -123,9 +122,8 @@ describe("localised opening hours", () => {
       "en",
       { kind: "one", clinic: "dapto" },
     );
-    expect(quoted.startsWith("Dapto Dentists is open:")).toBe(true);
+    expect(quoted).toBe("Dapto Dentists is open Monday to Friday from 8am to 6pm. Dapto Dentists is open Saturday from 8am to 4pm.");
     expect(quoted).not.toContain('"');
-    expect(quoted.split("8:00 AM–6:00 PM").length - 1).toBe(1);
 
     const persian = guardBareHoursReply(`Dapto Dentists: ${formatClinicHours("dapto", "fa")}`, "fa", { kind: "one", clinic: "dapto" });
     expect(persian.startsWith("ساعات کاری Dapto Dentists:")).toBe(true);
