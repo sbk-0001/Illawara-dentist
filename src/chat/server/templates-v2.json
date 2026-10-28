@@ -1,0 +1,276 @@
+{
+ "meta": {
+  "source": "knowledge-index d0873a1",
+  "slots": "{clinic} {phone} {name} {label} {range} {address}",
+  "notes": "ACHE_ONE/ACHE_LINE/WHITE_ONE/IMPLANT are now keyed per clinic because the published facts differ per clinic. ACHE_GROUP = ACHE_LEAD + one ACHE_LINE per clinic. IMPLANT.all = shellharbour + woonona + dapto joined with a space. HOURS no-clinic = one HOURS_OPEN/HOURS_APPT sentence per clinic, no lead line. No-clinic variants for hours/address/phone/implant now use composite HOURS_ANY (slots {label} {dapto_range} {woonona_range} {sh_phone}), ADDRESS_ALL / PHONE_ALL (slots {dapto} {shellharbour} {woonona}) and IMPLANT_ALL. HOURS_APPT now takes {phone}."
+ },
+ "ACHE_ONE": {
+  "en": {
+   "dapto": "I'm sorry you're in pain. {clinic} sees urgent dental problems whenever an appointment is available. Please call {phone} now.",
+   "shellharbour": "I'm sorry you're in pain. {clinic} offers same-day or next-day appointments for urgent problems. Please call {phone} now.",
+   "woonona": "I'm sorry you're in pain. {clinic} has emergency appointments available every day. Please call {phone} now."
+  },
+  "ml": {
+   "dapto": "വേദനയുണ്ടെന്ന് കേട്ടതിൽ വിഷമമുണ്ട്. ഒഴിവുള്ള സമയം അനുസരിച്ച് {clinic} അടിയന്തര ദന്തപ്രശ്നങ്ങൾക്ക് അപ്പോയിന്റ്മെന്റ് നൽകുന്നു. ദയവായി ഇപ്പോൾ തന്നെ {phone} എന്ന നമ്പറിൽ വിളിക്കൂ.",
+   "shellharbour": "വേദനയുണ്ടെന്ന് കേട്ടതിൽ വിഷമമുണ്ട്. അടിയന്തര പ്രശ്നങ്ങൾക്ക് {clinic} അന്നുതന്നെയോ പിറ്റേന്നോ അപ്പോയിന്റ്മെന്റ് നൽകുന്നു. ദയവായി ഇപ്പോൾ തന്നെ {phone} എന്ന നമ്പറിൽ വിളിക്കൂ.",
+   "woonona": "വേദനയുണ്ടെന്ന് കേട്ടതിൽ വിഷമമുണ്ട്. {clinic}-ൽ എല്ലാ ദിവസവും അടിയന്തര അപ്പോയിന്റ്മെന്റുകൾ ലഭ്യമാണ്. ദയവായി ഇപ്പോൾ തന്നെ {phone} എന്ന നമ്പറിൽ വിളിക്കൂ."
+  },
+  "ta": {
+   "dapto": "பல் வலியால் நீங்கள் சிரமப்படுவதைக் கேட்டு வருந்துகிறோம். {clinic}-இல் அவசர பல் பிரச்சினைகளுக்கு, வாய்ப்பு இருந்தால் அப்பாயிண்ட்மெண்ட் தருகிறோம். தயவுசெய்து இப்போதே {phone} என்ற எண்ணில் அழையுங்கள்.",
+   "shellharbour": "பல் வலியால் நீங்கள் சிரமப்படுவதைக் கேட்டு வருந்துகிறோம். அவசர பிரச்சினைகளுக்கு {clinic} அதே நாளிலோ அடுத்த நாளிலோ அப்பாயிண்ட்மெண்ட் தருகிறது. தயவுசெய்து இப்போதே {phone} என்ற எண்ணில் அழையுங்கள்.",
+   "woonona": "பல் வலியால் நீங்கள் சிரமப்படுவதைக் கேட்டு வருந்துகிறோம். {clinic}-இல் ஒவ்வொரு நாளும் அவசர அப்பாயிண்ட்மெண்ட் உண்டு. தயவுசெய்து இப்போதே {phone} என்ற எண்ணில் அழையுங்கள்."
+  },
+  "hi": {
+   "dapto": "सुनकर अफ़सोस हुआ कि आपको दर्द हो रहा है। {clinic} में दांत की इमरजेंसी के लिए हम जल्द से जल्द अपॉइंटमेंट देने की कोशिश करते हैं, जब भी जगह उपलब्ध हो। कृपया अभी {phone} पर कॉल करें।",
+   "shellharbour": "सुनकर अफ़सोस हुआ कि आपको दर्द हो रहा है। {clinic} में इमरजेंसी में उसी दिन या अगले दिन अपॉइंटमेंट मिल जाता है। कृपया अभी {phone} पर कॉल करें।",
+   "woonona": "सुनकर अफ़सोस हुआ कि आपको दर्द हो रहा है। {clinic} में हर दिन इमरजेंसी अपॉइंटमेंट उपलब्ध रहते हैं। कृपया अभी {phone} पर कॉल करें।"
+  },
+  "bn": {
+   "dapto": "আপনার ব্যথা হচ্ছে শুনে খারাপ লাগল। {clinic}-এ সময় খালি থাকলে জরুরি দাঁতের সমস্যার জন্য অ্যাপয়েন্টমেন্ট দেওয়া হয়। দয়া করে এখনই {phone} নম্বরে ফোন করুন।",
+   "shellharbour": "আপনার ব্যথা হচ্ছে শুনে খারাপ লাগল। {clinic}-এ জরুরি সমস্যার জন্য সেদিনই বা পরের দিন অ্যাপয়েন্টমেন্ট পাওয়া যায়। দয়া করে এখনই {phone} নম্বরে ফোন করুন।",
+   "woonona": "আপনার ব্যথা হচ্ছে শুনে খারাপ লাগল। {clinic}-এ প্রতিদিন জরুরি অ্যাপয়েন্টমেন্ট পাওয়া যায়। দয়া করে এখনই {phone} নম্বরে ফোন করুন।"
+  },
+  "zh": {
+   "dapto": "牙疼一定很难受。{clinic}在有空位时会为紧急牙齿问题安排预约。请现在拨打 {phone}。",
+   "shellharbour": "牙疼一定很难受。{clinic}可以为紧急问题安排当天或第二天的预约。请现在拨打 {phone}。",
+   "woonona": "牙疼一定很难受。{clinic}每天都有急诊预约。请现在拨打 {phone}。"
+  },
+  "ar": {
+   "dapto": "نأسف لأنك تشعر بالألم. يوفّر {clinic} مواعيد للحالات العاجلة حسب توفر المواعيد. يُرجى الاتصال الآن على {phone}.",
+   "shellharbour": "نأسف لأنك تشعر بالألم. يوفّر {clinic} مواعيد في اليوم نفسه أو في اليوم التالي للحالات العاجلة. يُرجى الاتصال الآن على {phone}.",
+   "woonona": "نأسف لأنك تشعر بالألم. تتوفر في {clinic} مواعيد طوارئ كل يوم. يُرجى الاتصال الآن على {phone}."
+  },
+  "es": {
+   "dapto": "Siento mucho que tenga dolor. {clinic} atiende urgencias dentales según la disponibilidad de citas. Llame ahora al {phone}.",
+   "shellharbour": "Siento mucho que tenga dolor. {clinic} ofrece citas para el mismo día o el día siguiente en casos urgentes. Llame ahora al {phone}.",
+   "woonona": "Siento mucho que tenga dolor. {clinic} tiene citas de urgencia disponibles todos los días. Llame ahora al {phone}."
+  }
+ },
+ "ACHE_LEAD": {
+  "en": "I'm sorry you're in pain. Please call whichever clinic suits you:",
+  "ml": "വേദനയുണ്ടെന്ന് കേട്ടതിൽ വിഷമമുണ്ട്. നിങ്ങൾക്ക് സൗകര്യമുള്ള ക്ലിനിക്കിൽ ഇപ്പോൾ തന്നെ വിളിക്കൂ:",
+  "ta": "பல் வலியால் நீங்கள் சிரமப்படுவதைக் கேட்டு வருந்துகிறோம். உங்களுக்கு அருகிலுள்ள கிளினிக்கை இப்போதே அழையுங்கள்:",
+  "hi": "सुनकर अफ़सोस हुआ कि आपको दर्द हो रहा है। कृपया अपनी पसंद के क्लिनिक में अभी कॉल करें:",
+  "bn": "আপনার ব্যথা হচ্ছে শুনে খারাপ লাগল। আপনার সুবিধামতো ক্লিনিকে এখনই ফোন করুন:",
+  "zh": "牙疼一定很难受。请现在打电话给方便您的诊所：",
+  "ar": "نأسف لأنك تشعر بالألم. يُرجى الاتصال الآن بالعيادة الأنسب لك:",
+  "es": "Siento mucho que tenga dolor. Llame ahora a la clínica que le quede mejor:"
+ },
+ "ACHE_LINE": {
+  "en": {
+   "dapto": "{clinic} sees urgent cases when an appointment is free. Call {phone}.",
+   "shellharbour": "{clinic} offers same-day or next-day urgent appointments. Call {phone}.",
+   "woonona": "{clinic} has emergency appointments every day. Call {phone}."
+  },
+  "ml": {
+   "dapto": "{clinic}-ൽ ഒഴിവുള്ള സമയം അനുസരിച്ച് അടിയന്തര അപ്പോയിന്റ്മെന്റ് നൽകും; {phone} എന്ന നമ്പറിൽ വിളിക്കാം.",
+   "shellharbour": "{clinic}-ൽ അന്നുതന്നെയോ പിറ്റേന്നോ അപ്പോയിന്റ്മെന്റ് കിട്ടും; {phone} എന്ന നമ്പറിൽ വിളിക്കാം.",
+   "woonona": "{clinic}-ൽ എല്ലാ ദിവസവും അടിയന്തര അപ്പോയിന്റ്മെന്റ് ഉണ്ട്; {phone} എന്ന നമ്പറിൽ വിളിക്കാം."
+  },
+  "ta": {
+   "dapto": "{clinic}-இல் வாய்ப்பு இருந்தால் அவசர அப்பாயிண்ட்மெண்ட் தருவார்கள்; {phone} என்ற எண்ணில் அழைக்கலாம்.",
+   "shellharbour": "{clinic}-இல் அதே நாளிலோ அடுத்த நாளிலோ அப்பாயிண்ட்மெண்ட் கிடைக்கும்; {phone} என்ற எண்ணில் அழைக்கலாம்.",
+   "woonona": "{clinic}-இல் ஒவ்வொரு நாளும் அவசர அப்பாயிண்ட்மெண்ட் கிடைக்கும்; {phone} என்ற எண்ணில் அழைக்கலாம்."
+  },
+  "hi": {
+   "dapto": "{clinic} में उपलब्धता के आधार पर इमरजेंसी अपॉइंटमेंट मिल सकता है, नंबर {phone} है।",
+   "shellharbour": "{clinic} में उसी दिन या अगले दिन अपॉइंटमेंट मिल जाता है, नंबर {phone} है।",
+   "woonona": "{clinic} में हर दिन इमरजेंसी अपॉइंटमेंट मिलता है, नंबर {phone} है।"
+  },
+  "bn": {
+   "dapto": "{clinic}-এ সময় খালি থাকলে জরুরি অ্যাপয়েন্টমেন্ট দেওয়া হয়, নম্বর {phone}।",
+   "shellharbour": "{clinic}-এ সেদিনই বা পরের দিন অ্যাপয়েন্টমেন্ট পাওয়া যায়, নম্বর {phone}।",
+   "woonona": "{clinic}-এ প্রতিদিন জরুরি অ্যাপয়েন্টমেন্ট পাওয়া যায়, নম্বর {phone}।"
+  },
+  "zh": {
+   "dapto": "{clinic}有空位时会安排紧急预约，电话 {phone}。",
+   "shellharbour": "{clinic}可以安排当天或第二天的预约，电话 {phone}。",
+   "woonona": "{clinic}每天都有急诊预约，电话 {phone}。"
+  },
+  "ar": {
+   "dapto": "يوفّر {clinic} مواعيد عاجلة حسب التوفر، ورقم الهاتف {phone}.",
+   "shellharbour": "يوفّر {clinic} مواعيد في اليوم نفسه أو اليوم التالي، ورقم الهاتف {phone}.",
+   "woonona": "تتوفر في {clinic} مواعيد طوارئ كل يوم، ورقم الهاتف {phone}."
+  },
+  "es": {
+   "dapto": "{clinic} atiende urgencias según la disponibilidad; su teléfono es {phone}.",
+   "shellharbour": "{clinic} ofrece citas el mismo día o el día siguiente; su teléfono es {phone}.",
+   "woonona": "{clinic} tiene citas de urgencia todos los días; su teléfono es {phone}."
+  }
+ },
+ "WHITE_ONE": {
+  "en": {
+   "dapto": "Yes, we do. At Dapto Dentists we first check your teeth and any existing dental work, then plan the whitening with you.",
+   "shellharbour": "Yes, we do. Shellharbour Dentists offers in-chair Philips Zoom whitening, which takes about an hour.",
+   "woonona": "Yes, we do. Woonona Dentists offers in-chair Philips Zoom whitening for $650, and it takes about an hour."
+  },
+  "ml": {
+   "dapto": "അതെ, ചെയ്യാറുണ്ട്. Dapto Dentists-ൽ ആദ്യം നിങ്ങളുടെ പല്ലുകളും മുമ്പ് ചെയ്ത ദന്ത ചികിത്സകളും ഡോക്ടർ പരിശോധിക്കും; അതിനു ശേഷം നിങ്ങൾക്ക് ചേരുന്ന രീതിയിൽ പല്ല് വെളുപ്പിക്കൽ ചെയ്യും.",
+   "shellharbour": "അതെ, ചെയ്യാറുണ്ട്. Shellharbour Dentists-ൽ ക്ലിനിക്കിൽ വെച്ച് ചെയ്യുന്ന Philips Zoom പല്ല് വെളുപ്പിക്കൽ ലഭ്യമാണ്; ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും.",
+   "woonona": "അതെ, ചെയ്യാറുണ്ട്. Woonona Dentists-ൽ ക്ലിനിക്കിൽ വെച്ച് ചെയ്യുന്ന Philips Zoom പല്ല് വെളുപ്പിക്കലിന് $650 ആണ്; ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും."
+  },
+  "ta": {
+   "dapto": "ஆம், செய்கிறோம். Dapto Dentists-இல் முதலில் உங்கள் பற்களையும், ஏற்கனவே போட்டிருக்கும் ஃபில்லிங், கிரவுன் போன்றவற்றையும் பரிசோதித்து, அதன் பிறகு உங்களுக்கேற்ற முறையில் வெண்மையாக்குவோம்.",
+   "shellharbour": "ஆம், செய்கிறோம். Shellharbour Dentists-இல் கிளினிக்கிலேயே செய்யப்படும் Philips Zoom பல் வெண்மையாக்கல் உள்ளது; இதற்கு சுமார் ஒரு மணி நேரம் ஆகும்.",
+   "woonona": "ஆம், செய்கிறோம். Woonona Dentists-இல் கிளினிக்கிலேயே செய்யப்படும் Philips Zoom பல் வெண்மையாக்கலுக்கு $650 ஆகும்; இதற்கு சுமார் ஒரு மணி நேரம் ஆகும்."
+  },
+  "hi": {
+   "dapto": "जी हाँ, हम करते हैं। Dapto Dentists में पहले आपके दांतों और पहले से लगी फ़िलिंग या क्राउन की जांच की जाती है, फिर आपकी ज़रूरत के अनुसार दांत सफ़ेद किए जाते हैं।",
+   "shellharbour": "जी हाँ, हम करते हैं। Shellharbour Dentists में Philips Zoom से दांत सफ़ेद किए जाते हैं, और इसमें करीब एक घंटा लगता है।",
+   "woonona": "जी हाँ, हम करते हैं। Woonona Dentists में Philips Zoom से दांत सफ़ेद किए जाते हैं; इसका खर्च $650 है और इसमें करीब एक घंटा लगता है।"
+  },
+  "bn": {
+   "dapto": "হ্যাঁ, আমরা করি। Dapto Dentists-এ প্রথমে আপনার দাঁত এবং পুরনো ফিলিং বা ক্রাউন পরীক্ষা করা হয়, তারপর আপনার জন্য উপযুক্ত উপায়ে দাঁত সাদা করা হয়।",
+   "shellharbour": "হ্যাঁ, আমরা করি। Shellharbour Dentists-এ Philips Zoom পদ্ধতিতে ক্লিনিকেই দাঁত সাদা করা হয়, এতে প্রায় এক ঘণ্টা সময় লাগে।",
+   "woonona": "হ্যাঁ, আমরা করি। Woonona Dentists-এ Philips Zoom পদ্ধতিতে ক্লিনিকেই দাঁত সাদা করা হয়; খরচ $650, আর সময় লাগে প্রায় এক ঘণ্টা।"
+  },
+  "zh": {
+   "dapto": "有的。Dapto Dentists 会先检查您的牙齿和以前做过的治疗，再和您一起安排美白。",
+   "shellharbour": "有的。Shellharbour Dentists 提供诊所内的 Philips Zoom 牙齿美白，大约需要一个小时。",
+   "woonona": "有的。Woonona Dentists 提供诊所内的 Philips Zoom 牙齿美白，费用是 $650，大约需要一个小时。"
+  },
+  "ar": {
+   "dapto": "نعم، نقدّم ذلك. في Dapto Dentists نفحص أسنانك وأي علاجات سابقة أولًا، ثم نخطط معك للتبييض.",
+   "shellharbour": "نعم، نقدّم ذلك. يقدّم Shellharbour Dentists تبييض Philips Zoom في العيادة، ويستغرق نحو ساعة.",
+   "woonona": "نعم، نقدّم ذلك. يقدّم Woonona Dentists تبييض Philips Zoom في العيادة بتكلفة $650، ويستغرق نحو ساعة."
+  },
+  "es": {
+   "dapto": "Sí, lo hacemos. En Dapto Dentists primero revisamos sus dientes y los tratamientos que ya tiene, y luego planificamos el blanqueamiento con usted.",
+   "shellharbour": "Sí, lo hacemos. Shellharbour Dentists ofrece blanqueamiento Philips Zoom en la clínica, que dura aproximadamente una hora.",
+   "woonona": "Sí, lo hacemos. Woonona Dentists ofrece blanqueamiento Philips Zoom en la clínica por $650, y dura aproximadamente una hora."
+  }
+ },
+ "WHITE_ALL": {
+  "en": "Yes, all three clinics offer teeth whitening. Woonona Dentists offers in-chair Philips Zoom whitening for $650, and it takes about an hour. Shellharbour Dentists also offers in-chair Philips Zoom, which takes about an hour. At Dapto Dentists we first check your teeth and any existing dental work.",
+  "ml": "അതെ, മൂന്ന് ക്ലിനിക്കുകളിലും പല്ല് വെളുപ്പിക്കൽ ചെയ്യുന്നുണ്ട്. Woonona Dentists-ൽ ക്ലിനിക്കിൽ വെച്ച് ചെയ്യുന്ന Philips Zoom പല്ല് വെളുപ്പിക്കലിന് $650 ആണ്; ഏകദേശം ഒരു മണിക്കൂർ എടുക്കും. Shellharbour Dentists-ലും ക്ലിനിക്കിൽ വെച്ച് Philips Zoom ചെയ്യുന്നുണ്ട്, അതിനും ഏകദേശം ഒരു മണിക്കൂർ മതി. Dapto Dentists-ലും പല്ല് വെളുപ്പിക്കൽ ചെയ്യും; അവിടെ ആദ്യം നിങ്ങളുടെ പല്ലുകളും മുമ്പ് ചെയ്ത ദന്ത ചികിത്സകളും ഡോക്ടർ പരിശോധിക്കും.",
+  "ta": "ஆம், மூன்று கிளினிக்குகளிலும் பல் வெண்மையாக்கல் செய்கிறோம். Woonona Dentists-இல் கிளினிக்கிலேயே செய்யப்படும் Philips Zoom வெண்மையாக்கலுக்கு $650 ஆகும், சுமார் ஒரு மணி நேரம் ஆகும். Shellharbour Dentists-இலும் கிளினிக்கிலேயே Philips Zoom செய்கிறார்கள், அதற்கும் சுமார் ஒரு மணி நேரம் ஆகும். Dapto Dentists-இலும் வெண்மையாக்கல் உண்டு; அங்கே முதலில் உங்கள் பற்களையும் ஏற்கனவே போட்டிருக்கும் ஃபில்லிங், கிரவுன் போன்றவற்றையும் பரிசோதிப்போம்.",
+  "hi": "जी हाँ, हमारे तीनों क्लिनिक में दांत सफ़ेद करने का इलाज होता है। Woonona Dentists में क्लिनिक में ही Philips Zoom व्हाइटनिंग होती है, जिसका खर्च $650 है और करीब एक घंटा लगता है। Shellharbour Dentists में भी क्लिनिक में ही Philips Zoom व्हाइटनिंग होती है, उसमें भी करीब एक घंटा लगता है। Dapto Dentists में भी यह इलाज होता है; वहाँ पहले आपके दांतों और पहले से लगी फ़िलिंग या क्राउन की जांच की जाती है।",
+  "bn": "হ্যাঁ, আমাদের তিনটি ক্লিনিকেই দাঁত সাদা করা হয়। Woonona Dentists-এ Philips Zoom পদ্ধতিতে ক্লিনিকেই দাঁত সাদা করা হয়; খরচ $650, আর সময় লাগে প্রায় এক ঘণ্টা। Shellharbour Dentists-এও একইভাবে Philips Zoom করা হয়, এতেও প্রায় এক ঘণ্টা লাগে। Dapto Dentists-এও এই চিকিৎসা হয়; শুরুর আগে আপনার দাঁত এবং পুরনো ফিলিং বা ক্রাউন পরীক্ষা করে দেখা হয়।",
+  "zh": "有的，三家诊所都提供牙齿美白。Woonona Dentists 的诊所内 Philips Zoom 美白费用是 $650，大约需要一个小时。Shellharbour Dentists 也提供诊所内的 Philips Zoom 美白，同样大约一个小时。Dapto Dentists 会先检查您的牙齿和以前做过的治疗。",
+  "ar": "نعم، تقدّم العيادات الثلاث تبييض الأسنان. يقدّم Woonona Dentists تبييض Philips Zoom في العيادة بتكلفة $650 ويستغرق نحو ساعة. ويقدّم Shellharbour Dentists أيضًا تبييض Philips Zoom في العيادة ويستغرق نحو ساعة. أما في Dapto Dentists فنفحص أسنانك وأي علاجات سابقة أولًا.",
+  "es": "Sí, hacemos blanqueamiento en las tres clínicas. En Woonona Dentists el blanqueamiento Philips Zoom en consulta cuesta $650 y dura más o menos una hora. Shellharbour Dentists también ofrece Philips Zoom en consulta, de aproximadamente una hora. En Dapto Dentists, antes de blanquear, el dentista revisa sus dientes y los trabajos dentales que ya tenga."
+ },
+ "IMPLANT": {
+  "en": {
+   "shellharbour": "At Shellharbour Dentists, a single implant with a crown starts from $4500*. *Conditions apply and are explained at your consultation.",
+   "woonona": "At Woonona Dentists, a single implant with a crown starts from $5000, and payment plans start from about $30 a week.",
+   "dapto": "Dapto Dentists doesn't list a fixed implant price; instead you can book a free implant consultation, where the dentist will give you your price. You pay a $50 deposit when you book, and it is refunded in full when you attend."
+  },
+  "ml": {
+   "shellharbour": "Shellharbour Dentists-ൽ ഒരു ഇംപ്ലാന്റും ക്രൗണും ചേർന്ന ചികിത്സയ്ക്ക് $4500* മുതലാണ് നിരക്ക്. *നിബന്ധനകൾ ബാധകമാണ്; അവ കൺസൾട്ടേഷനിൽ വിശദീകരിക്കും.",
+   "woonona": "Woonona Dentists-ൽ ഒരു ഇംപ്ലാന്റും ക്രൗണും ചേർന്ന ചികിത്സയ്ക്ക് $5000 മുതലാണ് നിരക്ക്; ആഴ്ചയിൽ ഏകദേശം $30 മുതലുള്ള തവണകളായും പണം അടയ്ക്കാം.",
+   "dapto": "Dapto Dentists ഇംപ്ലാന്റിന് ഒരു നിശ്ചിത നിരക്ക് പ്രസിദ്ധീകരിച്ചിട്ടില്ല; സൗജന്യ കൺസൾട്ടേഷൻ ബുക്ക് ചെയ്താൽ ഡോക്ടർ നിങ്ങൾക്ക് നിരക്ക് പറഞ്ഞുതരും. ബുക്ക് ചെയ്യുമ്പോൾ $50 ഡെപ്പോസിറ്റ് നൽകണം, നിങ്ങൾ വരുമ്പോൾ അത് മുഴുവനായി തിരികെ തരും."
+  },
+  "ta": {
+   "shellharbour": "Shellharbour Dentists-இல் ஒரு இம்ப்ளாண்ட் மற்றும் கிரவுனுக்கான கட்டணம் $4500* முதல் தொடங்குகிறது. *நிபந்தனைகள் பொருந்தும்; அவை ஆலோசனையின்போது விளக்கப்படும்.",
+   "woonona": "Woonona Dentists-இல் ஒரு இம்ப்ளாண்ட் மற்றும் கிரவுனுக்கான கட்டணம் $5000 முதல் தொடங்குகிறது; வாரத்திற்கு சுமார் $30 முதல் தவணை முறையிலும் செலுத்தலாம்.",
+   "dapto": "Dapto Dentists இம்ப்ளாண்டுக்கு நிலையான கட்டணத்தை வெளியிடவில்லை; இலவச ஆலோசனையை முன்பதிவு செய்தால் பல் மருத்துவர் உங்களுக்கான கட்டணத்தைச் சொல்வார். முன்பதிவின்போது $50 முன்பணம் செலுத்த வேண்டும், நீங்கள் வந்தவுடன் அது முழுமையாகத் திருப்பித் தரப்படும்."
+  },
+  "hi": {
+   "shellharbour": "Shellharbour Dentists में एक इम्प्लांट और क्राउन का खर्च $4500* से शुरू होता है। *शर्तें लागू हैं, जो कंसल्टेशन के समय समझाई जाती हैं।",
+   "woonona": "Woonona Dentists में एक इम्प्लांट और क्राउन का खर्च $5000 से शुरू होता है, और आप लगभग $30 प्रति सप्ताह की किस्तों में भी भुगतान कर सकते हैं।",
+   "dapto": "Dapto Dentists में इम्प्लांट की कोई तय कीमत नहीं है। आप मुफ़्त कंसल्टेशन बुक कर सकते हैं, जिसमें डेंटिस्ट आपके इलाज का खर्च बताएँगे। बुकिंग के समय $50 जमा करने होते हैं, जो कंसल्टेशन पर आने के बाद आपको पूरे लौटा दिए जाते हैं।"
+  },
+  "bn": {
+   "shellharbour": "Shellharbour Dentists-এ একটি ইমপ্ল্যান্ট ও ক্রাউনের খরচ $4500* থেকে শুরু। *শর্ত প্রযোজ্য, যা পরামর্শের সময় বুঝিয়ে বলা হয়।",
+   "woonona": "Woonona Dentists-এ একটি ইমপ্ল্যান্ট ও ক্রাউনের খরচ $5000 থেকে শুরু। চাইলে সপ্তাহে প্রায় $30 করে কিস্তিতে পরিশোধ করার সুবিধাও আছে।",
+   "dapto": "Dapto Dentists-এ ইমপ্ল্যান্টের কোনো নির্দিষ্ট দাম নেই। বিনামূল্যে পরামর্শ বুক করলে ডেন্টিস্ট আপনার চিকিৎসার খরচ জানিয়ে দেবেন। বুক করার সময় $50 জমা দিতে হয়, আর অ্যাপয়েন্টমেন্টে উপস্থিত হলে সেই $50 পুরোটাই আপনাকে ফেরত দেওয়া হয়।"
+  },
+  "zh": {
+   "shellharbour": "在 Shellharbour Dentists，单颗种植牙加牙冠的费用从 $4500* 起。*适用相关条款，会在咨询时向您说明。",
+   "woonona": "在 Woonona Dentists，单颗种植牙加牙冠的费用从 $5000 起，也可以分期付款，每周大约 $30 起。",
+   "dapto": "Dapto Dentists没有公布固定的种植牙价格，您可以预约免费咨询，由牙医为您报价。预约时需付 $50 订金，您按时就诊后会全额退还。"
+  },
+  "ar": {
+   "shellharbour": "في Shellharbour Dentists تبدأ تكلفة زراعة سن واحدة مع التاج من $4500*. *تنطبق شروط تُشرح لك خلال الاستشارة.",
+   "woonona": "في Woonona Dentists تبدأ تكلفة زراعة سن واحدة مع التاج من $5000، ويمكن الدفع بالتقسيط ابتداءً من نحو $30 أسبوعيًا.",
+   "dapto": "لا تعلن Dapto Dentists عن سعر ثابت لزراعة الأسنان، لكن يمكنك حجز استشارة مجانية يحدد فيها الطبيب السعر المناسب لك. تدفع عربونًا قدره $50 عند الحجز، ويُعاد إليك كاملًا عند حضورك."
+  },
+  "es": {
+   "shellharbour": "En Shellharbour Dentists, un implante con corona cuesta desde $4500*. *Se aplican condiciones, que se explican en la consulta.",
+   "woonona": "En Woonona Dentists, un implante con corona cuesta desde $5000, y hay planes de pago desde unos $30 por semana.",
+   "dapto": "Dapto Dentists no publica un precio fijo para implantes; puede reservar una consulta gratuita en la que el dentista le dará su precio. Paga un depósito de $50 al reservar y se le devuelve íntegro cuando asiste."
+  }
+ },
+ "HOURS_OPEN": {
+  "en": "{name} is open {label} {range}.",
+  "ml": "{name} {label} {range} തുറന്നിരിക്കും.",
+  "ta": "{name} {label} {range} திறந்திருக்கும்.",
+  "hi": "{name} {label} {range} खुला रहता है।",
+  "bn": "{name} {label} {range} খোলা থাকে।",
+  "zh": "{name}{label}{range}营业。",
+  "ar": "يفتح {name} {label} {range}.",
+  "es": "{name} abre {label} {range}."
+ },
+ "HOURS_APPT": {
+  "en": "{name} doesn't have set opening hours on {label}; it sees patients by appointment only. Please call {phone} to book a time.",
+  "ml": "{name} {label} സാധാരണ രീതിയിൽ തുറക്കാറില്ല; മുൻകൂട്ടി അപ്പോയിന്റ്മെന്റ് എടുത്തവരെ മാത്രമേ അന്ന് കാണുകയുള്ളൂ. ബുക്ക് ചെയ്യാൻ {phone} എന്ന നമ്പറിൽ വിളിക്കാം.",
+  "ta": "{name}-இல் {label}களில் நிலையான வேலை நேரம் இல்லை; முன்பதிவு செய்தவர்களை மட்டுமே பார்க்கிறோம். முன்பதிவு செய்ய {phone} என்ற எண்ணில் அழைக்கவும்.",
+  "hi": "{name} में {label} को कोई तय समय नहीं है; वहाँ सिर्फ़ अपॉइंटमेंट पर मरीज़ देखे जाते हैं। समय बुक करने के लिए {phone} पर कॉल करें।",
+  "bn": "{name}-এর {label} কোনো নির্দিষ্ট খোলার সময় নেই; শুধু অ্যাপয়েন্টমেন্ট নিয়ে রোগী দেখা হয়। সময় বুক করতে {phone} নম্বরে ফোন করুন।",
+  "zh": "{name}{label}没有固定营业时间，只接待预约患者。如需预约，请致电 {phone}。",
+  "ar": "ليس لعيادة {name} دوام ثابت يوم {label}، فهي تستقبل المرضى بموعد مسبق فقط. يُرجى الاتصال على {phone} لحجز موعد.",
+  "es": "{name} no tiene un horario fijo el {label}: atiende solo con cita previa. Llame al {phone} para reservar una hora."
+ },
+ "HOURS_LABEL_NOTE": "label: single day uses FULL_DAY with article where the language needs it (ar: 'يوم السبت', es: 'el sábado'); full week uses weekdayLabel. No HOURS_LEAD line for multi-clinic replies.",
+ "ADDRESS": {
+  "en": "The address of {name} is {address}.",
+  "ml": "{name}-ന്റെ വിലാസം {address} ആണ്.",
+  "ta": "{name}-இன் முகவரி: {address}. உங்களை வரவேற்கக் காத்திருக்கிறோம்.",
+  "hi": "{name} का पता {address} है।",
+  "bn": "{name}-এর ঠিকানা হলো {address}।",
+  "zh": "{name}位于 {address}，欢迎您前来就诊。",
+  "ar": "تقع عيادة {name} في العنوان التالي: {address}. يسعدنا استقبالك.",
+  "es": "La dirección de {name} es {address}."
+ },
+ "PHONE": {
+  "en": "The phone number for {clinic} is {phone}.",
+  "ml": "{clinic}-ന്റെ ഫോൺ നമ്പർ {phone} ആണ്.",
+  "ta": "{clinic}-இன் தொலைபேசி எண்: {phone}. முன்பதிவுக்கு இந்த எண்ணில் அழைக்கலாம்.",
+  "hi": "{clinic} का फ़ोन नंबर {phone} है।",
+  "bn": "{clinic}-এর ফোন নম্বর {phone}।",
+  "zh": "{clinic}的电话是 {phone}，欢迎来电预约。",
+  "ar": "رقم هاتف {clinic} هو {phone}.",
+  "es": "El teléfono de {clinic} es el {phone}."
+ },
+ "HOURS_ANY": {
+  "en": "It depends on the clinic. On {label}, Dapto Dentists is open {dapto_range}, and Woonona Dentists is open {woonona_range}. Shellharbour Dentists doesn't have set opening hours on {label}; it sees patients by appointment only, so please call {sh_phone} to book a time.",
+  "ml": "ഓരോ ക്ലിനിക്കിലും സമയം വ്യത്യസ്തമാണ്. {label} Dapto Dentists {dapto_range}യും, Woonona Dentists {woonona_range}യും പ്രവർത്തിക്കും. Shellharbour Dentists-ൽ {label} അപ്പോയിന്റ്മെന്റ് എടുത്തവരെ മാത്രമേ കാണൂ; സമയം ബുക്ക് ചെയ്യാൻ {sh_phone} എന്ന നമ്പറിൽ വിളിക്കാം.",
+  "ta": "இது கிளினிக்கைப் பொறுத்து மாறும். {label} அன்று Dapto Dentists {dapto_range} திறந்திருக்கும்; Woonona Dentists {woonona_range} திறந்திருக்கும். Shellharbour Dentists-இல் {label} நிலையான நேரம் இல்லை, முன்பதிவு செய்தவர்களை மட்டுமே பார்க்கிறோம். நேரம் பதிவு செய்ய {sh_phone} என்ற எண்ணில் அழையுங்கள்.",
+  "hi": "यह क्लिनिक पर निर्भर करता है। {label} को Dapto Dentists {dapto_range} खुला रहता है, और Woonona Dentists {woonona_range} खुला रहता है। Shellharbour Dentists में {label} को कोई तय समय नहीं है; वहाँ सिर्फ़ अपॉइंटमेंट से मरीज़ देखे जाते हैं, इसलिए समय बुक करने के लिए {sh_phone} पर कॉल करें।",
+  "bn": "এটা ক্লিনিকভেদে আলাদা। {label} Dapto Dentists {dapto_range} খোলা থাকে, আর Woonona Dentists খোলা থাকে {woonona_range}। Shellharbour Dentists-এর {label} কোনো নির্দিষ্ট সময় নেই; শুধু অ্যাপয়েন্টমেন্ট নিয়ে রোগী দেখা হয়, তাই সময় বুক করতে {sh_phone} নম্বরে ফোন করুন।",
+  "zh": "各诊所的时间不同：{label}Dapto Dentists {dapto_range}营业，Woonona Dentists {woonona_range}营业；Shellharbour Dentists{label}没有固定营业时间，只接待预约患者，如需预约请致电 {sh_phone}。",
+  "ar": "يختلف ذلك حسب العيادة. يوم {label}، تفتح عيادة Dapto Dentists {dapto_range}، وتفتح عيادة Woonona Dentists {woonona_range}. أما عيادة Shellharbour Dentists فليس لها دوام ثابت يوم {label}، بل تستقبل المرضى بموعد مسبق فقط، فيُرجى الاتصال على {sh_phone} لحجز موعد.",
+  "es": "Depende de la clínica. El {label}, Dapto Dentists abre {dapto_range} y Woonona Dentists abre {woonona_range}. Shellharbour Dentists no tiene un horario fijo el {label}: atiende solo con cita previa, así que llame al {sh_phone} para reservar una hora."
+ },
+ "ADDRESS_ALL": {
+  "en": "Here are the addresses of our three clinics:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "ml": "ഞങ്ങളുടെ മൂന്ന് ക്ലിനിക്കുകളുടെ വിലാസങ്ങൾ ഇതാ:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "ta": "எங்கள் மூன்று கிளினிக்குகளின் முகவரிகள் இதோ:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "hi": "हमारे तीनों क्लिनिक के पते ये हैं:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "bn": "আমাদের তিনটি ক্লিনিকের ঠিকানা নিচে দেওয়া হলো:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "zh": "以下是我们三家诊所的地址：\n• Dapto Dentists：{dapto}\n• Shellharbour Dentists：{shellharbour}\n• Woonona Dentists：{woonona}",
+  "ar": "يسعدنا استقبالك في أيٍّ من عياداتنا الثلاث، وهذه عناوينها:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "es": "Estas son las direcciones de nuestras tres clínicas:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}"
+ },
+ "PHONE_ALL": {
+  "en": "Here are the phone numbers for our three clinics:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "ml": "ഞങ്ങളുടെ മൂന്ന് ക്ലിനിക്കുകളുടെ ഫോൺ നമ്പറുകൾ ഇതാ:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "ta": "எங்கள் மூன்று கிளினிக்குகளின் தொலைபேசி எண்கள் இதோ:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "hi": "हमारे तीनों क्लिनिक के फ़ोन नंबर ये हैं:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "bn": "আমাদের তিনটি ক্লিনিকের ফোন নম্বর নিচে দেওয়া হলো:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "zh": "以下是我们三家诊所的电话：\n• Dapto Dentists：{dapto}\n• Shellharbour Dentists：{shellharbour}\n• Woonona Dentists：{woonona}",
+  "ar": "إليك أرقام هواتف عياداتنا الثلاث:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}",
+  "es": "Estos son los teléfonos de nuestras tres clínicas:\n• Dapto Dentists: {dapto}\n• Shellharbour Dentists: {shellharbour}\n• Woonona Dentists: {woonona}"
+ },
+ "IMPLANT_ALL": {
+  "en": "A single implant with a crown starts from $4500* at Shellharbour Dentists (*conditions apply, explained at your consultation) and from $5000 at Woonona Dentists, with payment plans from about $30 a week. Dapto Dentists offers a free implant consultation to give you a price; you pay a $50 deposit when you book, and it is refunded when you attend.",
+  "ml": "ഒരു ഇംപ്ലാന്റും ക്രൗണും ചേർന്ന ചികിത്സയ്ക്ക് Shellharbour Dentists-ൽ $4500* മുതലാണ് നിരക്ക് (*നിബന്ധനകൾ ബാധകം, കൺസൾട്ടേഷനിൽ വിശദീകരിക്കും). Woonona Dentists-ൽ $5000 മുതലാണ്, ആഴ്ചയിൽ ഏകദേശം $30 മുതൽ തവണകളായി അടയ്ക്കാം. Dapto Dentists-ൽ നിരക്ക് അറിയാൻ സൗജന്യ കൺസൾട്ടേഷൻ ഉണ്ട്; ബുക്ക് ചെയ്യുമ്പോൾ $50 ഡെപ്പോസിറ്റ് നൽകണം, നിങ്ങൾ വരുമ്പോൾ അത് മുഴുവനായി തിരികെ തരും.",
+  "ta": "ஒரு இம்ப்ளாண்ட் மற்றும் கிரவுனுக்கு Shellharbour Dentists-இல் கட்டணம் $4500* முதல் தொடங்குகிறது (*நிபந்தனைகள் உண்டு, ஆலோசனையின்போது விளக்கப்படும்). Woonona Dentists-இல் $5000 முதல் தொடங்குகிறது; வாரத்துக்கு சுமார் $30 முதல் தவணையாகவும் செலுத்தலாம். Dapto Dentists-இல் கட்டணத்தை அறிய இலவச ஆலோசனை உண்டு; முன்பதிவின்போது $50 முன்பணம் செலுத்த வேண்டும், நீங்கள் வந்தவுடன் அது முழுமையாகத் திருப்பித் தரப்படும்.",
+  "hi": "एक इम्प्लांट और क्राउन का खर्च Shellharbour Dentists में $4500* से शुरू होता है (*शर्तें लागू, कंसल्टेशन में समझाई जाएँगी)। Woonona Dentists में यह $5000 से शुरू होता है, और आप लगभग $30 प्रति सप्ताह की किस्तों में भी भुगतान कर सकते हैं। Dapto Dentists में कीमत जानने के लिए मुफ़्त कंसल्टेशन होता है; बुकिंग पर $50 जमा करने होते हैं, जो आपके आने पर पूरे लौटा दिए जाते हैं।",
+  "bn": "একটি ইমপ্ল্যান্ট ও ক্রাউনের খরচ Shellharbour Dentists-এ শুরু হয় $4500* থেকে (*শর্ত প্রযোজ্য, পরামর্শের সময় বুঝিয়ে বলা হবে)। Woonona Dentists-এ শুরু $5000 থেকে, আর চাইলে সপ্তাহে প্রায় $30 করে কিস্তিতে পরিশোধ করার সুবিধাও আছে। Dapto Dentists-এ খরচ জানতে বিনামূল্যে পরামর্শ নেওয়া যায়; বুক করার সময় $50 জমা দিতে হয়, আর আপনি এলে পুরো টাকাটাই ফেরত দেওয়া হয়।",
+  "zh": "单颗种植牙加牙冠，在Shellharbour Dentists $4500* 起（*适用相关条款，咨询时会详细说明），在Woonona Dentists $5000 起，也可分期付款，每周约 $30 起。Dapto Dentists提供免费种植牙咨询，帮您了解具体费用；预约时需付 $50 订金，您按时就诊后会全额退还。",
+  "ar": "تبدأ تكلفة زرعة واحدة مع التاج في Shellharbour Dentists من $4500* (*تنطبق شروط تُشرح لك في الاستشارة)، وفي Woonona Dentists من $5000 مع إمكانية الدفع بالتقسيط بدءًا من نحو $30 أسبوعيًا. وفي Dapto Dentists يمكنك حجز استشارة مجانية لمعرفة السعر؛ تدفع عربونًا قدره $50 عند الحجز ويُعاد إليك كاملًا عند حضورك.",
+  "es": "Un implante con corona cuesta desde $4500* en Shellharbour Dentists (*se aplican condiciones, que se explican en la consulta) y desde $5000 en Woonona Dentists, con planes de pago desde unos $30 a la semana. En Dapto Dentists puede reservar una consulta gratuita para saber el precio; paga un depósito de $50 al reservar y se le devuelve íntegro cuando asiste."
+ }
+}

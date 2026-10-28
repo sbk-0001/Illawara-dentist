@@ -2,7 +2,9 @@ import type { ClinicFocus } from "../intent";
 import type { KnowledgeIndex } from "../types";
 import { ensureAddressReply, isAddressQuestion } from "./address";
 import { directoryLabels, englishPhoneFallback } from "./contacts";
+import { fillTemplate } from "./fill-template";
 import { guardBareHoursReply, mayBeBareHours } from "./hours";
+import templates from "./templates-v2.json";
 
 const ENGLISH_LABEL = "(?:phone|booking|email|address|hours|website)";
 const LINE_LABEL = new RegExp(`^(${ENGLISH_LABEL})\\s*[:：]\\s*(\\S.*)$`, "i");
@@ -196,6 +198,14 @@ function clinicForPhone(index: KnowledgeIndex, text: string): { name: string; ph
 
 export function phoneReply(code: string, index: KnowledgeIndex, focus: ClinicFocus): string {
   const ids = focus.kind === "one" ? [focus.clinic] : focus.kind === "many" ? focus.clinics : (["dapto", "shellharbour", "woonona"] as const);
+  const combined = templates.PHONE_ALL[code as keyof typeof templates.PHONE_ALL];
+  if (ids.length >= 3 && combined) {
+    return fillTemplate(combined, {
+      dapto: index.contacts.dapto?.phone ?? "",
+      shellharbour: index.contacts.shellharbour?.phone ?? "",
+      woonona: index.contacts.woonona?.phone ?? "",
+    });
+  }
   return ids
     .map((id) => {
       const card = index.contacts[id];
@@ -207,6 +217,8 @@ export function phoneReply(code: string, index: KnowledgeIndex, focus: ClinicFoc
 
 function phoneSentence(code: string, clinic: string, phone: string): string {
   const named = clinic.length > 0;
+  const templated = templates.PHONE[code as keyof typeof templates.PHONE];
+  if (named && templated) return fillTemplate(templated, { clinic, phone });
   const table: Record<string, [string, string]> = {
     en: [`The phone number for ${clinic} is ${phone}.`, `The phone number is ${phone}.`],
     bn: [`${clinic}-এর ফোন নম্বর ${phone}।`, `ফোন নম্বর ${phone}।`],

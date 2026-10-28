@@ -142,11 +142,10 @@ describe("contact label rewrite", () => {
       attachContactLabels(source([line]), { code: "en", index, replyStatus: { missing: false }, focus: { kind: "ask" } }),
     );
     const text = unnamed.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(text.startsWith("Here are the opening hours.")).toBe(true);
-    expect(text).toContain("Dapto Dentists is open Monday to Friday from 8am to 6pm.");
-    expect(text).toContain("Dapto Dentists is open Saturday from 8am to 4pm.");
-    expect(text).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
-    expect(text).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
+    expect(text.startsWith("It depends on the clinic.")).toBe(true);
+    expect(text).toContain("Dapto Dentists is open from 8am to 6pm");
+    expect(text).toContain("Woonona Dentists is open from 8am to 6pm");
+    expect(text).toContain("02 4216 9911");
     expect(isShortLabelReply(text, "en")).toBe(false);
     expect(text.startsWith("Monday")).toBe(false);
 

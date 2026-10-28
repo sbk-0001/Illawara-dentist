@@ -31,8 +31,8 @@ describe("address questions", () => {
     expect(listed).toContain("35 Baan Baan Street");
     expect(listed).toContain("Captain Cook Drive");
     expect(listed).toContain("379 Princes Highway");
-    expect(listed).toContain("এর ঠিকানা হলো");
-    expect(listed).not.toContain("Woonona Dentists:");
+    expect(listed).toContain("তিনটি ক্লিনিকের ঠিকানা");
+    expect(listed).toContain("• Woonona Dentists:");
     expect(listed).not.toContain("02 4288 0737");
 
     const recent = ensureAddressReply("02 4288 0737", "কোথায়?", "bn", index, { kind: "one", clinic: "dapto" });
@@ -72,11 +72,11 @@ describe("address questions", () => {
   it("turns the live Tamil address line into a full sentence", () => {
     const live = "Woonona Dentists முகவரி 379 Princes Highway, Woonona, NSW, 2517.";
     const spoken = ensureAddressReply(live, "வூனோனா முகவரி என்ன?", "ta", index, { kind: "one", clinic: "woonona" });
-    expect(spoken).toBe("Woonona Dentists-இன் முகவரி 379 Princes Highway, Woonona, NSW, 2517 ஆகும்.");
+    expect(spoken).toBe("Woonona Dentists-இன் முகவரி: 379 Princes Highway, Woonona, NSW, 2517. உங்களை வரவேற்கக் காத்திருக்கிறோம்.");
     expect(ensureAddressReply(live, "വൂനോനയുടെ വിലാസം എന്താണ്?", "ml", index, { kind: "one", clinic: "woonona" })).toContain("-ന്റെ വിലാസം");
-    expect(ensureAddressReply("379 Princes Highway, Woonona", "你们的地址在哪？", "zh", index, { kind: "one", clinic: "woonona" })).toContain("的地址是");
+    expect(ensureAddressReply("379 Princes Highway, Woonona", "你们的地址在哪？", "zh", index, { kind: "one", clinic: "woonona" })).toContain("位于");
     expect(ensureAddressReply("379 Princes Highway, Woonona", "¿Cuál es la dirección?", "es", index, { kind: "one", clinic: "woonona" })).toContain("La dirección de Woonona Dentists es");
-    expect(ensureAddressReply("379 Princes Highway, Woonona", "ما هو العنوان؟", "ar", index, { kind: "one", clinic: "woonona" })).toContain("عنوان Woonona Dentists هو");
+    expect(ensureAddressReply("379 Princes Highway, Woonona", "ما هو العنوان؟", "ar", index, { kind: "one", clinic: "woonona" })).toContain("تقع عيادة Woonona Dentists");
     expect(ensureAddressReply("379 Princes Highway, Woonona", "What is the address?", "en", index, { kind: "one", clinic: "woonona" })).toBe(
       "The address of Woonona Dentists is 379 Princes Highway, Woonona, NSW, 2517.",
     );

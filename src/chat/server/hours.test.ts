@@ -70,11 +70,10 @@ describe("localised opening hours", () => {
     expect(mayBeBareHours("Monday–Friday 8:00 AM–6:00", "en")).toBe(true);
     expect(mayBeBareHours("Dapto is open Monday–Friday 8:00 AM–6:00 PM.", "en")).toBe(false);
     const unnamed = guardBareHoursReply(line, "en", { kind: "ask" });
-    expect(unnamed.startsWith("Here are the opening hours.")).toBe(true);
-    expect(unnamed).toContain("Dapto Dentists is open Monday to Friday from 8am to 6pm.");
-    expect(unnamed).toContain("Dapto Dentists is open Saturday from 8am to 4pm.");
-    expect(unnamed).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
-    expect(unnamed).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
+    expect(unnamed.startsWith("It depends on the clinic.")).toBe(true);
+    expect(unnamed).toContain("Dapto Dentists is open from 8am to 6pm");
+    expect(unnamed).toContain("Woonona Dentists is open from 8am to 6pm");
+    expect(unnamed).toContain("02 4216 9911");
     expect(unnamed).not.toMatch(/Dentists:\s/);
     const named = guardBareHoursReply(line, "en", { kind: "one", clinic: "dapto" });
     expect(named).toBe("Dapto Dentists is open Monday to Friday from 8am to 6pm. Dapto Dentists is open Saturday from 8am to 4pm.");
@@ -107,9 +106,9 @@ describe("localised opening hours", () => {
     expect(guarded).not.toContain('"');
 
     const unnamed = guardBareHoursReply(english, "en", { kind: "ask" });
-    expect(unnamed.startsWith("Here are the opening hours.")).toBe(true);
-    expect(unnamed).toContain("Shellharbour Dentists is open Monday to Friday from 8am to 5pm.");
-    expect(unnamed).toContain("Woonona Dentists is open Saturday from 8am to 5pm.");
+    expect(unnamed.startsWith("It depends on the clinic.")).toBe(true);
+    expect(unnamed).toContain("02 4216 9911");
+    expect(unnamed).toContain("Woonona Dentists is open from 8am to 6pm");
 
     const chinese = `${formatClinicHours("dapto", "zh")}。Dapto Dentists 的营业时间就是这样。`;
     const zh = guardBareHoursReply(chinese, "zh", { kind: "one", clinic: "dapto" });

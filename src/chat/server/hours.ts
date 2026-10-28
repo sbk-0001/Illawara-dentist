@@ -1,6 +1,8 @@
 import { mentionedClinics, type ClinicFocus } from "../intent";
 import { clinicName } from "../retrieval/search";
 import type { ClinicId } from "../types";
+import { fillTemplate } from "./fill-template";
+import templates from "./templates-v2.json";
 
 /**
  * Opening hours taken only from indexed pages. Times are 24-hour. Sunday is not
@@ -182,7 +184,15 @@ const DAY_INDEX: Record<string, number> = {
 };
 
 const HOURS_QUESTION =
-  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|സമയം|തുറക്കും|തുറക്കു|തുറന്ന|തുറ|நேரம்|திறக்கும்|திறக்கு|திற|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|thurakkum|thirakkum|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
+  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|സമയം|തുറക്കും|തുറക്കു|തുറന്ന|തുറ|நேரம்|திறக்கும்|திறக்கு|திற|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|thurakkum|thirakkum|ساعات|اوقات|متى|متي|تفتح|دوام|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
+
+const CLINIC_PHONE: Record<ClinicId, string> = {
+  dapto: "02 4288 0737",
+  shellharbour: "02 4216 9911",
+  woonona: "02 4284 4486",
+};
+
+const TEMPLATE_HOURS = new Set(["en", "ml", "ta", "hi", "bn", "zh", "ar", "es"]);
 
 const HOURS_CHUNK = /clinic hours|operating hours|opening hours|monday to friday|mon\s*[–—-]\s*fri|8:00\s*am|8\.00\s*am|8am/i;
 
@@ -509,7 +519,47 @@ function englishSpokenSpan(open: string, close: string): string {
   return `from ${englishClock(open)} to ${englishClock(close)}`;
 }
 
+function hoursRange(code: string, open: string, close: string): string {
+  return code === "en" ? englishSpokenSpan(open, close) : spokenSpan(open, close, code);
+}
+
+function hoursAnyParagraph(code: string, question: string): string {
+  const day = askedDay(question);
+  const label = day ? dayLabel(code, day) : weekdayLabel(code);
+  const rangeFor = (id: ClinicId) => {
+    const schedule = CLINIC_HOURS[id];
+    const span = day ? schedule.spans.find((item) => item.days.includes(day)) : schedule.spans[0];
+    return span ? hoursRange(code, span.open, span.close) : "";
+  };
+  const template = templates.HOURS_ANY[code as keyof typeof templates.HOURS_ANY] ?? templates.HOURS_ANY.en;
+  return fillTemplate(template, {
+    label,
+    dapto_range: rangeFor("dapto"),
+    woonona_range: rangeFor("woonona"),
+    sh_phone: CLINIC_PHONE.shellharbour,
+  });
+}
+
+function templatedClinicHours(code: string, id: ClinicId, question: string): string {
+  const day = askedDay(question);
+  const schedule = CLINIC_HOURS[id];
+  const name = clinicName(id);
+  const phone = CLINIC_PHONE[id];
+  const openTemplate = templates.HOURS_OPEN[code as keyof typeof templates.HOURS_OPEN] ?? templates.HOURS_OPEN.en;
+  const apptTemplate = templates.HOURS_APPT[code as keyof typeof templates.HOURS_APPT] ?? templates.HOURS_APPT.en;
+  const spans = day ? schedule.spans.filter((span) => span.days.includes(day)) : schedule.spans;
+  const open = spans.map((span) => {
+    const label = span.days.length > 1 && !day ? weekdayLabel(code) : dayLabel(code, day && span.days.includes(day) ? day : span.days[0]);
+    return fillTemplate(openTemplate, { name, label, range: hoursRange(code, span.open, span.close) });
+  });
+  const appointments = schedule.notes
+    .filter((note): note is { kind: "appointment"; days: Day[] } => note.kind === "appointment" && (!day || note.days.includes(day)))
+    .map((note) => fillTemplate(apptTemplate, { name, label: dayLabel(code, day || note.days[0] || "sat"), phone }));
+  return [...open, ...appointments].join(" ");
+}
+
 function hoursSentence(code: string, id: ClinicId, question = ""): string {
+  if (TEMPLATE_HOURS.has(code)) return templatedClinicHours(code, id, question);
   if (code === "en") {
     const day = askedDay(question);
     const name = clinicName(id);
@@ -535,6 +585,7 @@ export function hoursReply(code: string, focus: ClinicFocus, question = ""): str
 }
 
 function renderHours(code: string, ids: ClinicId[], question = ""): string {
+  if (ids.length >= 3 && TEMPLATE_HOURS.has(code)) return hoursAnyParagraph(code, question);
   const lines = ids.map((id) => hoursSentence(code, id, question));
   if (ids.length === 1) return lines[0] ?? "";
   return `${hoursLeadIn(code, "")}\n${lines.join("\n")}`;

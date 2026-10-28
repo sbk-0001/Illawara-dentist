@@ -334,6 +334,8 @@ describe("prompt rules", () => {
     expect(unnamed).not.toMatch(/does not list/i);
     expect(unnamed).toMatch(/\$4500\* at Shellharbour Dentists/);
     expect(unnamed).toMatch(/\$5000 at Woonona Dentists/);
+    expect(implantPriceSentence("en", { kind: "one", clinic: "shellharbour" })).toContain("$4500*");
+    expect(implantPriceSentence("en", { kind: "one", clinic: "shellharbour" })).not.toContain("$5000");
     expect(implantPriceSentence("en", { kind: "one", clinic: "woonona" })).not.toContain("$4500");
     expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).toMatch(/free implant consult/i);
     expect(implantPriceSentence("en", { kind: "one", clinic: "dapto" })).not.toMatch(/\$4500|\$5000/);
@@ -371,18 +373,18 @@ describe("prompt rules", () => {
 
   it("answers toothache and whitening with a warm sentence, and drops a denial next to a real answer", () => {
     const ache = acheReply("ml", { kind: "one", clinic: "dapto" }, index);
-    expect(ache).toContain("വേദനയിൽ ഖേദിക്കുന്നു");
+    expect(ache).toContain("വേദനയുണ്ടെന്ന് കേട്ടതിൽ വിഷമമുണ്ട്");
     expect(ache).toContain("02 4288 0737");
     expect(ache).not.toContain("ലഭ്യത");
     const all = acheReply("en", { kind: "any" }, index);
-    expect(all).toContain("All three clinics");
+    expect(all).toContain("I'm sorry you're in pain");
     expect(all).toContain("02 4288 0737");
     expect(all).toContain("02 4216 9911");
     expect(all).toContain("02 4284 4486");
     expect(all.split("Dapto Dentists").length - 1).toBe(1);
 
     const white = whiteningReply("ta", { kind: "one", clinic: "woonona" }, index);
-    expect(white).toContain("பல் வெண்மையாக்குதல்");
+    expect(white).toContain("வெண்மையாக்க");
     expect(white).not.toContain("தகவல்");
     expect(white).toContain("$650");
     expect(white).toContain(index.contacts.woonona.bookingUrl);

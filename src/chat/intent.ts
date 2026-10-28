@@ -3,7 +3,7 @@ import type { ClinicId } from "./types";
 const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   {
     clinic: "dapto",
-    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ডাপ্টো|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト|ഡാപ്റ്റോ|ഡാർട്ടോ|ഡാറ്റോ|ഡാപ്ടോ|டாப்டோ|டாப்லோ|தாப்போ|நாட்டோ|ডাক্তার\s*ক্লিনিক/i,
+    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|دابت|دبت|ڈاپٹو|ڈاپتو|داپتو|ডাপ্টো|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト|ഡാപ്റ്റോ|ഡാർട്ടോ|ഡാറ്റോ|ഡാപ്ടോ|டாப்டோ|டாப்லோ|தாப்போ|நாட்டோ|ডাক্তার\s*ক্লিনিক/i,
   },
   {
     clinic: "shellharbour",
@@ -107,6 +107,10 @@ function fuzzyHits(text: string): { clinic: ClinicId; index: number }[] {
   return hits;
 }
 
+/** Phone, address, or hours. Bare "doctor" maps to Dapto only beside one of these. */
+const DOCTOR_CONTACT =
+  /phone|ഫോൺ|फोन|फ़ोन|ফোন|নম্বর|ঠিকানা|কোথায়|খোলা|সময়|தொலைபேசி|முகவரி|எங்கே|நேரம்|திற|மணி|വിലാസം|സമയം|തുറ|address|\bhours\b|\bopen\b|هاتف|عنوان|متى|متي|تفتح|电话|地址|营业|开门/i;
+
 export function mentionedClinics(text: string): ClinicId[] {
   const found: ClinicId[] = [];
   for (const term of CLINIC_TERMS) {
@@ -115,6 +119,7 @@ export function mentionedClinics(text: string): ClinicId[] {
   for (const hit of fuzzyHits(text)) {
     if (!found.includes(hit.clinic)) found.push(hit.clinic);
   }
+  if (!found.includes("dapto") && /ডাক্তার|டாக்டர்/.test(text) && DOCTOR_CONTACT.test(text)) found.push("dapto");
   return found;
 }
 

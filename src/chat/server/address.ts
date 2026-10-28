@@ -1,6 +1,8 @@
 import { lastMentionedClinic, mentionedClinics, type ClinicFocus } from "../intent";
 import type { ClinicId, KnowledgeIndex } from "../types";
 import { directoryLabels } from "./contacts";
+import { fillTemplate } from "./fill-template";
+import templates from "./templates-v2.json";
 
 const ALL_CLINICS: ClinicId[] = ["dapto", "shellharbour", "woonona"];
 
@@ -47,14 +49,14 @@ function phoneOnly(text: string): boolean {
 }
 
 const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string> = {
-  en: (name, address) => `The address of ${name} is ${address}.`,
-  bn: (name, address) => `${name}-এর ঠিকানা হলো ${address}।`,
+  en: (name, address) => fillTemplate(templates.ADDRESS.en, { name, address }),
+  bn: (name, address) => fillTemplate(templates.ADDRESS.bn, { name, address }),
   "bn-Latn": (name, address) => `${name} er thikana holo ${address}.`,
-  hi: (name, address) => `${name} का पता ${address} है।`,
+  hi: (name, address) => fillTemplate(templates.ADDRESS.hi, { name, address }),
   "hi-Latn": (name, address) => `${name} ka pata ${address} hai.`,
-  zh: (name, address) => `${name}的地址是 ${address}。`,
-  es: (name, address) => `La dirección de ${name} es ${address}.`,
-  ar: (name, address) => `عنوان ${name} هو ${address}.`,
+  zh: (name, address) => fillTemplate(templates.ADDRESS.zh, { name, address }),
+  es: (name, address) => fillTemplate(templates.ADDRESS.es, { name, address }),
+  ar: (name, address) => fillTemplate(templates.ADDRESS.ar, { name, address }),
   fa: (name, address) => `آدرس ${name} ${address} است.`,
   ur: (name, address) => `${name} کا پتہ ${address} ہے۔`,
   ko: (name, address) => `${name}의 주소는 ${address}입니다.`,
@@ -68,8 +70,8 @@ const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string
   ru: (name, address) => `Адрес ${name}: ${address}.`,
   th: (name, address) => `ที่อยู่ของ ${name} คือ ${address}`,
   ne: (name, address) => `${name} को ठेगाना ${address} हो।`,
-  ml: (name, address) => `${name}-ന്റെ വിലാസം ${address} ആണ്.`,
-  ta: (name, address) => `${name}-இன் முகவரி ${address} ஆகும்.`,
+  ml: (name, address) => fillTemplate(templates.ADDRESS.ml, { name, address }),
+  ta: (name, address) => fillTemplate(templates.ADDRESS.ta, { name, address }),
 };
 
 const NATIVE_ADDRESS: Record<string, RegExp> = {
@@ -109,6 +111,14 @@ export function addressReply(code: string, index: KnowledgeIndex, focus: ClinicF
 }
 
 function addressBlock(index: KnowledgeIndex, code: string, ids: ClinicId[]): string {
+  const combined = templates.ADDRESS_ALL[code as keyof typeof templates.ADDRESS_ALL];
+  if (ids.length >= 3 && combined) {
+    return fillTemplate(combined, {
+      dapto: index.contacts.dapto?.address ?? "",
+      shellharbour: index.contacts.shellharbour?.address ?? "",
+      woonona: index.contacts.woonona?.address ?? "",
+    });
+  }
   return ids
     .map((id) => {
       const card = index.contacts[id];

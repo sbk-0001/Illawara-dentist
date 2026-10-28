@@ -30,20 +30,34 @@ function bookingLines(index: KnowledgeIndex, focus: ClinicFocus): string {
     .join("\n");
 }
 
+export type CoreIntent = "ache" | "white" | "implant" | "hours" | "address" | "phone";
+
+/** Which fixed reply a question gets. Null means the model still answers. */
+export function coreIntent(question: string): CoreIntent | null {
+  if (isToothacheQuestion(question)) return "ache";
+  if (isWhiteningQuestion(question)) return "white";
+  if (isImplantPriceQuestion(question)) return "implant";
+  if (questionAsksHours(question)) return "hours";
+  if (isAddressQuestion(question)) return "address";
+  if (isPhoneQuestion(question)) return "phone";
+  return null;
+}
+
 /**
  * Hours, address, phone, toothache, whitening and implant cost are fixed
  * sentences. Everything else still goes to the model.
  */
 export function coreTemplate(question: string, code: string, focus: ClinicFocus, index: KnowledgeIndex): string | null {
-  if (isToothacheQuestion(question)) return acheReply(code, focus, index);
-  if (isWhiteningQuestion(question)) return whiteningReply(code, focus, index);
-  if (isImplantPriceQuestion(question)) {
+  const intent = coreIntent(question);
+  if (intent === "ache") return acheReply(code, focus, index);
+  if (intent === "white") return whiteningReply(code, focus, index);
+  if (intent === "implant") {
     const price = implantPriceSentence(code, focus);
     const book = bookingLines(index, focus);
     return book ? `${price}\n${book}` : price;
   }
-  if (questionAsksHours(question)) return hoursReply(code, focus, question);
-  if (isAddressQuestion(question)) return addressReply(code, index, focus);
-  if (isPhoneQuestion(question)) return phoneReply(code, index, focus);
+  if (intent === "hours") return hoursReply(code, focus, question);
+  if (intent === "address") return addressReply(code, index, focus);
+  if (intent === "phone") return phoneReply(code, index, focus);
   return null;
 }

@@ -116,6 +116,9 @@ describe("contact footer", () => {
     expect(mentionedClinics("ডাক্তার")).toEqual([]);
     expect(mentionedClinics("ഡോക്ടർ")).toEqual([]);
     expect(mentionedClinics("டாக்டர்")).toEqual([]);
+    expect(mentionedClinics("டாக்டர் தொலைபேசி எண் என்ன?")).toEqual(["dapto"]);
+    expect(mentionedClinics("ডাক্তারের ফোন নম্বর কী?")).toEqual(["dapto"]);
+    expect(mentionedClinics("আমি ডাক্তার")).toEqual([]);
     expect(mentionedClinics("doctor")).toEqual([]);
     if (follow.sources.length) {
       expect(
