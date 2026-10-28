@@ -62,5 +62,17 @@ describe("native-script transcript repair", () => {
       },
     });
     expect(english).toBeNull();
+
+    let omitted: string | undefined = "unset";
+    const open = await repairNativeTranscript({
+      audio: new Uint8Array([9, 9, 9]),
+      transcribe: async (input) => {
+        omitted = input.providerOptions.openai.language;
+        return { text: "উনোনা ক্লিনিকের ঠিকানা কি?" };
+      },
+    });
+    expect(open).toBe("উনোনা ক্লিনিকের ঠিকানা কি?");
+    expect(omitted).toBeUndefined();
+    expect(TRANSCRIPT_REPAIR_TIMEOUT_MS).toBeLessThan(3_000);
   });
 });

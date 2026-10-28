@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getKnowledgeIndex } from "./index-store";
-import { messagesAfterLanguageSwitch, prepareTurn } from "./chat-route";
+import { messagesAfterLanguageSwitch, messagesForScriptRetry, prepareTurn } from "./chat-route";
 
 const index = getKnowledgeIndex();
 
@@ -131,6 +131,16 @@ describe("spoken language on a voice turn", () => {
     );
     expect(String(switched[0]?.content)).toContain("switched to en");
     expect(String(switched[0]?.content)).not.toMatch(/[\u0980-\u09FF]/);
+    const history = messagesForScriptRetry(
+      [
+        { role: "assistant", content: "হ্যাঁ, ডাপ্টো খোলা।" },
+        { role: "user", content: "Woonona phone?" },
+      ],
+      "en",
+      true,
+    );
+    expect(history).toEqual([{ role: "user", content: "Woonona phone?" }]);
+    expect(messagesForScriptRetry(history, "bn", true)).toEqual(history);
 
     const freshBanglish = prepareTurn([{ role: "user", content: "dapto kokhon khola" }], "auto", index);
     expect(freshBanglish.reply.code).toBe("bn");

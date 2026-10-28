@@ -29,11 +29,31 @@ export function restoreClinicNames(text: string): string {
     .replace(/शेलहारबर(?:\s+डेंटिस्ट्स?)?|शेलहार्बर(?:\s+डेंटिस्ट्स?)?/g, "Shellharbour Dentists");
 }
 
-function phoneAlreadyStated(text: string, phone: string, code: string): boolean {
+function phoneKeys(line: string): string[] {
+  const keys: string[] = [];
+  for (const match of line.matchAll(/\d[\d\s().-]{6,}\d/g)) {
+    const key = digits(match[0]).slice(-8);
+    if (key.length >= 8) keys.push(key);
+  }
+  return keys;
+}
+
+/** Drop a later line that repeats a phone already written, ignoring spaces. */
+export function dedupePhoneLines(text: string): string {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const line of text.split("\n")) {
+    const keys = phoneKeys(line);
+    if (keys.length > 0 && keys.every((key) => seen.has(key))) continue;
+    for (const key of keys) seen.add(key);
+    kept.push(line);
+  }
+  return kept.join("\n");
+}
+
+function phoneAlreadyStated(text: string, phone: string, _code: string): boolean {
   const needle = digits(phone).slice(-8);
-  if (needle.length < 8 || !digits(text).includes(needle)) return false;
-  if (isShortLabelReply(text, code) || text.split(/\n/).some((line) => isLabelValueLine(line, code))) return false;
-  return /[.!?।。？！]|입니다|합니다/.test(text);
+  return needle.length >= 8 && digits(text).includes(needle);
 }
 
 export function rewriteContactLabels(text: string, code: string): string {
@@ -181,11 +201,11 @@ function phoneSentence(code: string, clinic: string, phone: string): string {
   return named ? pair[0] : pair[1];
 }
 
-export function bareContactPreface(code: string, text: string, index: KnowledgeIndex): string {
+export function bareContactPreface(code: string, text: string, index: KnowledgeIndex, replaceLabel = false): string {
   const found = clinicForPhone(index, text);
   const phone = found?.phone ?? text.match(/\d[\d\s()-]{8,}\d/)?.[0]?.replace(/\s+/g, " ").trim();
   if (!phone) return "";
-  if (phoneAlreadyStated(text, found?.phone ?? phone, code)) return "";
+  if (!replaceLabel && phoneAlreadyStated(text, found?.phone ?? phone, code)) return "";
   return phoneSentence(code, found?.name ?? "", phone);
 }
 
@@ -211,6 +231,20 @@ export function attachContactLabels<T extends LabelChunk>(
   let passed = false;
   let lineHold = "";
   let sealed = false;
+  const seenPhones = new Set<string>();
+
+  const withoutRepeat = (delta: string): string => {
+    if (!delta) return "";
+    const lines = delta.split("\n");
+    const kept: string[] = [];
+    for (const line of lines) {
+      const keys = phoneKeys(line);
+      if (keys.length > 0 && keys.every((key) => seenPhones.has(key))) continue;
+      for (const key of keys) seenPhones.add(key);
+      kept.push(line);
+    }
+    return kept.join("\n");
+  };
 
   const rewritePass = (delta: string): string => {
     if (input.code === "en" || input.code === "und") return lineHold + delta;
@@ -248,10 +282,10 @@ export function attachContactLabels<T extends LabelChunk>(
       isOnlyContactLine(body) ||
       isOnlyContactLine(raw);
     if (bare) {
-      const preface = bareContactPreface(input.code, raw, input.index);
-      if (preface) return `${preface}\n${body}`;
+      const sentence = bareContactPreface(input.code, body, input.index, true) || bareContactPreface(input.code, raw, input.index, true);
+      if (sentence) return sentence;
     }
-    return body;
+    return dedupePhoneLines(body);
   };
 
   const enqueueLabeled = (controller: TransformStreamDefaultController<T>, chunk: T, delta: string) => {
@@ -280,7 +314,7 @@ export function attachContactLabels<T extends LabelChunk>(
           if (chunk.type === "text-end" || chunk.type === "finish") {
             if (!sealed) {
               sealed = true;
-              const tail = `${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`;
+              const tail = withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`);
               lineHold = "";
               enqueueTail(controller, tail);
             }
@@ -301,16 +335,17 @@ export function attachContactLabels<T extends LabelChunk>(
           if (pending && held.length < (hoursPending || addressPending ? 500 : 80)) return;
           passed = true;
           const visible = releaseHeld();
-          if (visible) enqueueLabeled(controller, chunk, visible);
+          const once = withoutRepeat(visible);
+          if (once) enqueueLabeled(controller, chunk, once);
           return;
         }
-        const visible = rewritePass(chunk.delta);
+        const visible = withoutRepeat(rewritePass(chunk.delta));
         if (visible) enqueueLabeled(controller, chunk, visible);
       },
       flush(controller) {
         if (sealed) return;
         sealed = true;
-        const tail = `${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`;
+        const tail = withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`);
         lineHold = "";
         enqueueTail(controller, tail);
       },

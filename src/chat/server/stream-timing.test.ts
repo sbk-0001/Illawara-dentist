@@ -388,6 +388,39 @@ describe("first-token timeout", () => {
       expect(text).toBe(english);
       expect(text).not.toMatch(/[\u0980-\u09FF]/);
     }
+
+    const events: ChatTimingEvent[] = [];
+    let shortCalls = 0;
+    const stillBengali = "Woonona Dentists-এর Phone: 02 4284 4486।";
+    const checked = createRetryingTextStream({
+      language: "en",
+      timeoutMs: 500,
+      log: (event) => events.push(event),
+      run: () => {
+        shortCalls += 1;
+        return (async function* () {
+          yield { type: "text-delta", text: stillBengali };
+        })();
+      },
+    });
+    const templated = await readText(checked);
+    expect(shortCalls).toBe(2);
+    expect(templated).toBe("The phone number for Woonona Dentists is 02 4284 4486.");
+    expect(templated).not.toMatch(/[\u0980-\u09FF]/);
+    expect(events[0]?.shortReplyScriptCheck).toEqual({ target: "en", detectedScript: "bn", regenerated: true });
+
+    const glossary = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 500,
+      log: () => undefined,
+      run: async function* () {
+        yield { type: "text-delta", text: "এখানে singular implant with crown, assessment, pain relief, stabilisation এবং availability আছে।" };
+      },
+    });
+    const glossed = await readText(glossary);
+    expect(glossed).not.toMatch(/implant|crown|assessment|pain relief|stabilisation|availability/i);
+    expect(glossed).toContain("ইমপ্ল্যান্ট");
+    expect(glossed).toContain("প্রাপ্যতা");
   });
 
   it("does not flag an English reply as a script violation", async () => {

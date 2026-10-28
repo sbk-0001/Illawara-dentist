@@ -50,6 +50,13 @@ export type VoiceTurn = {
   spokenLanguage?: string;
 };
 
+/** The English regeneration sees only this user turn, so a Bengali answer cannot continue. */
+export function messagesForScriptRetry<T extends { role?: string }>(messages: T[], code: string, scriptRetry: boolean): T[] {
+  if (!scriptRetry || code !== "en") return messages;
+  const lastUser = [...messages].reverse().find((message) => message.role === "user");
+  return lastUser ? [lastUser] : messages;
+}
+
 /** Drop earlier assistant text when this turn's language is different, so the model cannot continue it. */
 export function messagesAfterLanguageSwitch<T extends { role?: string; parts?: unknown; content?: unknown; metadata?: { language?: string } }>(
   messages: T[],
@@ -296,7 +303,7 @@ export async function POST(request: Request): Promise<Response> {
           mode?.scriptRetry ? FIRST_TOKEN_TIMEOUT_MS : firstTokenBudget({ attempt, timeoutMs: FIRST_TOKEN_TIMEOUT_MS, startedAt }),
         ),
         instructions: mode?.scriptRetry ? `${instructions}\n\n${scriptRetryInstruction(lexical.reply)}` : instructions,
-        messages: modelMessages,
+        messages: messagesForScriptRetry(modelMessages, lexical.reply.code, mode?.scriptRetry === true),
         abortSignal: signal,
       }).stream,
   });

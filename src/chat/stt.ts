@@ -159,7 +159,10 @@ export function deepgramListenQuery(options?: { interim?: boolean; endpointing?:
   params.set("smart_format", "true");
   params.set("punctuate", "true");
   if (options?.interim) params.set("interim_results", "true");
-  if (options?.endpointing) params.set("endpointing", "400");
+  if (options?.endpointing) {
+    params.set("endpointing", "400");
+    params.set("utterance_end_ms", "1000");
+  }
   const hints = options?.hints?.length ? options.hints : ["en"];
   for (const hint of hints) params.append("language_hint", hint);
   for (const term of keytermsForHints(hints)) params.append("keyterm", term);
@@ -356,6 +359,15 @@ export function spokenLanguageAtSubmit(input: {
  * After the second pass, pure Hindi can stand when this turn was not hinted as Bengali.
  * A bn hint does not settle on hi.
  */
+/** Language after the gpt-4o-mini-transcribe pass. Any Bengali interim forces Bangla. */
+export function spokenLanguageAfterSecondPass(text: string, sawBengali: boolean): string {
+  if (sawBengali) return "bn";
+  const bengali = text.match(/[\u0980-\u09FF]/g)?.length ?? 0;
+  const letters = text.match(/\p{L}/gu)?.length ?? 0;
+  if (bengali >= 6 && letters > 0 && bengali / letters >= 0.5) return "bn";
+  return languageFromNativeScript(text) || "";
+}
+
 export function languageAfterRepair(requested: string | null | undefined, repaired: string, hint?: string | null): string | null {
   const hinted = normalizeSpokenLanguage(hint);
   const script = languageFromNativeScript(repaired);
@@ -389,6 +401,7 @@ function wordLanguageVotes(alternative: DeepgramAlternative | undefined): { code
 export type MicLanguageStreak = { code: string; count: number };
 
 const NOTE_SCRIPT_MIN = 6;
+const NOTE_SCRIPT_SHARE = 0.8;
 
 function scriptCount(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0;
@@ -405,23 +418,49 @@ const NOTE_BLOCKS: { code: string; re: RegExp }[] = [
   { code: "th", re: /[\u0E00-\u0E7F]/g },
   { code: "pa", re: /[\u0A00-\u0A7F]/g },
   { code: "ta", re: /[\u0B80-\u0BFF]/g },
-  { code: "te", re: /[\u0C00-\u0C7F]/g },
 ];
 
-/** The one native script that has at least three characters. Devanagari is Hindi. Bengali is Bangla. */
+/**
+ * The listening note names one script only after six characters of that script,
+ * and only when those characters are at least 80% of the native letters.
+ * Mixed Bengali and Devanagari stays "Listening…". Telugu is not a note:
+ * Deepgram tags Bengali audio as `te`, and Telugu letters are not Bengali.
+ */
 function scriptNoteLanguage(text: string): string {
+  if (scriptCount(text, /[\u0980-\u09FF]/g) > 0 && scriptCount(text, /[\u0900-\u097F]/g) > 0) return "";
   const counts = NOTE_BLOCKS.map((block) => ({ code: block.code, count: scriptCount(text, block.re) }));
   const kana = scriptCount(text, /[\u3040-\u30FF]/g);
   const han = scriptCount(text, /[\u4E00-\u9FFF]/g);
   if (kana >= NOTE_SCRIPT_MIN) counts.push({ code: "ja", count: kana + han });
   else if (han >= NOTE_SCRIPT_MIN) counts.push({ code: "zh", count: han });
-  const qualified = counts.filter((block) => block.count >= NOTE_SCRIPT_MIN);
+  const nativeTotal = counts.reduce((sum, block) => sum + block.count, 0);
+  const qualified = counts.filter((block) => block.count >= NOTE_SCRIPT_MIN && block.count / Math.max(nativeTotal, 1) >= NOTE_SCRIPT_SHARE);
   if (qualified.length !== 1) return "";
   const winner = qualified[0];
-  if (!winner) return "";
-  if (counts.some((block) => block.code !== winner.code && block.count > 0)) return "";
+  if (!winner || !languageOption(winner.code) || winner.code === "te") return "";
   if (winner.code === "ar") return languageFromNativeScript(text) || "ar";
   return winner.code;
+}
+
+const ROMAN_BENGALI = /\b(?:kliniker|klinik|chikana|chikanaki|chkanaki|kanaki|thikana|ache|achen|kothay|kokhon|khola|paoa|jabe|betha|dante|amar|ki)\b/i;
+
+/** Live Nova-3 garbled a Bengali utterance. These need the second pass before submit. */
+export function bengaliTranscriptGarbled(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const bengali = trimmed.match(/[\u0980-\u09FF]/g)?.length ?? 0;
+  const devanagari = trimmed.match(/[\u0900-\u097F]/g)?.length ?? 0;
+  const latinWords = (trimmed.match(/[A-Za-z]{2,}/g) ?? []).filter((word) => !/^(?:dapto|woonona|shellharbour|illawarra|nsw)$/i.test(word));
+  const families = [bengali > 0, devanagari > 0, latinWords.length > 0].filter(Boolean).length;
+  if (families >= 2) return true;
+  if (bengali > 0 && (devanagari > 0 || latinWords.length > 0)) return true;
+  return ROMAN_BENGALI.test(trimmed);
+}
+
+/** Last user message only. Auto does not inherit the assistant's language. */
+export function priorUserSpeechHint(text: string): "bn" | "hi" | null {
+  const code = utteranceLanguage(text, { final: true });
+  return code === "bn" || code === "hi" ? code : null;
 }
 
 /**
@@ -442,16 +481,15 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
   const detectedCode = detected.code === "bn-Latn" ? "bn" : detected.code === "hi-Latn" ? "hi" : detected.code;
   const heard = normalizeSpokenLanguage(options?.heard);
   const latinHeard = heard && !replyScriptWouldBeNative(heard) ? heard : null;
+  const latinNote = latinHeard && /^(?:es|fr|pt|it|de|vi|id|ms)$/.test(latinHeard) ? latinHeard : null;
   if (!options?.final) {
-    if (latinHeard && latinHeard !== "en" && (detectedCode === latinHeard || detectedCode === "und")) return latinHeard;
+    if (latinNote && detectedCode === latinNote) return latinNote;
     return "";
   }
   if (detected.code === "bn-Latn") return "bn";
   if (detected.code === "hi-Latn") return "hi";
-  if (detected.code === "und" || detected.fallback) {
-    if (latinHeard && latinHeard !== "en") return latinHeard;
-    return isDictionaryEnglish(text) ? "en" : "";
-  }
+  if (detected.code === "und" || detected.fallback) return isDictionaryEnglish(text) ? "en" : "";
+  if (detectedCode === "te") return "";
   return detected.code;
 }
 
@@ -469,7 +507,9 @@ export function interimMicLanguage(
   context?: { hint?: string | null; previous?: string | null; seen?: string | null; final?: boolean; streak?: MicLanguageStreak; picker?: string | null; heard?: string | null },
 ): string {
   const current = `${context?.seen ?? ""} ${transcript}`.replace(/\s+/g, " ").trim();
-  const code = utteranceLanguage(current, { final: context?.final, picker: context?.picker, heard: context?.heard });
+  let code = utteranceLanguage(current, { final: context?.final, picker: context?.picker, heard: context?.heard });
+  if (code === "te") code = "";
+  if (code === "hi" && /[\u0980-\u09FF]/.test(current)) code = "";
   if (context?.streak) {
     context.streak.code = code;
     context.streak.count = code ? NOTE_SCRIPT_MIN : 0;
@@ -481,7 +521,7 @@ const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
 
 /** A native language still written in Latin, mixed with Latin, or split across Devanagari and Bengali, needs the second pass. */
 export function transcriptNeedsRepair(code: string | null | undefined, text: string, hint?: string | null): boolean {
-  if (mixedIndicScripts(text)) return true;
+  if (bengaliTranscriptGarbled(text) || mixedIndicScripts(text)) return true;
   const hinted = normalizeSpokenLanguage(hint);
   const fromScript = languageFromNativeScript(text);
   const normalized = normalizeSpokenLanguage(code);
@@ -536,8 +576,9 @@ function correctJiShiMei(text: string): string {
  * "Buona" becomes Woonona only beside a clinic or dentist word, and not in "Buona sera".
  */
 export function correctTranscript(text: string): string {
+  const stripped = text.replace(/^[\s.。．,،!！?？]+/u, "");
   const replaced = correctJiShiMei(
-    correctDoctorClinic(correctBengaliAddress(text.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو"))),
+    correctDoctorClinic(correctBengaliAddress(stripped.replaceAll("隐世美", "隐适美").replaceAll("隐式美", "隐适美").replaceAll("دبتو", "دابتو"))),
   );
   return replaced.replace(/\b(?:buona|wunona|wonona|woona|voonona|woonana|unona)\b/gi, (match, offset: number, whole: string) => {
     const after = whole.slice(offset + match.length, offset + match.length + 16);
@@ -554,7 +595,7 @@ export function correctTranscript(text: string): string {
 /** Mic status once the utterance language is known, for example "শুনছি · বাংলা". */
 export function micListeningNote(code: string | null | undefined): string {
   const normalized = normalizeSpokenLanguage(code);
-  if (!normalized || normalized === "en") return "Listening…";
+  if (!normalized || normalized === "en" || normalized === "te") return "Listening…";
   const option = languageOption(normalized);
   const verb = LISTENING_VERB[normalized] ?? "Listening";
   return `${verb} · ${option?.label ?? normalized}`;

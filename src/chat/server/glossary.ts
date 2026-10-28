@@ -5,6 +5,14 @@
  */
 const PHRASES: Record<string, readonly [string, string][]> = {
   bn: [
+    ["singular implant with crown", "ক্রাউনসহ সিঙ্গল ইমপ্ল্যান্ট"],
+    ["pain relief", "ব্যথা উপশম"],
+    ["stabilisation", "স্থিতিশীলকরণ"],
+    ["stabilization", "স্থিতিশীলকরণ"],
+    ["assessment", "মূল্যায়ন"],
+    ["availability", "প্রাপ্যতা"],
+    ["implant", "ইমপ্ল্যান্ট"],
+    ["crown", "ক্রাউন"],
     ["professional teeth whitening", "পেশাদার দাঁত সাদা করা"],
     ["teeth whitening", "দাঁত সাদা করা"],
     ["suspected jaw fracture", "সন্দেহজনক চোয়াল ভাঙা"],
@@ -26,6 +34,14 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["concern", "সমস্যা"],
   ],
   hi: [
+    ["singular implant with crown", "क्राउन के साथ सिंगल इम्प्लांट"],
+    ["pain relief", "दर्द से राहत"],
+    ["stabilisation", "स्थिरीकरण"],
+    ["stabilization", "स्थिरीकरण"],
+    ["assessment", "आकलन"],
+    ["availability", "उपलब्धता"],
+    ["implant", "इम्प्लांट"],
+    ["crown", "क्राउन"],
     ["professional teeth whitening", "पेशेवर दांत सफ़ेद करना"],
     ["teeth whitening", "दांत सफ़ेद करना"],
     ["suspected jaw fracture", "संदिग्ध जबड़े की फ्रैक्चर"],

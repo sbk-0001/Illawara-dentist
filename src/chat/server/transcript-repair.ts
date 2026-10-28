@@ -15,18 +15,22 @@ type RepairCall = (input: {
   audio: Uint8Array;
   maxRetries: number;
   abortSignal: AbortSignal;
-  providerOptions: { openai: { language: string } };
+  providerOptions: { openai: { language?: string } };
 }) => Promise<{ text?: string }>;
 
-/** Use the repaired text only when it contains the spoken script. A Latin clinic name may remain. Timeout and errors keep the original. */
+/**
+ * Second pass on the full audio. A Bengali interim passes `language: "bn"`.
+ * Auto with no Bengali interim omits the language. Timeout stays under 3s.
+ * Latin-only results are discarded.
+ */
 export async function repairNativeTranscript(input: {
   audio: Uint8Array;
-  language: string;
+  language?: string;
   timeoutMs?: number;
   transcribe?: RepairCall;
 }): Promise<string | null> {
   const language = normalizeSpokenLanguage(input.language);
-  if (!language || !requiresNativeScript(language)) return null;
+  if (input.language?.trim() && (!language || !requiresNativeScript(language))) return null;
   const run = input.transcribe ?? ((args) => transcribe(args));
   try {
     const result = await run({
@@ -34,10 +38,15 @@ export async function repairNativeTranscript(input: {
       audio: input.audio,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(input.timeoutMs ?? TRANSCRIPT_REPAIR_TIMEOUT_MS),
-      providerOptions: { openai: { language } },
+      providerOptions: { openai: language ? { language } : {} },
     });
     const text = result.text?.trim() || "";
-    if (!text || (!hasNativeScript(language, text) && !languageFromNativeScript(text))) return null;
+    if (!text) return null;
+    if (language) {
+      if (!hasNativeScript(language, text) && !languageFromNativeScript(text)) return null;
+      return text;
+    }
+    if (!languageFromNativeScript(text)) return null;
     return text;
   } catch {
     return null;

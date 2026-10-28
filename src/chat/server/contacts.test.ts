@@ -4,6 +4,7 @@ import { detectLanguage, hasLetters } from "../language/detect";
 import { mentionedClinics } from "../intent";
 import {
   attachContactFooter,
+  canonicalKnownUrls,
   nameClinicInReply,
   chooseContactFooter,
   contactFooter,
@@ -858,6 +859,51 @@ describe("contact footer", () => {
       statusTag: "A",
       index,
       focus: { kind: "one", clinic: "dapto" },
+    })).toBe("none");
+
+    const stored = index.contacts.dapto.bookingUrl;
+    const corrupted = stored.replace("fc73148c-a1a3", "fc73148-c-a1a3");
+    expect(corrupted).not.toBe(stored);
+    const repaired = canonicalKnownUrls(`预约：${corrupted}`, index);
+    expect(repaired).toContain(stored);
+    expect(repaired).not.toContain("fc73148-c-a1a3");
+    expect(canonicalKnownUrls("see https://bookings.zavy360.com/booking/not-a-clinic", index)).not.toContain("zavy360");
+
+    const cut = Math.floor(url.length / 2);
+    const split = await readChunks(
+      attachContactFooter(new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "t2" });
+          controller.enqueue({ type: "text-delta", id: "t2", delta: "Puede reservar aquí: " });
+          controller.enqueue({ type: "text-delta", id: "t2", delta: url.slice(0, cut) });
+          controller.enqueue({ type: "text-delta", id: "t2", delta: url.slice(cut) });
+          controller.enqueue({ type: "text-end", id: "t2" });
+          controller.close();
+        },
+      }), {
+        footer: "Book or call:",
+        routeFooter: "Book or call:",
+        sourcesFound: true,
+        sourceCount: 2,
+        topScore: 2,
+        question: "¿Puedo reservar en Shellharbour?",
+        covered: () => false,
+        index,
+        focus: { kind: "one", clinic: "shellharbour" },
+        replyStatus: { tag: "A" },
+      }),
+    );
+    const named = split.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(named).toContain("Shellharbour Dentists");
+    expect(named).toContain(url);
+    expect(chooseContactFooter({
+      question: "¿Puedo reservar en Shellharbour?",
+      sourceCount: 2,
+      topScore: 2,
+      replyText: named,
+      statusTag: "A",
+      index,
+      focus: { kind: "one", clinic: "shellharbour" },
     })).toBe("none");
   });
 });

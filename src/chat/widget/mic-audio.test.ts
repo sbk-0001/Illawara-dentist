@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, shouldUploadRecording } from "./mic-audio";
+import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 
 function blob(size: number): Blob {
   return new Blob([new Uint8Array(size)]);
@@ -34,5 +34,13 @@ describe("microphone audio before the socket opens", () => {
     expect(shouldUploadRecording({ byteLength: 2400, transcript: "ডাপ্টো", socketOpened: true, needsRepair: true })).toBe(true);
     expect(shouldUploadRecording({ byteLength: 2400, transcript: "What time does Dapto open?", socketOpened: true, needsRepair: false })).toBe(false);
     expect(shouldUploadRecording({ byteLength: 0, transcript: "", socketOpened: false, needsRepair: false })).toBe(false);
+  });
+
+  it("keeps a longer interim when a later final is only the first words", () => {
+    expect(SPEECH_END_WAIT_MS).toBeLessThanOrEqual(1_200);
+    const early = "मेरे दांत";
+    const full = "मेरे दांत में बहुत दर्द हो रहा है";
+    expect(longerTranscript(early, full)).toBe(full);
+    expect(longerTranscript(full, early)).toBe(full);
   });
 });

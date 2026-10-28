@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, priorUserSpeechHint, spokenLanguageAfterSecondPass, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -15,6 +15,7 @@ describe("Deepgram Nova-3 keyterms", () => {
     }
     expect(deepgramListenUrl("stream")).toContain("interim_results=true");
     expect(deepgramListenUrl("stream")).toContain("endpointing=400");
+    expect(deepgramListenUrl("stream")).toContain("utterance_end_ms=1000");
     expect(deepgramListenUrl("prerecorded")).not.toContain("interim_results");
     expect(deepgramListenUrl("stream").startsWith("wss://")).toBe(true);
     expect(deepgramListenUrl("prerecorded").startsWith("https://")).toBe(true);
@@ -154,5 +155,37 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(correctTranscript("饥食美矫正多少钱")).toBe("隐适美矫正多少钱");
     expect(correctTranscript("我想做饥食美种植")).toBe("我想做种植牙种植");
     expect(correctTranscript("饥食美多少钱")).toBe("饥食美多少钱");
+    expect(correctTranscript(".Woonona ক্লিনিকের ঠিকানা কি?")).toBe("Woonona ক্লিনিকের ঠিকানা কি?");
+    expect(correctTranscript(".Woonona kliniker চkanaki.")).toMatch(/^Woonona/);
+  });
+
+  it("sends a Bengali hint only after a Bengali user turn, and catches a garbled final", () => {
+    const address = "উনোনা ক্লিনিকের ঠিকানা কি";
+    expect(priorUserSpeechHint(address)).toBe("bn");
+    expect(priorUserSpeechHint("मेरे दांत में दर्द है")).toBe("hi");
+    expect(priorUserSpeechHint("Woonona phone?")).toBeNull();
+    const hinted = new URL(deepgramListenUrl("stream", priorUserSpeechHint(address)).replace(/^wss:/, "https:")).searchParams;
+    expect(hinted.getAll("language_hint")).toEqual(["bn", "en"]);
+    expect(hinted.getAll("keyterm")).toContain("ঠিকানা");
+    expect(deepgramListenUrl("stream")).not.toMatch(/[\u0980-\u09FF]/);
+
+    const court = "दाते बैठा court से आज की क्या absentment পাওয়া যাবে?";
+    const woonona = "Woonona kliniker চkanaki.";
+    expect(bengaliTranscriptGarbled(court)).toBe(true);
+    expect(bengaliTranscriptGarbled(woonona)).toBe(true);
+    expect(bengaliTranscriptGarbled("Woonona clinic দাঁত court दात")).toBe(true);
+    expect(bengaliTranscriptGarbled("আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?")).toBe(false);
+    expect(transcriptNeedsRepair("", court)).toBe(true);
+    expect(transcriptNeedsRepair("en", woonona)).toBe(true);
+    expect(spokenLanguageAfterSecondPass("উনোনা ক্লিনিকের ঠিকানা কি", false)).toBe("bn");
+    expect(spokenLanguageAfterSecondPass("Woonona clinic", true)).toBe("bn");
+
+    expect(utteranceLanguage(address, { heard: "te", final: true })).toBe("bn");
+    expect(micListeningNote("te")).toBe("Listening…");
+    expect(micListeningNote(utteranceLanguage(address, { heard: "te" }))).toBe("শুনছি · বাংলা");
+    expect(micListeningNote(utteranceLanguage("উনোনা", { heard: "te", final: true }))).toBe("Listening…");
+    expect(interimMicLanguage({ languages: ["te"], words: [{ language: "te" }] }, "উনোনা ক্লিনিকের ঠিকানা", { heard: "te" })).toBe("bn");
+    expect(utteranceLanguage("दांत সাদা করার", { heard: "hi" })).toBe("");
+    expect(interimMicLanguage({ languages: ["hi"] }, "दांत সাদা করার চিকিৎসা", { heard: "hi", final: true })).toBe("");
   });
 });

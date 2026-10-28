@@ -185,8 +185,22 @@ function foreignScript(text: string): boolean {
   return (text.match(/[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0590-\u05FF\u0370-\u03FF]/g) || []).length >= 4;
 }
 
+/** Script of the model text, for the timing log. Latin replies are `latn`. */
+export function detectedReplyScript(text: string): string {
+  if (/[\u0980-\u09FF]/.test(text)) return "bn";
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+  if (/[\uAC00-\uD7AF]/.test(text)) return "ko";
+  if (/[\u4E00-\u9FFF]/.test(text)) return "zh";
+  if (/[\u0600-\u06FF]/.test(text)) return "ar";
+  if (/[\u0E00-\u0E7F]/.test(text)) return "th";
+  if (/[\u0400-\u04FF]/.test(text)) return "ru";
+  return "latn";
+}
+
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) {
+    const indic = code === "en" && /[\u0980-\u09FF\u0900-\u097F]/.test(text);
+    if (indic && text.trim().length < SHORT_REPLY) return final ? "conflict" : "wait";
     if (!foreignScript(text) || text.trim().length >= SHORT_REPLY) return "release";
     return final ? "conflict" : "wait";
   }

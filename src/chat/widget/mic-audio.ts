@@ -29,6 +29,16 @@ export function flushMicAudio(queue: MicAudioQueue, send: (chunk: Blob) => void)
   for (const chunk of buffered) send(chunk);
 }
 
+/** Keep the longer of an interim and a later final. A short utterance-end must not replace it. */
+export function longerTranscript(current: string, incoming: string): string {
+  const next = incoming.trim();
+  const prev = current.trim();
+  return next.length >= prev.length ? next : prev;
+}
+
+/** How long to wait for speech_final or UtteranceEnd after the visitor stops. */
+export const SPEECH_END_WAIT_MS = 1_200;
+
 /** Upload the recording when live speech produced no transcript, or the socket never opened. */
 export function shouldUploadRecording(input: {
   byteLength: number;

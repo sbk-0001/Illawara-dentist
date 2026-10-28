@@ -1,4 +1,4 @@
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, repairLanguageForTranscript, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, repairLanguageForTranscript, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
 import { repairNativeTranscript } from "./transcript-repair";
 
@@ -55,7 +55,27 @@ export async function POST(request: Request): Promise<Response> {
 
   const hint = typeof form.get("languageHint") === "string" ? String(form.get("languageHint")) : "";
   const hints = deepgramLanguageHints(hint);
+  const sawBengali = form.get("sawBengali") === "1";
+  const garbled = form.get("garbled") === "1";
   const bytes = await audio.arrayBuffer();
+  if (garbled) {
+    if (!process.env.AI_GATEWAY_API_KEY) {
+      logTranscribe({ outcome: "error", error: "repair_unconfigured", ...(liveDrop ? { liveDrop } : {}) });
+      return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 503 }));
+    }
+    const next = await repairNativeTranscript({
+      audio: new Uint8Array(bytes),
+      ...(sawBengali ? { language: "bn" } : {}),
+    });
+    if (!next) {
+      logTranscribe({ outcome: "error", error: "repair_empty", sawBengali, ...(liveDrop ? { liveDrop } : {}) });
+      return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 502 }));
+    }
+    const transcript = correctTranscript(next);
+    const detected = spokenLanguageAfterSecondPass(transcript, sawBengali);
+    logTranscribe({ outcome: "ok", language: detected, repaired: true, sawBengali, ...(liveDrop ? { liveDrop } : {}) });
+    return withCors(request, Response.json({ transcript, language: detected }));
+  }
   let upstream: Response;
   try {
     upstream = await fetch(deepgramListenUrl("prerecorded", hint), {

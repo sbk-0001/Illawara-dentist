@@ -66,7 +66,7 @@ describe("contact label rewrite", () => {
     );
     const text = split.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(text.startsWith("Woonona Dentists का फ़ोन नंबर 02 4284 4486 है।")).toBe(true);
-    expect(text).toContain("फ़ोन: 02 4284 4486");
+    expect(text.match(/02 4284 4486/g)).toHaveLength(1);
     expect(text).not.toContain("Phone");
     expect(split.some((chunk) => chunk.delta?.includes("Pho"))).toBe(false);
   });
@@ -79,7 +79,7 @@ describe("contact label rewrite", () => {
     );
     const bnText = bn.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(bnText.startsWith("Shellharbour Dentists-এর ফোন নম্বর 02 4216 9911।")).toBe(true);
-    expect(bnText).toContain("ফোন: 02 4216 9911");
+    expect(bnText.match(/02 4216 9911/g)).toHaveLength(1);
     expect(bnText).not.toContain("Phone:");
 
     const id = await readChunks(
@@ -87,7 +87,7 @@ describe("contact label rewrite", () => {
     );
     const idText = id.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(idText).toContain("Nomor telepon Woonona Dentists adalah 02 4284 4486.");
-    expect(idText).toContain("Telepon: 02 4284 4486");
+    expect(idText.match(/02 4284 4486/g)).toHaveLength(1);
     expect(idText).not.toContain("Phone:");
 
     const tagged = await readChunks(
@@ -95,7 +95,7 @@ describe("contact label rewrite", () => {
     );
     const arText = tagged.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(arText.startsWith("رقم هاتف Woonona Dentists هو 02 4284 4486.")).toBe(true);
-    expect(arText).toContain("الهاتف: 02 4284 4486");
+    expect(arText.match(/02 4284 4486/g)).toHaveLength(1);
     expect(arText).not.toContain("Phone:");
   });
 
@@ -111,7 +111,7 @@ describe("contact label rewrite", () => {
     );
     const text = greek.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(text.startsWith("Το τηλέφωνο του Woonona Dentists είναι 02 4284 4486.")).toBe(true);
-    expect(text).toContain("Τηλέφωνο: 02 4284 4486.");
+    expect(text.match(/02 4284 4486/g)).toHaveLength(1);
 
     let releaseEnd: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
@@ -216,14 +216,14 @@ describe("contact label rewrite", () => {
     );
     const labeledText = labeled.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(labeledText.startsWith("Woonona Dentists의 전화번호는 02 4284 4486입니다.")).toBe(true);
-    expect(labeledText).toContain("전화: 02 4284 4486");
+    expect(labeledText.match(/02 4284 4486/g)).toHaveLength(1);
 
     const bare = await readChunks(
       attachContactLabels(source(["Dapto Dentists 전화 02 4288 0737"]), { code: "ko", index, replyStatus: { missing: false } }),
     );
     const bareText = bare.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(bareText.startsWith("Dapto Dentists의 전화번호는 02 4288 0737입니다.")).toBe(true);
-    expect(bareText).toContain("Dapto Dentists 전화 02 4288 0737");
+    expect(bareText.match(/02 4288 0737/g)).toHaveLength(1);
 
     const sentence = "울로나 치과의 전화번호는 02 4284 4486입니다.";
     expect(restoreClinicNames(sentence)).toBe("Woonona Dentists의 전화번호는 02 4284 4486입니다.");
@@ -235,5 +235,15 @@ describe("contact label rewrite", () => {
     expect(once.match(/02 4284 4486/g)).toHaveLength(1);
     expect(once).not.toContain("울로나");
     expect(restoreClinicNames("ড্যাপ্টো ডেন্টিস্টস এবং উনোনা ডেন্টিস্টস")).toBe("Dapto Dentists এবং Woonona Dentists");
+
+    const hinglish = "Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।\nDapto Dentists का फ़ोन 02 4288 0737 है।";
+    const hi = await readChunks(attachContactLabels(source([hinglish]), { code: "hi", index, replyStatus: { missing: false } }));
+    const hiText = hi.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(hiText.match(/02 4288 0737/g)).toHaveLength(1);
+
+    const korean = "Dapto Dentists의 전화번호는 02 4288 0737입니다.\n전화: 02 4288 0737 입니다";
+    const ko = await readChunks(attachContactLabels(source([korean]), { code: "ko", index, replyStatus: { missing: false } }));
+    const koText = ko.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(koText.match(/02 4288 0737/g)).toHaveLength(1);
   });
 });

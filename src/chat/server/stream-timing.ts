@@ -1,4 +1,5 @@
-import { latinWordRun, replyScriptGate, replyScriptRatio, replyUsesNativeScript } from "../language/reply-script";
+import { detectedReplyScript, latinWordRun, replyScriptGate, replyScriptRatio, replyUsesNativeScript } from "../language/reply-script";
+import { englishPhoneFallback } from "./contacts";
 import { restoreClinicNames } from "./label-fix";
 import { createGlossaryFilter } from "./glossary";
 import { CHAT_MODEL } from "./prompt";
@@ -85,6 +86,8 @@ export type ChatTimingEvent = {
   scriptViolation: boolean;
   /** A script regeneration was attempted. */
   scriptRegen: boolean;
+  /** English short replies: which script the model used, and whether it was regenerated. */
+  shortReplyScriptCheck: { target: string; detectedScript: string; regenerated: boolean };
   /** The 2s retrieval cap returned lexical hits. */
   retrievalTimedOut?: boolean;
 };
@@ -165,6 +168,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
   let scriptViolation = false;
   let scriptRegen = false;
   let heldScript: { text: string; ratio: number | null } | null = null;
+  let replySample = "";
 
   const noteTag = (tag: StatusTag | null, missing: boolean) => {
     tagDecided = true;
@@ -213,6 +217,11 @@ export function createRetryingTextStream<T extends TextPart>(input: {
       scriptRatio,
       scriptViolation,
       scriptRegen,
+      shortReplyScriptCheck: {
+        target: input.language,
+        detectedScript: detectedReplyScript(replySample),
+        regenerated: scriptRegen,
+      },
       ...(input.retrievalTimedOut ? { retrievalTimedOut: true } : {}),
     };
     if (firstAttemptMs !== undefined) line.firstAttemptMs = firstAttemptMs;
@@ -437,6 +446,7 @@ export function createRetryingTextStream<T extends TextPart>(input: {
               held += takeText("", true);
               flushGloss();
               const judged = stripFeeCaveat(held);
+              replySample = judged || held;
               const gate = replyScriptGate(judged, input.language, true);
               if (gate === "conflict") {
                 const ratio = replyScriptRatio(judged, input.language);
@@ -535,6 +545,11 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             const firstRatio = firstDraft?.ratio ?? -1;
             const secondRatio = secondDraft?.ratio ?? -1;
             const chosen = again === "script" && secondDraft && secondRatio > firstRatio ? secondDraft : firstDraft;
+            const english = (text: string) => {
+              replySample = text;
+              if (input.language === "en" && /[\u0980-\u09FF\u0900-\u097F]/.test(text)) return englishPhoneFallback(text);
+              return text;
+            };
             if (again === "ok") {
               clearDeadline();
               finish("done");
@@ -543,8 +558,9 @@ export function createRetryingTextStream<T extends TextPart>(input: {
             }
             if (chosen?.text) {
               scriptRatio = chosen.ratio;
-              if (replyUsesNativeScript(input.language) && latinWordRun(chosen.text) >= 3) scriptViolation = true;
-              publishSaved(chosen.text);
+              const published = english(chosen.text);
+              if (replyUsesNativeScript(input.language) && latinWordRun(published) >= 3) scriptViolation = true;
+              publishSaved(published);
               clearDeadline();
               finish("done");
               controller.close();

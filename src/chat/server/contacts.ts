@@ -17,6 +17,74 @@ export const RETRIEVAL_SCORE_FLOOR = 0.2;
 
 const CLINIC_ORDER: ClinicId[] = ["dapto", "shellharbour", "woonona"];
 
+const CLINIC_NAME_PATTERN = /\b(?:Shellharbour|Woonona|Dapto)\s+Dentists\b/;
+
+/** English contact line when a regeneration still contains Bengali or Devanagari. */
+export function englishPhoneFallback(text: string): string {
+  const phone = text.match(/\d[\d\s()-]{8,}\d/)?.[0]?.replace(/\s+/g, " ").trim() ?? "";
+  const named = text.match(CLINIC_NAME_PATTERN)?.[0];
+  const clinic = named ?? (/\bWoonona\b/i.test(text) ? "Woonona Dentists" : /\bDapto\b/i.test(text) ? "Dapto Dentists" : /\bShellharbour\b/i.test(text) ? "Shellharbour Dentists" : "");
+  if (phone && clinic) return `The phone number for ${clinic} is ${phone}.`;
+  if (phone) return `The phone number is ${phone}.`;
+  return "Please call the clinic and they will help with that.";
+}
+
+function compactUrl(url: string): string {
+  return url.toLowerCase().replace(/-/g, "").replace(/\/+$/g, "");
+}
+
+const urlCache = new WeakMap<KnowledgeIndex, Map<string, string>>();
+
+function knownUrls(index: KnowledgeIndex): Map<string, string> {
+  const cached = urlCache.get(index);
+  if (cached) return cached;
+  const known = new Map<string, string>();
+  const add = (url: string | undefined) => {
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    const key = compactUrl(url);
+    if (!known.has(key)) known.set(key, url);
+  };
+  for (const card of Object.values(index.contacts)) {
+    add(card.bookingUrl);
+    add(card.site);
+  }
+  for (const page of index.pages) add(page.url);
+  for (const chunk of index.chunks) add(chunk.url);
+  urlCache.set(index, known);
+  return known;
+}
+
+function isClinicHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "zavy360.com" || host.endsWith(".zavy360.com") || host.endsWith("dentists.com.au") || host.endsWith("dentist.com.au");
+  } catch {
+    return /zavy360|dentists?\.com\.au/i.test(url);
+  }
+}
+
+/**
+ * A model URL that matches a stored URL once hyphens are removed is rewritten
+ * to that exact URL. Any other clinic or booking URL is removed.
+ */
+export function canonicalKnownUrls(text: string, index: KnowledgeIndex): string {
+  const known = knownUrls(index);
+  return text.replace(/https?:\/\/[^\s<>)\]]+/gi, (raw) => {
+    const trimmed = raw.replace(/[.,;:!?。]+$/g, "");
+    const tail = raw.slice(trimmed.length);
+    const exact = known.get(compactUrl(trimmed));
+    if (exact) return exact + tail;
+    if (isClinicHost(trimmed)) return "";
+    return raw;
+  });
+}
+
+function splitTrailingUrl(text: string): { visible: string; hold: string } {
+  const match = text.match(/https?:\/\/\S*$/i);
+  if (!match || match.index === undefined) return { visible: text, hold: "" };
+  return { visible: text.slice(0, match.index), hold: match[0] };
+}
+
 const LEAD: Record<string, string> = {
   en: "The website does not list an answer for that. Call or book here:",
   bn: "ওয়েবসাইটে এই বিষয়ের উত্তর নেই। এই নম্বরে ফোন করুন অথবা বুকিং লিঙ্কে সময় ধরুন:",
@@ -654,18 +722,42 @@ export function attachContactFooter<T extends FooterChunk>(
 ): ReadableStream<T> {
   let textId: string | undefined;
   let pending = "";
+  let urlHold = "";
   let shown = "";
   let sawSentinel = false;
   let sealed = false;
 
+  const prepareVisible = (visible: string): string => {
+    if (!visible) return "";
+    const prior = shown;
+    const combined = input.index ? canonicalKnownUrls(prior + visible, input.index) : prior + visible;
+    const named = input.index ? nameClinicInReply(combined, input.index) : combined;
+    if (named.startsWith(prior)) {
+      shown = named;
+      return named.slice(prior.length);
+    }
+    shown = prior + visible;
+    return visible;
+  };
+
+  const drain = (final: boolean): string => {
+    const drained = takeVisibleReply(urlHold + pending, final);
+    pending = "";
+    if (drained.sawSentinel) sawSentinel = true;
+    if (!final) {
+      const split = splitTrailingUrl(drained.visible);
+      urlHold = split.hold + drained.hold;
+      return prepareVisible(split.visible);
+    }
+    urlHold = "";
+    return prepareVisible(drained.visible + drained.hold);
+  };
+
   const finishText = (controller: TransformStreamDefaultController<T>) => {
     if (sealed) return;
     sealed = true;
-    const drained = takeVisibleReply(pending, true);
-    pending = "";
-    if (drained.sawSentinel) sawSentinel = true;
-    shown += drained.visible;
-    if (drained.visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: drained.visible } as T);
+    const visible = drain(true);
+    if (visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
     const kind = chooseContactFooter({
       question: input.question,
       sourceCount: input.sourceCount ?? (input.sourcesFound ? 1 : 0),
@@ -702,16 +794,8 @@ export function attachContactFooter<T extends FooterChunk>(
         if (chunk.type === "text-start" && chunk.id) textId = chunk.id;
         if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
           pending += chunk.delta;
-          const drained = takeVisibleReply(pending, false);
-          pending = drained.hold;
-          if (drained.sawSentinel) sawSentinel = true;
-          if (drained.visible) {
-            const prior = shown;
-            const named = input.index ? nameClinicInReply(prior + drained.visible, input.index) : prior + drained.visible;
-            const delta = named.startsWith(prior) ? named.slice(prior.length) : drained.visible;
-            shown = named.startsWith(prior) ? named : prior + drained.visible;
-            controller.enqueue({ ...chunk, delta });
-          }
+          const visible = drain(false);
+          if (visible) controller.enqueue({ ...chunk, delta: visible });
           return;
         }
         if (chunk.type === "text-end" || chunk.type === "finish") {
