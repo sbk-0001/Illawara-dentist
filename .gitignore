@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+dist
+.vercel
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+playwright-report
+test-results
+blob-report
+playwright/.cache
+coverage
+
+# Design source is reference-only and must not be committed.
+design.html
+design_text.txt
+**/design_*.html

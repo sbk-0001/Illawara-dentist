@@ -1,0 +1,321 @@
+import { describe, expect, it } from "vitest";
+import { detectLanguage, confidentIndonesian } from "../language/detect";
+import { judgeIndicPair, malayalamMarkersWin } from "../language/indic";
+import { foreignScriptCount, replyScriptGate, sanitizeForeignScript, unexpectedLatinWords } from "../language/reply-script";
+import { finishedMicLanguage, hasNativeScript, noteAfterRecheck, shouldHoldLiveTranscript } from "../stt";
+import { prepareTurn } from "./chat-route";
+import { canonicalKnownUrls, ensureBookingReply, expandBookTokens } from "./contacts";
+import { applyGlossary } from "./glossary";
+import { getKnowledgeIndex } from "./index-store";
+import { attachContactLabels, dedupeSentenceFinal, stripInteriorContactStop } from "./label-fix";
+import { createRetryingTextStream } from "./stream-timing";
+import {
+  INDIC_PAIR_TIMEOUT_MS,
+  SCRIPT_CONVERT_TIMEOUT_MS,
+  TRANSCRIPT_FULL_MODEL,
+  indicVoiceBudgetMs,
+  longestNonEmptyTranscript,
+  rewriteTranscriptScript,
+  shouldRetryShortTranscript,
+  transcribeLanguagePair,
+  transliterateToNativeScript,
+} from "./transcript-repair";
+
+const index = getKnowledgeIndex();
+
+async function readText(stream: ReadableStream<{ type: string; delta?: string }>): Promise<string> {
+  const reader = stream.getReader();
+  let text = "";
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) return text;
+    if (next.value.type === "text-delta") text += next.value.delta || (next.value as { text?: string }).text || "";
+  }
+}
+
+function deltas(parts: string[]) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "text-start", id: "t1" });
+      for (const delta of parts) controller.enqueue({ type: "text-delta", id: "t1", delta });
+      controller.enqueue({ type: "text-end", id: "t1" });
+      controller.close();
+    },
+  });
+}
+
+describe("live reply and voice fixes", () => {
+  it("rewrites a translated booking path from the location id and expands [[BOOK:]]", () => {
+    const stored = index.contacts.dapto.bookingUrl;
+    const id = "fc73148c-a1a3-425d-91f9-b97eaaea1e04";
+    for (const segment of ["reserva", "बुकिंग", "বুকিং", "الحجز", "முன்பதிவு", "ബുക്കിംഗ്"]) {
+      const translated = `https://bookings.zavy360.com/${segment}/shellharbourdentists/locations/${id}/patient-type`;
+      expect(canonicalKnownUrls(translated, index)).toBe(stored);
+      expect(canonicalKnownUrls(translated, index)).not.toContain(segment);
+    }
+    expect(expandBookTokens("[[BOOK:dapto]]", index)).toBe(`Dapto Dentists: ${stored}`);
+    expect(expandBookTokens(`Dapto Dentists: [[BOOK:dapto]]`, index)).toBe(`Dapto Dentists: ${stored}`);
+    expect(expandBookTokens(`Dapto Dentists: [[BOOK:dapto]]`, index)).not.toContain("Dapto Dentists: Dapto Dentists");
+    const glued = `${stored}Woonona Dentists`;
+    expect(canonicalKnownUrls(glued, index)).toBe(`${stored} Woonona Dentists`);
+    expect(canonicalKnownUrls("see [[BOOK:woonona]]", index)).toContain(index.contacts.woonona.bookingUrl);
+    expect(canonicalKnownUrls("see https://bookings.zavy360.com/booking/not-a-clinic", index)).not.toContain("zavy360");
+  });
+
+  it("names the clinic and the stored URL when a Spanish booking answer has neither", () => {
+    const vague = "Puede hacer la reserva en línea a través de este sitio web";
+    const dapto = ensureBookingReply(vague, "¿Puedo reservar en Dapto?", index, { kind: "one", clinic: "dapto" });
+    expect(dapto).toContain("Dapto Dentists");
+    expect(dapto).toContain(index.contacts.dapto.bookingUrl);
+    const unnamed = ensureBookingReply(vague, "¿Puedo reservar?", index, { kind: "any" });
+    expect(unnamed).toContain("Dapto Dentists");
+    expect(unnamed).toContain("Shellharbour Dentists");
+    expect(unnamed).toContain("Woonona Dentists");
+    expect(unnamed).toContain(index.contacts.shellharbour.bookingUrl);
+  });
+
+  it("drops a second sentence-final है। even when the chunks split", async () => {
+    expect(dedupeSentenceFinal("Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।है।")).toBe(
+      "Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।",
+    );
+    const lead = "Dapto Dentists का फ़ोन नंबर 02 4288 0737 है और यह वाक्य काफी लंबा है ताकि यह तुरंत बाहर जाए ";
+    const text = await readText(
+      attachContactLabels(deltas([lead, "है।", "है।"]), {
+        code: "hi",
+        index,
+        replyStatus: { missing: false },
+        question: "फोन नंबर क्या है?",
+      }),
+    );
+    expect(text).toContain("है।");
+    expect(text).not.toContain("है।है।");
+    expect(text.match(/है।/g)?.length).toBe(1);
+  });
+
+  it("treats Malayalam dental words as native and rejects leftover English", () => {
+    const implant = "വെബ്‌സൈറ്റിൽ singular dental implants and ക്രൗൺ ഫീസ് from $5000 എന്നാണ് നൽകിയിരിക്കുന്നത്.";
+    expect(replyScriptGate(implant, "ml", true)).toBe("conflict");
+    const ml = applyGlossary("checkup cleaning Invisalign emergency booking whitening fees hours payment plan interest free", "ml");
+    expect(ml).not.toMatch(/checkup|cleaning|Invisalign|emergency|booking|whitening|fees|hours|payment plan|interest free/i);
+    const ta = applyGlossary("checkup cleaning Invisalign emergency booking whitening fees hours singular dental implants", "ta");
+    expect(ta).not.toMatch(/checkup|cleaning|Invisalign|emergency|whitening|singular dental/i);
+    expect(unexpectedLatinWords(applyGlossary(implant, "ml"))).toEqual([]);
+    expect(applyGlossary(implant, "bn")).not.toContain("singular dental implants");
+    expect(applyGlossary(implant, "hi")).not.toContain("singular dental implants");
+  });
+
+  it("hears Malayalam in Tamil letters and Manglish, and does not answer in Indonesian", () => {
+    const tamilLetters = "எனக்கு பல்லு வேதனையுண்டு இன்ன அப்பாயிண்ட்மென்ட்டுக்கிட்டுமோ";
+    expect(malayalamMarkersWin(tamilLetters)).toBe(true);
+    const judged = judgeIndicPair({
+      deepgram: tamilLetters,
+      malayalam: tamilLetters,
+      tamil: "எனக்கு பல் வலிக்கிறது இன்று அப்பாயிண்ட்மெண்ட் கிடைக்குமா",
+    });
+    expect(judged.language).toBe("ml");
+    expect(judged.needsScript).toBe(true);
+    const voice = prepareTurn([{ role: "user", content: tamilLetters }], "auto", index, { inputMode: "voice", spokenLanguage: "ta" });
+    expect(voice.reply.code).toBe("ml");
+
+    expect(detectLanguage("Woonona klinikinde vilasem endan").code).toBe("ml-Latn");
+    const manglish = prepareTurn([{ role: "user", content: "Woonona klinikinde vilasem endan" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "und",
+    });
+    expect(manglish.reply.code).toBe("ml");
+
+    expect(detectLanguage("Dapto klinik inde phone number and then").code).toBe("ml-Latn");
+    expect(confidentIndonesian("Dapto klinik inde phone number and then")).toBe(false);
+    const indonesian = prepareTurn([{ role: "user", content: "Dapto klinik inde phone number and then" }], "auto", index, {
+      inputMode: "voice",
+      spokenLanguage: "id",
+    });
+    expect(indonesian.reply.code).toBe("ml");
+
+    const devanagari = judgeIndicPair({
+      deepgram: "डाक्टर क्लिनिकको फोन नम्बर के हो?",
+      malayalam: "ഡാപ്റ്റോ ക്ലിനിക്കിന്റെ ഫോൺ നമ്പർ എന്താണ്?",
+      tamil: "டாப்டோ கிளினிக்கின் தொலைபேசி எண் என்ன?",
+    });
+    expect(devanagari.language).toBe("ml");
+    expect(devanagari.transcript).toMatch(/[\u0D00-\u0D7F]/);
+    expect(devanagari.language).not.toBe("hi");
+  });
+
+  it("converts a Malayalam picker transcript that arrived in the wrong script", async () => {
+    const samples = [
+      "Woonoone klinikinde vilasam entāṇ?",
+      "මූනෝන ක්ලිනික්කින්ගේ විලාසම එන ද?",
+      "Dapto клиникасынен арчаепол турокум.",
+      "டாப்டோ கிளினிக்கி சனியார்ச்சையே பொல் திறக்கும்.",
+    ];
+    for (const sample of samples) {
+      expect(hasNativeScript("ml", sample)).toBe(false);
+      expect(shouldHoldLiveTranscript(sample, "ml")).toBe(true);
+      const converted = await transliterateToNativeScript({
+        text: sample,
+        language: "ml",
+        generate: async () => "വൂനോന ക്ലിനിക്കിന്റെ വിലാസം എന്താണ്?",
+      });
+      expect(converted).toMatch(/[\u0D00-\u0D7F]/);
+    }
+    let called = false;
+    const native = "വൂനോന ക്ലിനിക്കിന്റെ വിലാസം എന്താണ്?";
+    const kept = await transliterateToNativeScript({
+      text: native,
+      language: "ml",
+      generate: async () => {
+        called = true;
+        return "no";
+      },
+    });
+    expect(kept).toBe(native);
+    expect(called).toBe(false);
+  });
+
+  it("shows Malayalam or Tamil on the mic note once the recheck confirms it", () => {
+    expect(noteAfterRecheck("ta")).toContain("தமிழ்");
+    expect(noteAfterRecheck("ml")).toContain("മലയാളം");
+    expect(noteAfterRecheck("ta")).not.toBe("Transcribing…");
+    expect(noteAfterRecheck("ml")).not.toBe("Transcribing…");
+    const tamil = "வூனோனா கிளினிக்கின் முகவரி என்ன?";
+    expect(malayalamMarkersWin(tamil)).toBe(false);
+    expect(finishedMicLanguage(tamil)).toBe("ta");
+    expect(shouldHoldLiveTranscript(tamil, null)).toBe(true);
+  });
+
+  it("strips a foreign script from the reply and regenerates an English implant run", () => {
+    expect(sanitizeForeignScript("Woonona Dentists 的 முகவரி 379 Princes Highway.", "ta")).not.toContain("的");
+    expect(sanitizeForeignScript("Woonona Dentists-এর വിലാസം 379 Princes Highway, Woonona, NSW, 2517 ആണ്.", "ml")).not.toMatch(
+      /[\u0980-\u09FF]/,
+    );
+    expect(sanitizeForeignScript("വെബ്‌സൈറ്റിൽ singular dental implants and ක්‍රൗൺ ഫീസ് from $5000", "ml")).not.toMatch(/[\u0D80-\u0DFF]/);
+    const indonesian = "Nomor telepon adalah दांत सफ़ेद करना di klinik.";
+    expect(replyScriptGate(indonesian, "id", true)).toBe("conflict");
+    expect(sanitizeForeignScript(indonesian, "id")).not.toMatch(/[\u0900-\u097F]/);
+  });
+
+  it("lets the clinic named in the current message beat the previous turn", () => {
+    const turn = prepareTurn(
+      [
+        { role: "user", content: "What time does the Dapto clinic open on Saturday?" },
+        { role: "assistant", content: "Dapto Dentists is open Saturday 8:00–16:00." },
+        { role: "user", content: "উনা ক্লিনিকের ঠিকানা কি ঠিকানা" },
+      ],
+      "auto",
+      index,
+      { inputMode: "voice", spokenLanguage: "bn" },
+    );
+    expect(turn.focus).toEqual({ kind: "one", clinic: "woonona" });
+    expect(turn.reply.code).toBe("bn");
+  });
+
+  it("runs the Malayalam and Tamil passes together inside the 4s voice budget", async () => {
+    expect(indicVoiceBudgetMs()).toBe(INDIC_PAIR_TIMEOUT_MS + SCRIPT_CONVERT_TIMEOUT_MS);
+    expect(indicVoiceBudgetMs()).toBeLessThanOrEqual(4_000);
+    expect(shouldRetryShortTranscript(TRANSCRIPT_FULL_MODEL)).toBe(false);
+    let running = 0;
+    let peak = 0;
+    const pair = await transcribeLanguagePair(async (language) => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      running -= 1;
+      return language;
+    });
+    expect(peak).toBe(2);
+    expect(pair).toEqual(["ml", "ta"]);
+  });
+
+  it("ends a held reply with the try-again line and phone numbers when the model never finishes", async () => {
+    const hung = () => ({
+      [Symbol.asyncIterator](): AsyncIterator<{ type: string; text?: string }> {
+        let sent = false;
+        return {
+          next(): Promise<IteratorResult<{ type: string; text?: string }>> {
+            if (!sent) {
+              sent = true;
+              return Promise.resolve({
+                done: false,
+                value: { type: "text-delta", text: "Please book a whitening appointment at the clinic today for your tooth." },
+              });
+            }
+            return new Promise(() => undefined);
+          },
+          return: () => Promise.resolve({ done: true as const, value: undefined }),
+        };
+      },
+    });
+    const stream = createRetryingTextStream({
+      language: "bn",
+      timeoutMs: 30_000,
+      deadlineMs: 250,
+      fallbackText: "আবার চেষ্টা করুন\nDapto Dentists: 02 4288 0737",
+      run: hung,
+    });
+    const text = await readText(stream);
+    expect(text).toContain("আবার চেষ্টা করুন");
+    expect(text).toContain("02 4288 0737");
+  });
+
+  it("treats Georgian letters as a foreign script in a Malayalam reply", () => {
+    const reply = "Woonona Dentists-ის വിലാസം";
+    expect(foreignScriptCount(reply, "ml")).toBeGreaterThan(0);
+    expect(replyScriptGate(reply, "ml", true)).toBe("conflict");
+    const cleaned = sanitizeForeignScript(reply, "ml");
+    expect(cleaned).not.toMatch(/\p{Script=Georgian}/u);
+    expect(cleaned).toContain("വിലാസം");
+    expect(cleaned).toContain("Woonona Dentists");
+  });
+
+  it("does not leave a full stop between a phone number and the rest of the sentence", () => {
+    expect(stripInteriorContactStop("Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737.ആണ്.")).toBe(
+      "Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737 ആണ്.",
+    );
+    expect(stripInteriorContactStop("The phone number is 02 4288 0737.")).toBe("The phone number is 02 4288 0737.");
+    expect(stripInteriorContactStop("Call 02 4288 0737. Then visit.")).toBe("Call 02 4288 0737. Then visit.");
+    expect(dedupeSentenceFinal("El teléfono es 02 4216 9911. Luego llama.")).toBe("El teléfono es 02 4216 9911. Luego llama.");
+  });
+
+  it("hides a wrong-script picker transcript until it is rewritten, and logs before and after", async () => {
+    const tamil = "நீங்கள் பல் வெளுப்பிக்கல் சிகிச்சை செய்யாருந்தோ?";
+    const hours = "டாப்டோக் இனிக்கி சனியார்ச்சையே பொல்துறக்கும்.";
+    const cyrillic = "Dapto клиникасынен арчаепол туракум.";
+    expect(shouldHoldLiveTranscript(tamil, "ml")).toBe(true);
+    expect(shouldHoldLiveTranscript(hours, "ml")).toBe(true);
+    expect(shouldHoldLiveTranscript(cyrillic, "ml")).toBe(true);
+    const logs: { before: string; after: string }[] = [];
+    const after = await rewriteTranscriptScript({
+      text: cyrillic,
+      language: "ml",
+      generate: async () => "Dapto ക്ലിനിക്ക് ശനിയാഴ്ച എപ്പോൾ തുറക്കും?",
+      log: (entry) => logs.push(entry),
+    });
+    expect(logs[0]).toMatchObject({ event: "scriptRewrite", before: cyrillic });
+    expect(after).toContain("ശനിയാഴ്ച");
+    expect(logs[0]?.after).toContain("ശനിയാഴ്ച");
+    const turn = prepareTurn([{ role: "user", content: after }], "ml", index, { inputMode: "voice", spokenLanguage: "ml" });
+    expect(turn.text).toContain("ശനിയാഴ്ച");
+    expect(turn.text).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(turn.focus).toEqual({ kind: "one", clinic: "dapto" });
+  });
+
+  it("counts Tamil spellings of Malayalam questions as Malayalam", () => {
+    const samples = [
+      "நீங்கள் பல் வெளுப்பிக்கல் சிகிச்சை செய்யாருந்தோ?",
+      "செய்யாருண்டோ",
+      "செய்யாறுண்டோ",
+      "டாப்டோக் இனிக்கி சனியார்ச்சையே பொல்துறக்கும்.",
+      "சனியாய்ச்ச எப்போல் துறக்கும்",
+      "எப்போள்",
+      "எனிக்கு",
+      "வெளுப்பிக்கில்",
+    ];
+    for (const sample of samples) expect(malayalamMarkersWin(sample), sample).toBe(true);
+  });
+
+  it("keeps the longest non-empty transcript when every pass would otherwise be empty", () => {
+    expect(longestNonEmptyTranscript("", null, "டாப்டோ", "டாப்டோ கிளினிக்கின் தொலைபேசி")).toBe("டாப்டோ கிளினிக்கின் தொலைபேசி");
+    expect(longestNonEmptyTranscript("", "  ", null)).toBe("");
+  });
+});

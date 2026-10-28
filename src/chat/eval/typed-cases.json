@@ -1,0 +1,458 @@
+[
+{
+"id": "ml-addr",
+"lang": "ml",
+"q": "വൂനോന ക്ലിനിക്കിന്റെ വിലാസം എന്താണ്?"
+},
+{
+"id": "ml-hours",
+"lang": "ml",
+"q": "ഡാപ്റ്റോ ക്ലിനിക്ക് ശനിയാഴ്ച എപ്പോൾ തുറക്കും?"
+},
+{
+"id": "ml-phone",
+"lang": "ml",
+"q": "ഡാപ്റ്റോ ക്ലിനിക്കിന്റെ ഫോൺ നമ്പർ എന്താണ്?"
+},
+{
+"id": "ml-ache",
+"lang": "ml",
+"q": "എനിക്ക് പല്ലുവേദനയുണ്ട്, ഇന്ന് അപ്പോയിന്റ്മെന്റ് കിട്ടുമോ?"
+},
+{
+"id": "ml-white",
+"lang": "ml",
+"q": "നിങ്ങൾ പല്ല് വെളുപ്പിക്കൽ ചികിത്സ ചെയ്യാറുണ്ടോ?"
+},
+{
+"id": "ml-implant",
+"lang": "ml",
+"q": "ഡെന്റൽ ഇംപ്ലാന്റിന് എത്ര ചെലവാകും?"
+},
+{
+"id": "ta-addr",
+"lang": "ta",
+"q": "வூனோனா கிளினிக்கின் முகவரி என்ன?"
+},
+{
+"id": "ta-hours",
+"lang": "ta",
+"q": "டாப்டோ கிளினிக் சனிக்கிழமை எப்போது திறக்கும்?"
+},
+{
+"id": "ta-phone",
+"lang": "ta",
+"q": "டாப்டோ கிளினிக்கின் தொலைபேசி எண் என்ன?"
+},
+{
+"id": "ta-ache",
+"lang": "ta",
+"q": "எனக்கு பல் வலிக்கிறது, இன்று அப்பாயின்ட்மென்ட் கிடைக்குமா?"
+},
+{
+"id": "ta-white",
+"lang": "ta",
+"q": "நீங்கள் பற்களை வெண்மையாக்கும் சிகிச்சை செய்கிறீர்களா?"
+},
+{
+"id": "ta-implant",
+"lang": "ta",
+"q": "டென்டல் இம்ப்ளான்ட்டுக்கு எவ்வளவு செலவாகும்?"
+},
+{
+"id": "hi-addr",
+"lang": "hi",
+"q": "वूनोना क्लिनिक का पता क्या है?"
+},
+{
+"id": "hi-hours",
+"lang": "hi",
+"q": "डैप्टो क्लिनिक शनिवार को कब खुलता है?"
+},
+{
+"id": "hi-phone",
+"lang": "hi",
+"q": "डैप्टो क्लिनिक का फ़ोन नंबर क्या है?"
+},
+{
+"id": "hi-ache",
+"lang": "hi",
+"q": "मेरे दांत में दर्द है, क्या आज अपॉइंटमेंट मिल सकता है?"
+},
+{
+"id": "hi-white",
+"lang": "hi",
+"q": "क्या आप दांत सफ़ेद करने का इलाज करते हैं?"
+},
+{
+"id": "hi-implant",
+"lang": "hi",
+"q": "डेंटल इम्प्लांट का खर्च कितना है?"
+},
+{
+"id": "ar-addr",
+"lang": "ar",
+"q": "ما هو عنوان عيادة وونونا؟"
+},
+{
+"id": "ar-hours",
+"lang": "ar",
+"q": "متى تفتح عيادة دابتو يوم السبت؟"
+},
+{
+"id": "ar-phone",
+"lang": "ar",
+"q": "ما هو رقم هاتف عيادة دابتو؟"
+},
+{
+"id": "ar-ache",
+"lang": "ar",
+"q": "عندي ألم في أسناني، هل يمكنني الحصول على موعد اليوم؟"
+},
+{
+"id": "ar-white",
+"lang": "ar",
+"q": "هل تقدمون علاج تبييض الأسنان؟"
+},
+{
+"id": "ar-implant",
+"lang": "ar",
+"q": "كم تكلفة زراعة الأسنان؟"
+},
+{
+"id": "zh-addr",
+"lang": "zh",
+"q": "Woonona诊所的地址是什么？"
+},
+{
+"id": "zh-hours",
+"lang": "zh",
+"q": "Dapto诊所星期六几点开门？"
+},
+{
+"id": "zh-phone",
+"lang": "zh",
+"q": "Dapto诊所的电话号码是多少？"
+},
+{
+"id": "zh-ache",
+"lang": "zh",
+"q": "我牙疼，今天能预约吗？"
+},
+{
+"id": "zh-white",
+"lang": "zh",
+"q": "你们提供牙齿美白吗？"
+},
+{
+"id": "zh-implant",
+"lang": "zh",
+"q": "种植牙要多少钱？"
+},
+{
+"id": "en-addr",
+"lang": "en",
+"q": "What's the address of the Woonona clinic?"
+},
+{
+"id": "en-hours",
+"lang": "en",
+"q": "What time does the Dapto clinic open on Saturday?"
+},
+{
+"id": "en-phone",
+"lang": "en",
+"q": "What's the phone number for Dapto?"
+},
+{
+"id": "en-ache",
+"lang": "en",
+"q": "I have a toothache, can I get an appointment today?"
+},
+{
+"id": "en-white",
+"lang": "en",
+"q": "Do you do teeth whitening?"
+},
+{
+"id": "en-implant",
+"lang": "en",
+"q": "How much do dental implants cost?"
+},
+{
+"id": "es-addr",
+"lang": "es",
+"q": "¿Cuál es la dirección de la clínica de Woonona?"
+},
+{
+"id": "es-hours",
+"lang": "es",
+"q": "¿A qué hora abre la clínica de Dapto el sábado?"
+},
+{
+"id": "es-phone",
+"lang": "es",
+"q": "¿Cuál es el teléfono de la clínica de Dapto?"
+},
+{
+"id": "es-ache",
+"lang": "es",
+"q": "Me duele una muela, ¿puedo tener una cita hoy?"
+},
+{
+"id": "es-white",
+"lang": "es",
+"q": "¿Hacen blanqueamiento dental?"
+},
+{
+"id": "es-implant",
+"lang": "es",
+"q": "¿Cuánto cuestan los implantes dentales?"
+},
+{
+"id": "bn-addr",
+"lang": "bn",
+"q": "উনোনা ক্লিনিকের ঠিকানা কী?"
+},
+{
+"id": "bn-hours",
+"lang": "bn",
+"q": "ডাপ্টো ক্লিনিক শনিবার কখন খোলে?"
+},
+{
+"id": "bn-phone",
+"lang": "bn",
+"q": "ডাপ্টো ক্লিনিকের ফোন নম্বর কত?"
+},
+{
+"id": "bn-ache",
+"lang": "bn",
+"q": "আমার দাঁতে ব্যথা করছে, আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?"
+},
+{
+"id": "bn-white",
+"lang": "bn",
+"q": "আপনারা কি দাঁত সাদা করার চিকিৎসা করেন?"
+},
+{
+"id": "bn-implant",
+"lang": "bn",
+"q": "ডেন্টাল ইমপ্লান্টের খরচ কত?"
+},
+{
+"id": "ml-rom-addr",
+"lang": "ml",
+"q": "woonona clinicinte address enthaanu?",
+"romanised": true
+},
+{
+"id": "ml-rom-hours",
+"lang": "ml",
+"q": "dapto clinic shaniyazhcha eppol thurakkum?",
+"romanised": true
+},
+{
+"id": "ml-rom-phone",
+"lang": "ml",
+"q": "dapto clinicinte phone number entha?",
+"romanised": true
+},
+{
+"id": "ml-rom-ache",
+"lang": "ml",
+"q": "enikku pallu vedana und, innu appointment kittumo?",
+"romanised": true
+},
+{
+"id": "ml-rom-white",
+"lang": "ml",
+"q": "ningal pallu veluppikkal cheyyarundo?",
+"romanised": true
+},
+{
+"id": "ml-rom-implant",
+"lang": "ml",
+"q": "dental implantinu ethra chilavakum?",
+"romanised": true
+},
+{
+"id": "ta-rom-addr",
+"lang": "ta",
+"q": "woonona clinic address enna?",
+"romanised": true
+},
+{
+"id": "ta-rom-hours",
+"lang": "ta",
+"q": "dapto clinic sanikizhamai eppo thirakkum?",
+"romanised": true
+},
+{
+"id": "ta-rom-phone",
+"lang": "ta",
+"q": "dapto clinic phone number enna?",
+"romanised": true
+},
+{
+"id": "ta-rom-ache",
+"lang": "ta",
+"q": "enakku pal vali irukku, inniku appointment kidaikkuma?",
+"romanised": true
+},
+{
+"id": "ta-rom-white",
+"lang": "ta",
+"q": "neenga teeth whitening pannuveengala?",
+"romanised": true
+},
+{
+"id": "ta-rom-implant",
+"lang": "ta",
+"q": "dental implant ku evvalavu selavu aagum?",
+"romanised": true
+},
+{
+"id": "hi-rom-addr",
+"lang": "hi",
+"q": "woonona clinic ka address kya hai?",
+"romanised": true
+},
+{
+"id": "hi-rom-hours",
+"lang": "hi",
+"q": "dapto clinic shaniwar ko kab khulta hai?",
+"romanised": true
+},
+{
+"id": "hi-rom-phone",
+"lang": "hi",
+"q": "dapto clinic ka phone number kya hai?",
+"romanised": true
+},
+{
+"id": "hi-rom-ache",
+"lang": "hi",
+"q": "mere daant mein dard hai, kya aaj appointment mil sakta hai?",
+"romanised": true
+},
+{
+"id": "hi-rom-white",
+"lang": "hi",
+"q": "kya aap daant safed karne ka ilaaj karte hain?",
+"romanised": true
+},
+{
+"id": "hi-rom-implant",
+"lang": "hi",
+"q": "dental implant ka kharcha kitna hai?",
+"romanised": true
+},
+{
+"id": "bn-rom-addr",
+"lang": "bn",
+"q": "woonona clinic er thikana ki?",
+"romanised": true
+},
+{
+"id": "bn-rom-hours",
+"lang": "bn",
+"q": "dapto clinic shonibar kokhon khole?",
+"romanised": true
+},
+{
+"id": "bn-rom-phone",
+"lang": "bn",
+"q": "dapto clinic er phone number koto?",
+"romanised": true
+},
+{
+"id": "bn-rom-ache",
+"lang": "bn",
+"q": "amar dante byatha korche, ajke ki appointment pawa jabe?",
+"romanised": true
+},
+{
+"id": "bn-rom-white",
+"lang": "bn",
+"q": "apnara ki daant shada korar chikitsha koren?",
+"romanised": true
+},
+{
+"id": "bn-rom-implant",
+"lang": "bn",
+"q": "dental implant er khoroch koto?",
+"romanised": true
+},
+{
+"id": "ar-rom-addr",
+"lang": "ar",
+"q": "shu 3enwan 3iyadet woonona?",
+"romanised": true
+},
+{
+"id": "ar-rom-hours",
+"lang": "ar",
+"q": "emta tefta7 3iyadet dapto yom el sabt?",
+"romanised": true
+},
+{
+"id": "ar-rom-phone",
+"lang": "ar",
+"q": "shu ra2am telefon 3iyadet dapto?",
+"romanised": true
+},
+{
+"id": "ar-rom-ache",
+"lang": "ar",
+"q": "3andi waja3 fi asnani, mumkin maw3ed el yom?",
+"romanised": true
+},
+{
+"id": "ar-rom-white",
+"lang": "ar",
+"q": "hal 3andkom tabyeed asnan?",
+"romanised": true
+},
+{
+"id": "ar-rom-implant",
+"lang": "ar",
+"q": "kam taklefet zera3et el asnan?",
+"romanised": true
+},
+{
+"id": "zh-rom-addr",
+"lang": "zh",
+"q": "Woonona zhensuo de dizhi shi shenme?",
+"romanised": true
+},
+{
+"id": "zh-rom-hours",
+"lang": "zh",
+"q": "Dapto zhensuo xingqiliu jidian kaimen?",
+"romanised": true
+},
+{
+"id": "zh-rom-phone",
+"lang": "zh",
+"q": "Dapto zhensuo de dianhua haoma shi duoshao?",
+"romanised": true
+},
+{
+"id": "zh-rom-ache",
+"lang": "zh",
+"q": "wo yatong, jintian neng yuyue ma?",
+"romanised": true
+},
+{
+"id": "zh-rom-white",
+"lang": "zh",
+"q": "nimen tigong yachi meibai ma?",
+"romanised": true
+},
+{
+"id": "zh-rom-implant",
+"lang": "zh",
+"q": "zhongzhiya yao duoshao qian?",
+"romanised": true
+}
+]

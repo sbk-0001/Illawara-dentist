@@ -1,0 +1,11 @@
+:global(.illawarra-embed) {
+  min-height: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+:global(html:has(.illawarra-embed)),
+:global(body:has(.illawarra-embed)) {
+  background: transparent !important;
+  height: 100%;
+}

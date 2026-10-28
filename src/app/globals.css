@@ -1,0 +1,23 @@
+:root {
+  color-scheme: light;
+  --ink: #0d1b22;
+  --ink-2: #12333b;
+  --cream: #f5f2ec;
+  --muted: #4f5d63;
+  --teal: #1f6f68;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans), "Inter Tight", "Segoe UI", sans-serif;
+}
+
+a { color: var(--teal); }

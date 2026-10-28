@@ -1,0 +1,407 @@
+{
+ "head": "d0873a1",
+ "totals": {
+  "ml": [
+   63,
+   12
+  ],
+  "ta": [
+   43,
+   10
+  ],
+  "hi": [
+   22,
+   2
+  ],
+  "ar": [
+   20,
+   10
+  ],
+  "zh": [
+   14,
+   4
+  ],
+  "en": [
+   18,
+   0
+  ],
+  "es": [
+   14,
+   3
+  ],
+  "bn": [
+   32,
+   5
+  ]
+ },
+ "misses": [
+  {
+   "lang": "ml",
+   "intent": "white",
+   "text": "നിങ്ങൾ പല്ല് വെളുപ്പിക്കൽ ചികിത്സ ചെയ്യാറുണ്ടോ?",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "hours",
+   "text": "متى تفتح عيادة دابتو يوم السبت؟",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "ache",
+   "text": "عندي ألم في أسناني، هل يمكنني الحصول على موعد اليوم؟",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "zh",
+   "intent": "ache",
+   "text": "我牙疼，今天能预约吗？",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "es",
+   "intent": "ache",
+   "text": "Me duele una muela, ¿puedo tener una cita hoy?",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "bn",
+   "intent": "ache",
+   "text": "আমার দাঁতে ব্যথা করছে, আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?",
+   "src": "phrases",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "hours",
+   "text": "ഡാപ്റ്റോ ക്ലിനിക്ക് എവിടെയാണെന്ന് പറയാമോ?",
+   "src": "run28:m_auto_ml_hours_1_noisy",
+   "matcher": false,
+   "template_fires": true
+  },
+  {
+   "lang": "ml",
+   "intent": "white",
+   "text": "നിങ്ങൾ പല്ല് വെളുപ്പിക്കൽ ചികിത്സ ചെയ്യാറുണ്ടോ?",
+   "src": "run28:m_auto_ml_white_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "implant",
+   "text": "Dental implant in etre çelevakum",
+   "src": "run28:m_auto_ml_implant_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "ache",
+   "text": "எனக்கு பான் வலிக்கிறது, என்று அப்பாயின்ட்மெண்ட் கிடைக்குமா?",
+   "src": "run28:m_auto_ta_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "ache",
+   "text": "எனக்கு பால் வலிக்கிறது, என்று அப்பாயின்ட்மெண்ட் கிடைக்குமா?",
+   "src": "run28:m_auto_ta_ache_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "ache",
+   "text": "எனக்கு பண் வலிக்கிறது, இன்று அப்பாயின்ட்மெண்ட் கிடைக்குமா?",
+   "src": "run28:m_auto_ta_ache_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "hi",
+   "intent": "white",
+   "text": "क्या आप दान सफेद करने का इलाज करते हैं?",
+   "src": "run28:m_auto_hi_white_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "hi",
+   "intent": "white",
+   "text": "क्या आप दान सफ़ेद करने का इलाज करते हैं?",
+   "src": "run28:m_auto_hi_white_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "bn",
+   "intent": "ache",
+   "text": "আমার দাঁতে ব্যথা করছে আজকে কি এবজেন্টমেন্ট পাওয়া যাবে",
+   "src": "run28:m_auto_bn_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "bn",
+   "intent": "ache",
+   "text": "আমার দাঁতে ব্যথা করছে, আজকে কি অ্যাবজেন্টমেন্ট পাওয়া যাবে?",
+   "src": "run28:m_auto_bn_ache_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "bn",
+   "intent": "ache",
+   "text": "আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপেন্টমেন্ট পাওয়া যাবে",
+   "src": "run28:m_auto_bn_ache_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "bn",
+   "intent": "ache",
+   "text": "আমার দাঁতে ব্যথা করছে আজকে কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে",
+   "src": "run28:m_auto_bn_ache_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "zh",
+   "intent": "ache",
+   "text": "我牙疼今天能预约吗",
+   "src": "run28:m_auto_zh_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "zh",
+   "intent": "ache",
+   "text": "我牙疼",
+   "src": "run28:m_auto_zh_ache_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "zh",
+   "intent": "implant",
+   "text": "重植牙要多少钱",
+   "src": "run28:m_auto_zh_implant_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "hours",
+   "text": "متي تفتح عياده دبت يوم السبت",
+   "src": "run28:m_auto_ar_hours_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "hours",
+   "text": "متي تفتح عياده دابتو يوم السبت",
+   "src": "run28:m_auto_ar_hours_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "hours",
+   "text": "متي تفتح عياده Dapto يوم السبت",
+   "src": "run28:m_auto_ar_hours_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "ache",
+   "text": "عندي الم في اسناني هل يمكنني الحصول علي موعد اليوم",
+   "src": "run28:m_auto_ar_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "ache",
+   "text": "عندي الم في اسناني. هل يمكنني الحصول علي موعد اليوم",
+   "src": "run28:m_auto_ar_ache_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "implant",
+   "text": "كم تكلفه زراعه الاسنان",
+   "src": "run28:m_auto_ar_implant_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "es",
+   "intent": "ache",
+   "text": "Me duele una muela, ¿puedo tener una cita hoy?",
+   "src": "run28:m_auto_es_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "es",
+   "intent": "ache",
+   "text": "Me duele una muela. ¿Puedo tener una cita hoy?",
+   "src": "run28:m_auto_es_ache_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "hours",
+   "text": "ഡാപ്റ്റോ ക്ലിനിക്കിനെ സഹായിക്കാൻ ഞാൻ തയ്യാറാണ്",
+   "src": "run28:m_pick_ml_hours_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "white",
+   "text": "നിങ്ങൾ പല്ലു വെളുപ്പിക്കൽ ചികിത്സ ചെയ്യാറുണ്ടോ?",
+   "src": "run28:m_pick_ml_white_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "white",
+   "text": "നിങ്ങൾ പല്ല് വെളുപ്പിക്കൽ ചികിത്സ ചെയ്യാറുണ്ടോ",
+   "src": "run28:m_pick_ml_white_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "ache",
+   "text": "எனக்கு பால் வலிக்கிறது இன்று அப்பாயின்மெண்ட் கிடைக்குமா?",
+   "src": "run28:m_pick_ta_ache_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "ache",
+   "text": "எனக்கு பால் வலிக்கிறது இன்று அப்பாயின்மெண்ட் கிடைக்கும்மா?",
+   "src": "run28:m_pick_ta_ache_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "implant",
+   "text": "தென்தல் இம்லான்டிக்ரி எவ்வளவ செலவாகும்?",
+   "src": "run28:m_pick_ta_implant_0_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "implant",
+   "text": "டெண்டல் இம்லான்ட்ரி எவ்வளவ செலவாகும்?",
+   "src": "run28:m_pick_ta_implant_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "implant",
+   "text": "தென்தல் இம்ப்லான்டிக்ரி எவ்வளவ செலவாகும்?",
+   "src": "run28:m_pick_ta_implant_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "implant",
+   "text": "தென்னல் இம்லான்ட்ரி எவ்வளவ செலவாகும்?",
+   "src": "run28:m_pick_ta_implant_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "hours",
+   "text": "متي تفتح عياده دابت يوم السبت",
+   "src": "run28:m_pick_ar_hours_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ta",
+   "intent": "implant",
+   "text": "டென்டல் இம்ப்லான்ட்க்கு எவ்வளவு செலவாகும்?",
+   "src": "run29:m_auto_ta_implant_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "hours",
+   "text": "Dapto cliniceni archae poltu roko.",
+   "src": "run30:m_auto_ml_hours_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "hours",
+   "text": "ഡാപ്റ്റോ ക്ലിനിക്കിനെ യാത്രാ എളുപ്പത്തിൽ ഒരുക്കും.",
+   "src": "run30:m_pick_ml_hours_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ar",
+   "intent": "implant",
+   "text": "كم تكلفه زراعه الاسنان.",
+   "src": "run31:m_auto_ar_implant_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "hours",
+   "text": "ഡാറ്റോ ക്ലിനിക്കേഷൻ എല്ലാം ചെയ്യാൻ പറ്റുമോ?",
+   "src": "run32:m_auto_ml_hours_1_noisy",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "implant",
+   "text": "Dental implant in etre çelevhagum",
+   "src": "run32:m_auto_ml_implant_1_clean",
+   "matcher": false,
+   "template_fires": false
+  },
+  {
+   "lang": "ml",
+   "intent": "implant",
+   "text": "ഡെൻഡൽ ഇമ്പ്ലാന്റിന് എത്ര ചിലവാകും?",
+   "src": "run32:m_pick_ml_implant_0_noisy",
+   "matcher": false,
+   "template_fires": false
+  }
+ ]
+}

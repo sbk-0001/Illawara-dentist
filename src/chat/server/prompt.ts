@@ -1,0 +1,185 @@
+import type { ClinicFocus } from "../intent";
+import { languageOption } from "../language/catalog";
+import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
+import type { ScoredChunk } from "../retrieval/search";
+import { clinicName } from "../retrieval/search";
+import { isAddressQuestion } from "./address";
+import { implantPriceSentence, isImplantPriceQuestion } from "./implant-price";
+import { needsClarification } from "./utterance";
+import { directoryLabels } from "./contacts";
+import { formatClinicHours, hoursRelevant, localisedHoursBlock, questionAsksHours } from "./hours";
+import { glossaryBlock } from "./glossary";
+import { stripFeeCaveat } from "./system-text";
+
+export const CHAT_MODEL = "openai/gpt-5.4-mini";
+
+/** Appended on the one regeneration when the finished reply used the wrong script. */
+export function scriptRetryInstruction(language: ReplyLanguage): string {
+  return `The previous answer used the wrong writing system or left English words in the reply. Rewrite the entire answer in ${language.label}, using ${language.script}. Do not write English sentences. Translate generic words and phrases such as urgent, dental, concern, whitening, teeth whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, check-up, implant, crown and filling. Only proper nouns stay in Latin: clinic names, street names, suburb names, dentist names, phone numbers and URLs. Do not transliterate clinic names. Do not copy English disclaimers from the source pages. Start with the status tag, then at least one full sentence.`;
+}
+export const CHAT_MODEL_REASON =
+  "openai/gpt-5.4-mini stays the chat model. The gateway list includes newer OpenAI ids such as openai/gpt-5.6-sol, but this environment has no AI_GATEWAY_API_KEY, so first-token p95 against the 2.5s budget was not measured. The prompt is tightened instead of switching models.";
+
+function wantsAlternatePhones(question: string | undefined): boolean {
+  return /other (?:phone|number)s?|alternative (?:phone|number)s?|another (?:phone|number)|second (?:phone|number)|all (?:the )?(?:phone )?numbers|\balternatives\b/i.test(question || "");
+}
+
+function contactBlock(card: ContactCard, showAlternatives: boolean, languageCode: string): string {
+  const labels = directoryLabels(languageCode);
+  return [
+    `${card.name} (${card.clinic})`,
+    `${labels.phone} ${card.phone}`,
+    showAlternatives && card.otherPhones.length ? `Other published phones: ${card.otherPhones.join(", ")}` : "",
+    `${labels.email} ${card.email}`,
+    `${labels.booking} ${card.bookingUrl}`,
+    card.address ? `${labels.address} ${card.address}` : "",
+    `${labels.hours} ${formatClinicHours(card.clinic, languageCode)}`,
+    `${labels.website} ${card.site}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+const STATUS_EXAMPLES = `[[A]] Dapto is open Monday–Friday, 8:00–18:00.
+[[A]] হ্যাঁ, ড্যাপ্টোতে হোয়াইটেনিং আছে।
+[[N]] The website does not list that.
+[[N]] ওয়েবসাইটে এটি উল্লেখ নেই।
+[[G]] Hello.
+[[G]] Xin chào.`;
+
+export function buildInstructions(input: {
+  index: KnowledgeIndex;
+  language: ReplyLanguage;
+  focus: ClinicFocus;
+  severe: boolean;
+  chunks: ScoredChunk[];
+  question?: string;
+}): string {
+  const showAlternatives = wantsAlternatePhones(input.question);
+  const directory = Object.values(input.index.contacts)
+    .map((card) => contactBlock(card, showAlternatives, input.language.code))
+    .join("\n\n");
+  const hoursBlock = hoursRelevant(input.question ?? "", input.chunks)
+    ? localisedHoursBlock(input.language.code, input.focus, clinicName, input.question ?? "")
+    : "";
+  const context = input.chunks.length
+    ? input.chunks
+        .map(
+          (chunk, index) =>
+            `[${index + 1}] ${clinicName(chunk.clinic)} — ${chunk.title}${chunk.heading && chunk.heading !== chunk.title ? ` — ${chunk.heading}` : ""}\n${chunk.url}\n${stripFeeCaveat(chunk.text)}`,
+        )
+        .join("\n\n")
+    : "NO RELEVANT PAGES. The index does not contain an answer. Say so and give the contact route.";
+
+  const clinicLine =
+    input.focus.kind === "one"
+      ? `The question is about ${clinicName(input.focus.clinic)}. Answer only for that clinic. Do not list the other clinics' addresses, phones, hours, or booking links unless the visitor asked to compare them.`
+      : input.focus.kind === "many"
+        ? `The question names ${input.focus.clinics.map(clinicName).join(" and ")}. Answer each named clinic from its own context.`
+        : input.focus.kind === "ask"
+          ? "The question is location-specific (hours, address, parking, dentists or phone) but does not say which clinic. Ask which of Dapto, Shellharbour or Woonona they mean. Do not guess one clinic's hours or address as if it applied to all three. You may list the three clinic names."
+          : "The visitor did not name a clinic. Give one combined answer for the group. Mention Dapto Dentists, Shellharbour Dentists, and Woonona Dentists at most once each. Do not repeat a clinic name in a later sentence, and do not say both names and then list them again.";
+
+  const catalogued = languageOption(input.language.code);
+  const instruction = catalogued
+    ? catalogued.instruction
+    : input.language.code === "und"
+      ? "Reply in the same language and script as the visitor's latest message. Do not switch to English, and do not mention language detection."
+      : `Write in ${input.language.label}.`;
+  const languageLine = input.language.fallback
+    ? "The visitor's language could not be detected. Reply in English and say, in that reply, that you could not tell which language they wrote in."
+    : `${instruction} The reply language code is ${input.language.code}. Match this language and script even if earlier messages were in another language. A language the visitor picked overrides the language they typed in.`;
+
+  const question = input.question ?? "";
+  const hoursIntent = questionAsksHours(question)
+    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant. If they did not name a day, give the full published week. Do not guess Sunday."
+    : "";
+  const clarifyLine = needsClarification(question)
+    ? "The visitor's words are unclear. Ask one short clarifying question in the reply language. Do not guess a treatment, a product, a price, or a clinic fact."
+    : "";
+  const addressLine = isAddressQuestion(question)
+    ? input.focus.kind === "one"
+      ? `The visitor asked for an address. Give the street address of ${clinicName(input.focus.clinic)}. Do not answer with only a phone number.`
+      : "The visitor asked for an address and did not name a clinic. List the street address of Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not answer with only a phone number. Do not ask which clinic they mean."
+    : "";
+
+  const glossary = glossaryBlock(input.language.code);
+  const severeLine = input.severe
+    ? "SEVERE SYMPTOMS: The first sentence must tell the visitor to call 000 now. Then give the relevant clinic phone from the directory. Do not give first aid steps, medicines or a diagnosis."
+    : "For toothache, swelling, trauma or a broken tooth, do not diagnose or recommend treatment. Point them to the relevant clinic phone and the emergency information in the context, plus that clinic's booking link.";
+
+  return `You are the website assistant for Illawarra Dentists, the family dental group behind Dapto Dentists, Shellharbour Dentists and Woonona Dentists.
+
+STATUS TAG
+The first characters are exactly one tag, then the answer: [[A]] from the directory or context, [[N]] when the site does not say or the question is off-topic, [[G]] for a greeting or thanks. Do not mention the tag. Examples of the tag, not the language:
+${STATUS_EXAMPLES}
+
+LANGUAGE
+${languageLine}
+Text only. Always answer in at least one full sentence in the visitor's language. Never reply with only a contact line.
+
+FACTS
+Use only the directory and context below. Never invent prices, dentists, hours, services, health-fund arrangements, CDBS rules or policies. If a number, name or time is not written there, do not say it. Do not repeat a phone from a design mock-up.
+For Shellharbour Dentists, give only the main phone in the directory. Do not mention any other Shellharbour number unless the visitor asked for an alternative number.
+
+NUMERALS AND WORDS
+Copy phone numbers, email addresses and URLs exactly. Keep Western digits 0-9. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
+Never write a booking URL yourself. Emit [[BOOK:dapto]], [[BOOK:shellharbour]] or [[BOOK:woonona]]. The server replaces that token with the clinic name and the exact stored link. Do not translate /booking/ or any other path segment.
+Copy the contact labels in the directory. They are already in the reply language.
+Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, say that sentence. Do not wrap the hours in quotation marks or write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
+Keep proper names verbatim: clinic names, street names, suburb names and dentist names. Write clinic names in Latin exactly as Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not transliterate them. Translate generic words and phrases into the reply language. Do not leave English words such as urgent, dental, concern, whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, same day treatment, emergency appointment, toothache, swelling, broken tooth, jaw fracture, urgent medical help, check-up, implant, crown, filling or cleaning inside a non-English sentence. Only proper nouns stay in Latin. In Bengali, write দাঁত সাদা করা for teeth whitening. In Hindi, write दांत सफ़ेद करना, not दांत सादा.
+When the visitor writes Banglish or Hinglish, answer in Bengali or Hindi script, not Latin. When the visitor writes Manglish, Tanglish, Arabizi or pinyin, answer in that language's native script, not Latin. Do not mix Devanagari into a Bengali reply, Bengali letters into a Hindi reply, Tamil into Malayalam, or Malayalam into Tamil.
+For Malayalam, Tamil, Hindi, Arabic, Chinese, Spanish and Bangla, write as a warm person at the clinic desk would speak: a native receptionist, short and warm, no literal translation. Say a service name once, then continue without repeating it. English only for clinic names, phone numbers, URLs, and brand names such as All-on-4 and Invisalign. Translate arch, jaw, professional, same-day, booking link, phone, and website.
+Examples, match this tone:
+ml: Dapto Dentists ശനിയാഴ്ച രാവിലെ 8 മണി മുതൽ വൈകുന്നേരം 4 മണി വരെ തുറന്നിരിക്കും.
+ml: Dapto Dentists-ന്റെ ഫോൺ നമ്പർ 02 4288 0737 ആണ്.
+ta: Dapto Dentists சனிக்கிழமை காலை 8 மணி முதல் மாலை 4 மணி வரை திறந்திருக்கும்.
+ta: Dapto Dentists தொலைபேசி எண் 02 4288 0737 ஆகும்.
+hi: Dapto Dentists शनिवार सुबह 8 बजे से शाम 4 बजे तक खुला रहता है।
+hi: Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।
+bn: Dapto Dentists শনিবার সকাল 8টা থেকে বিকাল 4টা পর্যন্ত খোলা থাকে।
+bn: Dapto Dentists-এর ফোন নম্বর 02 4288 0737।
+In Malayalam, Tamil, Bengali and Hindi, translate checkup, cleaning, Invisalign, emergency, booking, whitening, fees, hours, singular dental implants, payment plan and interest free. Do not leave those words in English. The only Latin in those replies is clinic names, street names, phone numbers and URLs. Do not mix in Chinese, Bengali, Sinhala, Devanagari or Tamil characters when the reply language is a different script.
+
+CLINIC
+${clinicLine}
+${hoursIntent}
+${clarifyLine}
+${addressLine}
+
+SAFETY
+${severeLine}
+Do not diagnose. Do not tell the visitor what procedure they need.
+
+PRICES
+If the context does not price the asked item, say the website does not list that exact item. If the context does contain a price, quote that same figure in every language and name its product and clinic. Do not say the fee is unlisted when a figure is in the context. Singular implants and a crown from $5000, or about $30 a week on a payment plan, is not the price of zirconia implants. A gallery caption is not a price. Then give the clinic phone and booking link.
+${isImplantPriceQuestion(question) ? `IMPLANT PRICE\nUse only this, and do not swap the figures between clinics:\n${implantPriceSentence(input.language.code, input.focus)}` : ""}
+
+OFF TOPIC
+If the question is not about these clinics, their services, fees, visits, payments or oral health on their sites, refuse it in the reply language. Start that refusal with [[N]] and do not type phone numbers yourself.
+
+Do not say that the website has no answer in the same reply that then gives the phone, address, hours, price, or booking link.
+
+WHEN YOU DO NOT KNOW
+${
+  input.chunks.length
+    ? "Context answers from the clinic websites. Give that answer and start with [[A]]. Do not start with [[N]]. Do not add a line that there is no other answer on the website."
+    : "The index does not contain an answer. Start with [[N]], say so in the visitor's language, and do not invent phone numbers. The app removes the tag and appends the three clinic phones and booking links."
+}
+
+STYLE
+Short, calm sentences. No markdown headings. Do not invent source links.
+
+${hoursBlock ? `${hoursBlock}\n\n` : ""}CONTACT DIRECTORY
+${directory}
+
+CONTEXT
+The pages below are in English. Translate every service name and symptom into the reply language. Do not copy English phrases from them.
+${context}
+
+${glossary ? `${glossary}\n\n` : ""}STATUS TAG
+Start with the tag, then at least one full sentence in the visitor's language. Never reply with only a contact line. Copy the directory labels. Examples of the tag, not the language:
+${STATUS_EXAMPLES}
+
+Reply ONLY in ${input.language.label} (${input.language.script}) for this message, regardless of earlier messages.`;
+}

@@ -1,0 +1,318 @@
+import { LANGUAGE_OPTIONS, languageOption, replyFromOption } from "./catalog";
+import type { ReplyLanguage } from "../types";
+
+export type Detection = ReplyLanguage & { confidence: "high" | "low" };
+
+const SCRIPT_TESTS: { script: string; code: string; re: RegExp }[] = [
+  { script: "Hebrew", code: "he", re: /[\u0590-\u05FF]/g },
+  { script: "Arabic", code: "ar", re: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g },
+  { script: "Bengali", code: "bn", re: /[\u0980-\u09FF]/g },
+  { script: "Gurmukhi", code: "pa", re: /[\u0A00-\u0A7F]/g },
+  { script: "Gujarati", code: "gu", re: /[\u0A80-\u0AFF]/g },
+  { script: "Devanagari", code: "hi", re: /[\u0900-\u097F]/g },
+  { script: "Tamil", code: "ta", re: /[\u0B80-\u0BFF]/g },
+  { script: "Telugu", code: "te", re: /[\u0C00-\u0C7F]/g },
+  { script: "Kannada", code: "kn", re: /[\u0C80-\u0CFF]/g },
+  { script: "Malayalam", code: "ml", re: /[\u0D00-\u0D7F]/g },
+  { script: "Thai", code: "th", re: /[\u0E00-\u0E7F]/g },
+  { script: "Hangul", code: "ko", re: /[\uAC00-\uD7AF]/g },
+  { script: "Kana", code: "ja", re: /[\u3040-\u30FF]/g },
+  { script: "Han", code: "zh", re: /[\u4E00-\u9FFF]/g },
+  { script: "Greek", code: "el", re: /[\u0370-\u03FF\u1F00-\u1FFF]/g },
+  { script: "Cyrillic", code: "ru", re: /[\u0400-\u04FF]/g },
+  { script: "Latin", code: "en", re: /[A-Za-z\u00C0-\u024F]/g },
+];
+
+const BANGLISH_STRONG = ["kemon", "acho", "achen", "kothay", "kothai", "kotha", "kivabe", "nombor", "bolben", "tumi", "apni", "apnar", "apnara", "bhalo", "hocche", "daktar", "dakter", "byatha", "bytha", "ekhon", "korbo", "koto", "kokhon", "shonibar", "thaken", "pabo", "pawa", "daat", "dant", "dante", "kobe", "amar", "valo", "korte", "korche", "dam", "shada", "koren", "chikitsha", "thikana", "khole", "khoroch", "jabe"];
+const BANGLISH_WEAK = ["chai", "chan", "ashen", "asbo", "ajke", "kalke", "taka", "khula", "khola", "hobe", "keno", "kene", "ki", "er", "ar", "ache", "ase", "nai", "din"];
+const HINGLISH_STRONG = ["kya", "kaise", "mujhe", "chahiye", "kitna", "kitne", "kitni", "aapka", "kahan", "kab", "nahi", "nahin", "daant", "dard", "baje", "khulti", "khulta", "khula", "shaniwar", "samay"];
+const HINGLISH_WEAK = ["hai", "hain", "kal", "aaj", "mera", "meri", "aap", "karo", "karna", "wala", "wali", "baat"];
+const ENGLISH = ["what", "when", "where", "hours", "hour", "saturday", "sunday", "monday", "friday", "appointment", "clinic", "fee", "fees", "much", "open", "opening", "pain", "tooth", "broken", "emergency", "payment", "health", "fund", "please", "your", "the", "are", "how", "cost", "price", "book", "booking", "address", "parking", "dentist", "which", "does", "do", "can", "need", "have", "who", "won", "dental", "implant", "implants", "clean", "offer", "about", "crown", "zirconia", "treatment", "root", "canal", "check"];
+const SPANISH = ["horario", "horarios", "sabado", "sábado", "clinica", "clínica", "cita", "duele", "diente", "cuanto", "cuánto", "cuesta", "donde", "dónde", "precio", "abierto", "cual", "cuál", "ustedes", "hola", "revision", "revisión", "limpieza", "noche", "perros", "quien", "quién", "gano", "ganó", "copa", "mundo", "roto", "hacen", "tienen", "tratamiento", "tratamientos", "conducto", "dentista", "implantes", "niños", "ninos", "puedo", "reservar", "teléfono", "telefono", "abierta"];
+const SPANISH_FUNCTION = ["para", "los", "las"];
+const ITALIAN = ["orari", "orario", "sabato", "clinica", "appuntamento", "dente", "dolore", "quanto", "dove", "aperto", "quali", "sono", "gli", "della", "del", "costa", "chi", "vinto", "coppa", "mondo", "rotto", "notte", "cani", "tenete", "durante", "fanno", "hanno", "trattamento", "trattamenti", "condotto", "canale", "dentista", "impianti", "bambini", "posso", "prenotare", "telefono", "radice", "sbiancamento", "corona"];
+const ITALIAN_FUNCTION = ["per", "che", "una", "con"];
+const FRENCH = ["horaires", "samedi", "clinique", "rendez", "dent", "douleur", "combien", "ouvert", "vous", "est", "font", "ont", "faites", "traitement", "traitements", "canal", "dentiste", "implants", "enfants", "peux", "reserver", "réserver", "telephone", "téléphone", "couronne", "blanchiment", "ou", "où"];
+const FRENCH_FUNCTION = ["pour", "les"];
+const GERMAN = ["öffnungszeiten", "offnungszeiten", "zahnarzt", "zahnärztin", "samstag", "termin", "zahn", "schmerzen", "wie", "nicht", "ich", "uhr", "geöffnet", "geoeffnet", "machen", "haben", "behandlung", "behandlungen", "wurzel", "wurzelbehandlung", "implantate", "kinder", "kann", "telefon", "wo", "wieviel", "kosten"];
+const GERMAN_FUNCTION = ["für", "fur", "die", "der", "das"];
+const PORTUGUESE = ["horário", "horario", "horários", "horarios", "sábado", "sabado", "clínica", "clinica", "consulta", "dente", "quanto", "onde", "aberto", "vocês", "voces", "fazem", "tem", "têm", "tratamento", "tratamentos", "canal", "dentista", "implantes", "crianças", "criancas", "posso", "reservar", "telefone", "aberta"];
+const PORTUGUESE_FUNCTION = ["para", "os", "as"];
+const VIETNAMESE = ["phong", "phòng", "kham", "khám", "gio", "giờ", "thu", "thứ", "bay", "bảy", "mo", "mở", "cua", "cửa", "bao", "nhieu", "nhiêu", "dau", "đau", "rang", "răng", "khong", "không", "luc", "lúc", "may", "mấy", "nha", "khoa", "phi", "nieng", "niềng", "trang", "trắng", "thoai", "thoại", "lich", "lịch", "dat", "đặt", "chua", "chữa", "implant", "bacsi", "nhakhoa", "xin", "chào", "chao", "bạn", "cảm", "ơn", "cám"];
+const VIETNAMESE_GREETING = /^(?:xin\s+ch[aà]o|ch[aà]o(?:\s+b[aạ]n)?|c[aảá]m\s+[oơ]n)[.!?\s]*$/iu;
+const VIETNAMESE_FUNCTION = ["bac", "si"];
+const INDONESIAN = ["apakah", "dokter", "bisa", "saya", "buka", "berapa", "gigi", "anak", "klinik", "perawatan", "cabut", "sakit"];
+const INDONESIAN_FUNCTION = ["ada", "di", "yang", "untuk", "ini", "jam"];
+const MALAY = ["adakah", "doktor", "boleh", "awak", "pukul", "buka", "berapa", "gigi", "anak", "klinik", "rawatan", "sakit"];
+const MALAY_FUNCTION = ["ada", "di", "yang", "untuk", "ini"];
+const MANGLISH_STRONG = ["evide", "enthu", "entha", "enthaanu", "ethra", "aanu", "undo", "enth", "engane", "venam", "vedana", "enikku", "pallu", "clinicinte", "shaniyazhcha", "eppol", "thurakkum", "innu", "kittumo", "ningal", "veluppikkal", "cheyyarundo", "chilavakum", "chelavakum", "chelevakum", "çelevakum", "celevakum", "implantinu", "klinikinde", "vilasem", "vilasam", "endan", "endal", "inde", "entaan", "endaan", "fon", "nambar"];
+const TANGLISH_STRONG = ["irukku", "iruka", "eppo", "evvalavu", "enge", "eppadi", "evlo", "venum", "vali", "enna", "sanikizhamai", "thirakkum", "enakku", "inniku", "kidaikkuma", "neenga", "pannuveengala", "selavu", "aagum"];
+const ARABIZI = /\b(?:3iyada\w*|3iyadet\w*|3enwan|3andi|3andkom|maw3ed|tabyeed|waja3|ra2am|tefta7|asnan|zera3et)\b/gi;
+const PINYIN = /\b(?:zhensuo|yuyue|dianhua|yasui|meibai|dizhi|kaimen|yatong|zhongzhiya|xingqiliu|jidian)\b/gi;
+
+const ARABIC_WORDS = ["ما", "هي", "ساعات", "العمل", "عيادة", "السبت", "ألم", "سن", "رسوم", "موعد", "كم"];
+const URDU_WORDS = ["کیا", "ہے", "ہیں", "کلینک", "بجے", "کھلتا", "ہفتہ", "درد", "دانت", "کتنے", "میں"];
+const PERSIAN_WORDS = ["ساعت", "کاری", "چیست", "کلینیک", "شنبه", "دندان", "سلام", "لطفا", "در", "روز"];
+const URDU_LETTERS = /[ٹڈڑںےھۃۂ]/g;
+const PERSIAN_LETTERS = /[پچژگ]/g;
+
+const HINDI_WORDS = ["है", "हैं", "क्या", "कितने", "कितना", "खुलता", "शनिवार", "मुझे", "नहीं", "आप"];
+const NEPALI_WORDS = ["हुन्छ", "छैन", "तपाईं", "कति", "खुल्छ", "शनिबार", "के", "हो", "बजे"];
+
+const GREETINGS = new Set(["hi", "hey", "hello", "ok", "okay", "thanks", "thankyou", "yo"]);
+
+function countMatches(text: string, re: RegExp): number {
+  return text.match(re)?.length ?? 0;
+}
+
+function tokensOf(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
+}
+
+function scoreWords(tokens: string[], words: string[], weight = 1): number {
+  const wanted = new Set(words);
+  let score = 0;
+  const seen = new Map<string, number>();
+  for (const token of tokens) {
+    if (!wanted.has(token)) continue;
+    const used = seen.get(token) ?? 0;
+    if (used >= 2) continue;
+    seen.set(token, used + 1);
+    score += weight;
+  }
+  return score;
+}
+
+function englishReply(fallback: boolean, confidence: "high" | "low"): Detection {
+  const option = languageOption("en")!;
+  return { ...replyFromOption(option, fallback ? "fallback" : "detected", fallback), confidence };
+}
+
+/** Latin text that is real language, but not one we can name. The model mirrors the visitor. */
+function mirrorReply(confidence: "high" | "low"): Detection {
+  return {
+    code: "und",
+    label: "the visitor's language",
+    script: "Latin",
+    dir: "ltr",
+    fallback: false,
+    source: "detected",
+    confidence,
+  };
+}
+
+function isUnidentifiableLatin(text: string, tokens: string[]): boolean {
+  const letters = text.replace(/[^A-Za-z\u00C0-\u024F]/g, "");
+  if (letters.length < 2) return true;
+  const long = tokens.filter((token) => token.length >= 3);
+  const wordlike = long.filter((token) => {
+    const vowels = token.match(/[aeiouàáâãäåæèéêëìíîïòóôõöùúûüýÿ]/gi)?.length ?? 0;
+    return vowels / token.length >= 0.25;
+  });
+  return wordlike.length < 2;
+}
+
+function fromCode(code: string, confidence: "high" | "low"): Detection {
+  const known = languageOption(code);
+  if (known) return { ...replyFromOption(known, "detected", false), confidence };
+  const extra = LANGUAGE_OPTIONS.find((option) => option.code === code);
+  if (extra) return { ...replyFromOption(extra, "detected", false), confidence };
+  return {
+    code,
+    label: code,
+    script: "Latin",
+    dir: "ltr",
+    fallback: false,
+    source: "detected",
+    confidence,
+  };
+}
+
+function arabicFamily(text: string, tokens: string[]): Detection {
+  const urduLetters = countMatches(text, URDU_LETTERS);
+  const persianLetters = countMatches(text, PERSIAN_LETTERS);
+  const urdu = scoreWords(tokens, URDU_WORDS, 2) + urduLetters * 2;
+  const persian = scoreWords(tokens, PERSIAN_WORDS, 2) + persianLetters * 2;
+  const arabic = scoreWords(tokens, ARABIC_WORDS, 1);
+  if (persian >= 2 && persian > urdu && persian >= arabic) return fromCode("fa", "high");
+  if (urdu >= 2 && urdu > persian) return fromCode("ur", "high");
+  return fromCode("ar", "high");
+}
+
+function devanagariFamily(tokens: string[]): Detection {
+  const nepali = scoreWords(tokens, NEPALI_WORDS, 2);
+  const hindi = scoreWords(tokens, HINDI_WORDS, 2);
+  if (nepali >= 2 && nepali > hindi) return fromCode("ne", "high");
+  return fromCode("hi", "high");
+}
+
+function latinFamily(text: string, tokens: string[]): Detection {
+  const joined = tokens.join(" ");
+  if (VIETNAMESE_GREETING.test(text.trim())) return fromCode("vi", "high");
+  if (tokens.length === 1 && GREETINGS.has(tokens[0] || "")) return englishReply(false, "high");
+  let banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
+  if (tokens.length <= 18 && /\bki\s*\?\s*$/i.test(text.trim())) banglish += 4;
+  const hinglish = scoreWords(tokens, HINGLISH_STRONG, 2) + scoreWords(tokens, HINGLISH_WEAK, 1);
+  const english = scoreWords(tokens, ENGLISH, 1);
+  const spanish = scoreWords(tokens, SPANISH, 2) + scoreWords(tokens, SPANISH_FUNCTION, 1);
+  const italian = scoreWords(tokens, ITALIAN, 2) + scoreWords(tokens, ITALIAN_FUNCTION, 1);
+  const french = scoreWords(tokens, FRENCH, 2) + scoreWords(tokens, FRENCH_FUNCTION, 1);
+  const german = scoreWords(tokens, GERMAN, 2) + scoreWords(tokens, GERMAN_FUNCTION, 1);
+  const portuguese = scoreWords(tokens, PORTUGUESE, 2) + scoreWords(tokens, PORTUGUESE_FUNCTION, 1);
+  const vietnameseDiacritics = /[ăơưđắằẳẵặấầẩẫậếềểễệốồổỗộớờởỡợứừửữựạẹịọụỵảẽỉỏủỷỹ]/i.test(text) ? 3 : 0;
+  const vietnamese = scoreWords(tokens, VIETNAMESE, 2) + scoreWords(tokens, VIETNAMESE_FUNCTION, 1) + vietnameseDiacritics;
+  const indonesian = scoreWords(tokens, INDONESIAN, 2) + scoreWords(tokens, INDONESIAN_FUNCTION, 1);
+  const malay = scoreWords(tokens, MALAY, 2) + scoreWords(tokens, MALAY_FUNCTION, 1);
+  let manglish = scoreWords(tokens, MANGLISH_STRONG, 2);
+  if (/\b(?:klinikinde|vilasem|vilasam|endan|endal|ethra|inde)\b/i.test(text)) manglish += 3;
+  const tanglish = scoreWords(tokens, TANGLISH_STRONG, 2);
+  const arabizi = (text.match(ARABIZI) || []).length * 2;
+  const pinyin = (text.match(PINYIN) || []).length * 2;
+
+  const ranked: { code: string; score: number }[] = [
+    { code: "bn-Latn", score: banglish },
+    { code: "hi-Latn", score: hinglish },
+    { code: "ml-Latn", score: manglish },
+    { code: "ta-Latn", score: tanglish },
+    { code: "ar-Latn", score: arabizi },
+    { code: "zh-Latn", score: pinyin },
+    { code: "en", score: english },
+    { code: "es", score: spanish },
+    { code: "it", score: italian },
+    { code: "fr", score: french },
+    { code: "de", score: german },
+    { code: "pt", score: portuguese },
+    { code: "vi", score: vietnamese },
+    { code: "id", score: indonesian },
+    { code: "ms", score: malay },
+  ].sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  const second = ranked[1];
+  if (!best || best.score < 2) {
+    if (isUnidentifiableLatin(text, tokens)) return englishReply(true, "low");
+    return mirrorReply("low");
+  }
+  if (best.code === "en") return englishReply(false, best.score >= 2 ? "high" : "low");
+  if (best.code === "bn-Latn" && banglish >= english && banglish >= hinglish && banglish >= manglish && banglish >= tanglish) return fromCode("bn-Latn", "high");
+  if (best.code === "hi-Latn" && hinglish >= english && hinglish > banglish && hinglish >= manglish && hinglish >= tanglish) return fromCode("hi-Latn", "high");
+  if (best.code === "ml-Latn" && manglish >= english && manglish >= tanglish) return fromCode("ml-Latn", "high");
+  if (best.code === "ta-Latn" && tanglish >= english && tanglish > manglish) return fromCode("ta-Latn", "high");
+  if (best.code === "ar-Latn" && arabizi >= english) return fromCode("ar-Latn", "high");
+  if (best.code === "zh-Latn" && pinyin >= english) return fromCode("zh-Latn", "high");
+  if (best.score >= 2 && (!second || best.score >= second.score)) {
+    if ((best.code === "bn-Latn" || best.code === "hi-Latn") && english > best.score) return englishReply(false, "high");
+    return fromCode(best.code, "high");
+  }
+  void joined;
+  return englishReply(true, "low");
+}
+
+/** True when the text contains a letter in any script. Digits and punctuation alone are not a language. */
+export function hasLetters(text: string): boolean {
+  return /\p{L}/u.test(text);
+}
+
+export function detectLanguage(text: string): Detection {
+  const input = text.trim();
+  if (!input) return englishReply(true, "low");
+
+  const counts = SCRIPT_TESTS.map((item) => ({
+    ...item,
+    count: countMatches(input, item.re),
+  })).sort((a, b) => b.count - a.count);
+  const latin = counts.find((item) => item.script === "Latin")?.count ?? 0;
+  const tokens = tokensOf(input);
+
+  if (counts.every((item) => item.count === 0)) return englishReply(true, "low");
+
+  const nonLatin = counts.find((item) => item.script !== "Latin" && item.count > 0);
+  const dominant = Boolean(
+    nonLatin && ((nonLatin.count >= 4 && nonLatin.count >= latin) || nonLatin.count >= 8),
+  );
+  if (!dominant || !nonLatin) return latinFamily(input, tokens);
+
+  if (nonLatin.script === "Arabic") return arabicFamily(input, tokens);
+  if (nonLatin.script === "Devanagari") return devanagariFamily(tokens);
+  if (nonLatin.script === "Kana") return fromCode("ja", "high");
+  if (nonLatin.script === "Han") {
+    const kana = counts.find((item) => item.script === "Kana")?.count ?? 0;
+    return fromCode(kana > 0 ? "ja" : "zh", "high");
+  }
+  return fromCode(nonLatin.code, "high");
+}
+
+const PROPER_TOKEN = new Set([
+  "dapto", "woonona", "shellharbour", "illawarra", "barrack", "heights", "princes", "highway", "baan", "street", "nsw",
+  "suite", "drive", "warilla", "kiama", "windang", "bulli", "thirroul", "corrimal", "oak", "flats", "albion", "park",
+  "lake", "fairy", "meadow", "mount", "pleasant", "calderwood", "blackbutt", "tullimbar", "warrawong", "helensburgh",
+  "fernhill", "balgownie", "captain", "cook", "shell", "harbor", "harbour", "dentists", "dentist",
+]);
+
+const DICTIONARY_ENGLISH = new Set([
+  ...ENGLISH,
+  "phone", "phones", "number", "numbers", "email", "call", "calls", "yes", "no", "thanks", "thank", "today", "tomorrow",
+  "time", "times", "at", "for", "of", "and", "or", "to", "in", "on", "me", "my", "their", "there", "this", "that",
+  "a", "an", "it", "its", "with", "from", "about", "available", "offer", "offers", "close", "closed", "opening",
+  "opened", "prices", "price", "book", "booking", "please", "clinic", "clinics", "open",
+]);
+
+/** Typed Latin whose ordinary words are English, ignoring clinic and place names. */
+export function isDictionaryEnglish(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || /[^\sA-Za-z0-9?.!',-]/.test(trimmed)) return false;
+  const tokens = trimmed.toLowerCase().match(/[a-z]{2,}/g) ?? [];
+  if (!tokens.length) return false;
+  let words = 0;
+  for (const token of tokens) {
+    if (PROPER_TOKEN.has(token)) continue;
+    if (!DICTIONARY_ENGLISH.has(token)) return false;
+    words += 1;
+  }
+  return words > 0;
+}
+
+/** Romanised Banglish or Hinglish markers. Not a guess from a previous turn by itself. */
+export function romanisedIndic(text: string): "bn-Latn" | "hi-Latn" | null {
+  const trimmed = text.trim();
+  if (!trimmed || /[^\sA-Za-z0-9?.!',-]/.test(trimmed)) return null;
+  const tokens = trimmed.toLowerCase().match(/[a-z]{2,}/g) ?? [];
+  if (!tokens.length) return null;
+  let banglish = scoreWords(tokens, BANGLISH_STRONG, 2) + scoreWords(tokens, BANGLISH_WEAK, 1);
+  if (/\bki\s*\??\s*$/i.test(trimmed)) banglish += 2;
+  const hinglish = scoreWords(tokens, HINGLISH_STRONG, 2) + scoreWords(tokens, HINGLISH_WEAK, 1);
+  if (banglish > hinglish && banglish > 0) return "bn-Latn";
+  if (hinglish > banglish && hinglish > 0) return "hi-Latn";
+  return null;
+}
+
+const CLINIC_WORD = /\b(?:dapto|woonona|shellharbour|illawarra|gigi|klinik|dokter|clinic|dentist|dentists)\b/i;
+
+/** Indonesian only when the words say so and a clinic word is present. A Deepgram `id` tag is not enough. */
+export function confidentIndonesian(text: string): boolean {
+  const detected = detectLanguage(text);
+  if (detected.code !== "id" || detected.fallback || detected.confidence !== "high") return false;
+  return CLINIC_WORD.test(text);
+}
+
+/** Latin that is clearly English, Spanish, or Indonesian-with-a-clinic-word. */
+export function confidentLatinLanguage(text: string): "en" | "es" | "id" | null {
+  const detected = detectLanguage(text);
+  if (detected.fallback || detected.confidence !== "high") return null;
+  if (detected.code === "en" || detected.code === "es") return detected.code;
+  if (detected.code === "id" && CLINIC_WORD.test(text)) return "id";
+  return null;
+}
+
+export function resolveReplyLanguage(text: string, picker: string | null | undefined): Detection {
+  const selected = (picker || "auto").trim();
+  if (selected && selected !== "auto") {
+    const option = languageOption(selected);
+    if (option) return { ...replyFromOption(option, "picker", false), confidence: "high" };
+  }
+  return detectLanguage(text);
+}
+
+export function isRtlLanguage(code: string): boolean {
+  return languageOption(code)?.dir === "rtl";
+}
