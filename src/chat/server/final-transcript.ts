@@ -21,9 +21,12 @@ export const GEMINI_RESCUE_TIMEOUT_MS = 3_000;
 const GATEWAY_CHAT = "https://ai-gateway.vercel.sh/v1/chat/completions";
 
 /** The prompt from the bake-off. Malayalam picker appends a language hint. */
+export const STT_CLINIC_PROMPT =
+  "Dental clinic callers. Spell clinic names exactly as Dapto, Woonona, or Shellharbour. Dapto is not doctor, dokter, ഡോക്ടർ, ডাক্তার, or डॉक्टर. Terms: dentist, implant, Invisalign, whitening, appointment, toothache, cleaning.";
+
 export const GEMINI_STT_PROMPT =
   'Identify the spoken language of this audio and transcribe it. Return ONLY JSON {"lang": one of "en","zh","ml","ta","hi","ar","es","bn","other", "transcript": the words in that language\'s native script (Malayalam script for ml, Tamil script for ta, Devanagari for hi, Bengali script for bn)}. ' +
-  "Context: callers ask a dental clinic chatbot about Dapto, Woonona or Shellharbour clinics; keep those clinic names in Latin script. Malayalam and Tamil are different languages: decide by vocabulary/grammar (e.g. Malayalam -ന്റെ, എന്താണ്, ഉണ്ട്; Tamil -இன், என்ன, இருக்கு), not by accent.";
+  "Context: callers ask a dental clinic chatbot about Dapto, Woonona or Shellharbour clinics; keep those clinic names in Latin script. Dapto is a place name, not the word for doctor. Malayalam and Tamil are different languages: decide by vocabulary/grammar (e.g. Malayalam -ന്റെ, എന്താണ്, ഉണ്ട്; Tamil -இன், என்ன, இருக்கு), not by accent.";
 
 export function geminiSttPrompt(hint: "ml" | null): string {
   if (hint !== "ml") return GEMINI_STT_PROMPT;
@@ -67,6 +70,7 @@ function foreignLetterCount(text: string): number {
 export function transcriptAnomaly(text: string): TranscriptAnomaly | null {
   const value = text.trim();
   if (!value) return "empty";
+  if (/çelevakum|chelavakum|chelevakum|\bethra\b|endaan/i.test(value)) return "manglish";
   if (foreignLetterCount(value) > 0) return "foreign-script";
   if (/[ৰৱ]/.test(value)) return "assamese";
   const tamil = countScript(value, /[\u0B80-\u0BFF]/g);
@@ -80,7 +84,7 @@ export function transcriptAnomaly(text: string): TranscriptAnomaly | null {
     malayalam +
     countScript(value, /[\u0600-\u06FF]/g) +
     countScript(value, /[\u4E00-\u9FFF]/g);
-  if (latin > native && (malayalamMarkersWin(value) || detectLanguage(value).code === "ml-Latn")) return "manglish";
+  if (latin > native && (malayalamMarkersWin(value) || /inde\b/i.test(value) || detectLanguage(value).code === "ml-Latn")) return "manglish";
   return null;
 }
 
@@ -134,13 +138,18 @@ export function parseGeminiStt(body: string): GeminiStt | null {
   }
 }
 
+/** OpenAI transcription `prompt`. The gateway forwards `providerOptions.openai`. */
+export function openAiTranscribeProviderOptions(language?: string): { openai: { language?: string; prompt: string } } {
+  return { openai: { ...(language ? { language } : {}), prompt: STT_CLINIC_PROMPT } };
+}
+
 async function defaultGpt(audio: Uint8Array, language: string | undefined, signal: AbortSignal): Promise<string> {
   const result = await experimental_transcribe({
     model: GPT_TRANSCRIBE_MODEL,
     audio,
     maxRetries: 0,
     abortSignal: signal,
-    providerOptions: language ? { openai: { language } } : {},
+    providerOptions: openAiTranscribeProviderOptions(language),
   });
   return result.text?.trim() || "";
 }

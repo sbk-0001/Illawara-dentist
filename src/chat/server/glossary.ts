@@ -5,6 +5,15 @@
  */
 const PHRASES: Record<string, readonly [string, string][]> = {
   ml: [
+    ["all-on-4 arch", "All-on-4 ആർച്ച്"],
+    ["all-on-x arch", "All-on-X ആർച്ച്"],
+    ["existing dental work", "നിലവിലുള്ള ദന്തചികിത്സ"],
+    ["upper jaw", "മേൽത്താടി"],
+    ["lower jaw", "കീഴ്ത്താടി"],
+    ["booking link", "ബുക്കിംഗ് ലിങ്ക്"],
+    ["same-day", "അതേ ദിവസം"],
+    ["professional", "വിദഗ്ദ്ധ"],
+    ["website", "വെബ്‌സൈറ്റ്"],
     ["singular dental implants", "ഒറ്റ ദന്ത ഇംപ്ലാന്റ്"],
     ["payment plan", "തവണ പദ്ധതി"],
     ["interest free", "പലിശയില്ലാത്ത"],
@@ -31,6 +40,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["and", "ഒപ്പം"],
   ],
   ta: [
+    ["all-on-4 arch", "All-on-4 ஆர்ச்"],
+    ["all-on-x arch", "All-on-X ஆர்ச்"],
+    ["existing dental work", "இருக்கும் பல் சிகிச்சை"],
+    ["upper jaw", "மேல் தாடை"],
+    ["lower jaw", "கீழ் தாடை"],
+    ["booking link", "முன்பதிவு இணைப்பு"],
+    ["same-day", "அதே நாள்"],
+    ["professional", "நிபுண"],
+    ["website", "இணையதளம்"],
     ["singular dental implants", "ஒற்றை பல் இம்ப்ளாண்ட்"],
     ["payment plan", "தவணைத் திட்டம்"],
     ["interest free", "வட்டியில்லா"],
@@ -56,6 +74,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["and", "மற்றும்"],
   ],
   bn: [
+    ["all-on-4 arch", "All-on-4 আর্চ"],
+    ["all-on-x arch", "All-on-X আর্চ"],
+    ["existing dental work", "আগের দাঁতের চিকিৎসা"],
+    ["upper jaw", "উপরের চোয়াল"],
+    ["lower jaw", "নিচের চোয়াল"],
+    ["booking link", "বুকিং লিংক"],
+    ["same-day", "একই দিনে"],
+    ["professional", "পেশাদার"],
+    ["website", "ওয়েবসাইট"],
     ["singular dental implants", "একক দাঁতের ইমপ্ল্যান্ট"],
     ["payment plan", "কিস্তি পরিকল্পনা"],
     ["interest free", "সুদমুক্ত"],
@@ -99,6 +126,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["appointment", "অ্যাপয়েন্টমেন্ট"],
   ],
   hi: [
+    ["all-on-4 arch", "All-on-4 आर्च"],
+    ["all-on-x arch", "All-on-X आर्च"],
+    ["existing dental work", "मौजूदा दंत उपचार"],
+    ["upper jaw", "ऊपरी जबड़ा"],
+    ["lower jaw", "निचला जबड़ा"],
+    ["booking link", "बुकिंग लिंक"],
+    ["same-day", "उसी दिन"],
+    ["professional", "विशेषज्ञ"],
+    ["website", "वेबसाइट"],
     ["singular dental implants", "एकल दंत इम्प्लांट"],
     ["payment plan", "किस्त योजना"],
     ["interest free", "ब्याज मुक्त"],
@@ -144,6 +180,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["appointment", "अपॉइंटमेंट"],
   ],
   es: [
+    ["all-on-4 arch", "All-on-4 arco"],
+    ["all-on-x arch", "All-on-X arco"],
+    ["existing dental work", "trabajo dental previo"],
+    ["upper jaw", "maxilar superior"],
+    ["lower jaw", "maxilar inferior"],
+    ["booking link", "enlace de reserva"],
+    ["same-day", "el mismo día"],
+    ["professional", "profesional"],
+    ["website", "sitio web"],
     ["opening hours", "horario"],
     ["check-up", "revisión"],
     ["implant", "implante"],
@@ -169,6 +214,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["swelling", "hinchazón"],
   ],
   ar: [
+    ["all-on-4 arch", "All-on-4 قوس"],
+    ["all-on-x arch", "All-on-X قوس"],
+    ["existing dental work", "علاج الأسنان الحالي"],
+    ["upper jaw", "الفك العلوي"],
+    ["lower jaw", "الفك السفلي"],
+    ["booking link", "رابط الحجز"],
+    ["same-day", "في اليوم نفسه"],
+    ["professional", "احترافي"],
+    ["website", "الموقع"],
     ["opening hours", "ساعات العمل"],
     ["check-up", "فحص"],
     ["toothache", "ألم الأسنان"],
@@ -190,6 +244,15 @@ const PHRASES: Record<string, readonly [string, string][]> = {
     ["jaw fracture", "كسر في الفك"],
   ],
   zh: [
+    ["all-on-4 arch", "All-on-4 全口"],
+    ["all-on-x arch", "All-on-X 全口"],
+    ["existing dental work", "现有牙科治疗"],
+    ["upper jaw", "上颌"],
+    ["lower jaw", "下颌"],
+    ["booking link", "预约链接"],
+    ["same-day", "当天"],
+    ["professional", "专业"],
+    ["website", "网站"],
     ["opening hours", "营业时间"],
     ["check-up", "检查"],
     ["implant", "种植牙"],
@@ -243,7 +306,7 @@ function escapeRegExp(value: string): string {
 const PROTECTED = /https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d\s().-]{7,}\d/gi;
 
 function replacePhrases(text: string, code: string): string {
-  const phrases = phrasesFor(code);
+  const phrases = phrasesFor(code).slice().sort((a, b) => b[0].length - a[0].length);
   if (!phrases.length || !text) return text;
   let out = text;
   for (const [from, to] of phrases) {

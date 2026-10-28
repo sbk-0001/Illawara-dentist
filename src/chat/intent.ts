@@ -3,7 +3,7 @@ import type { ClinicId } from "./types";
 const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   {
     clinic: "dapto",
-    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ডাপ্টো|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト/i,
+    re: /\bdapto\b|डाप्टो|डैप्टो|داپتو|داپٹو|دابتو|ڈاپٹو|ڈاپتو|داپتو|ডাপ্টো|ড্যাপ্টো|ডাপটো|达普托|達普托|답토|댑토|닥토|다프토|ντάπτο|ダプト|ഡാപ്റ്റോ|ഡാർട്ടോ|ഡാറ്റോ|ഡാപ്ടോ|டாப்டோ|டாப்லோ|தாப்போ|நாட்டோ/i,
   },
   {
     clinic: "shellharbour",
@@ -11,7 +11,7 @@ const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   },
   {
     clinic: "woonona",
-    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|উনুনা|উনা(?=\s*ক্লিনিক)|伍诺纳|沃诺纳|烏諾納|우노나|워노나|울로나/i,
+    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|वोनोना|উনোনা|উনুনা|উনা(?=\s*ক্লিনিক)|伍诺纳|沃诺纳|烏諾納|우노나|워노나|울로나|വൂനോണ|വൂനോന|വോണോന|வூனோனா|வூனோன/i,
   },
 ];
 
@@ -49,10 +49,71 @@ const SEVERE = [
   /saans nahi|saans nahin|nigal nahi|khoon nahi ruk|chehra sooj/,
 ];
 
+/** Standalone "doctor" in any script is not the suburb Dapto. */
+const DOCTOR_TOKEN = /^(?:doctor|dokter|doktor|डॉक्टर|ডাক্তার|ডাক্তৰ|ഡോക്ടർ|டாக்டர்|医生)$/iu;
+
+const FUZZY_STEMS: { clinic: ClinicId; stems: readonly string[] }[] = [
+  { clinic: "dapto", stems: ["ഡാപ്റ്റോ", "டாப்டோ", "ড্যাপটো", "डैप्टो"] },
+  { clinic: "woonona", stems: ["വൂനോണ", "വൂനോന", "வூனோனா", "উনোনা", "वूनोना"] },
+  { clinic: "shellharbour", stems: ["শেলহারবার", "शेलहार्बर"] },
+];
+
+const DAPTO_P = /[പபপपپ]/u;
+
+function editDistance(a: string, b: string): number {
+  const left = Array.from(a);
+  const right = Array.from(b);
+  if (Math.abs(left.length - right.length) > 2) return 3;
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let previous = row[0] ?? 0;
+    row[0] = i;
+    let rowMin = row[0];
+    for (let j = 1; j <= right.length; j += 1) {
+      const current = row[j] ?? 0;
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      const next = Math.min(current + 1, (row[j - 1] ?? 0) + 1, previous + cost);
+      previous = current;
+      row[j] = next;
+      if (next < rowMin) rowMin = next;
+    }
+    if (rowMin > 2) return 3;
+  }
+  return row[right.length] ?? 3;
+}
+
+function fuzzyClinic(token: string): ClinicId | null {
+  if (Array.from(token).length < 4 || DOCTOR_TOKEN.test(token)) return null;
+  let best: { clinic: ClinicId; distance: number } | null = null;
+  for (const group of FUZZY_STEMS) {
+    for (const stem of group.stems) {
+      const distance = editDistance(token, stem);
+      if (distance > 2) continue;
+      if (distance === 2 && group.clinic === "dapto" && !DAPTO_P.test(token)) continue;
+      if (!best || distance < best.distance) best = { clinic: group.clinic, distance };
+    }
+  }
+  return best?.clinic ?? null;
+}
+
+const NATIVE_WORD = /[\u0900-\u097F\u0980-\u09FF\u0B80-\u0BFF\u0D00-\u0D7F\u0600-\u06FF]+/gu;
+
+function fuzzyHits(text: string): { clinic: ClinicId; index: number }[] {
+  const hits: { clinic: ClinicId; index: number }[] = [];
+  for (const match of text.matchAll(NATIVE_WORD)) {
+    const clinic = fuzzyClinic(match[0]);
+    if (clinic) hits.push({ clinic, index: match.index ?? 0 });
+  }
+  return hits;
+}
+
 export function mentionedClinics(text: string): ClinicId[] {
   const found: ClinicId[] = [];
   for (const term of CLINIC_TERMS) {
     if (term.re.test(text) && !found.includes(term.clinic)) found.push(term.clinic);
+  }
+  for (const hit of fuzzyHits(text)) {
+    if (!found.includes(hit.clinic)) found.push(hit.clinic);
   }
   return found;
 }
@@ -68,6 +129,12 @@ export function lastClinicInText(text: string): ClinicId | null {
         best = match.index;
         clinic = term.clinic;
       }
+    }
+  }
+  for (const hit of fuzzyHits(text)) {
+    if (hit.index >= best) {
+      best = hit.index;
+      clinic = hit.clinic;
     }
   }
   return clinic;

@@ -67,6 +67,8 @@ const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string
   ru: (name, address) => `Адрес ${name}: ${address}.`,
   th: (name, address) => `ที่อยู่ของ ${name} คือ ${address}`,
   ne: (name, address) => `${name} को ठेगाना ${address} हो।`,
+  ml: (name, address) => `${name}-ന്റെ വിലാസം ${address} ആണ്.`,
+  ta: (name, address) => `${name} இன் முகவரி ${address}.`,
 };
 
 const NATIVE_ADDRESS: Record<string, RegExp> = {
@@ -111,9 +113,30 @@ function addressBlock(index: KnowledgeIndex, code: string, ids: ClinicId[]): str
     .join("\n");
 }
 
+function streetOf(index: KnowledgeIndex, id: ClinicId): string {
+  return index.contacts[id]?.address.split(",")[0]?.trim().toLowerCase() ?? "";
+}
+
+/** A named clinic's answer drops the other clinics' street lines. */
+function dropOtherClinicStreets(reply: string, index: KnowledgeIndex, keep: ClinicId): string {
+  const others = ALL_CLINICS.filter((id) => id !== keep)
+    .map((id) => streetOf(index, id))
+    .filter((street) => street.length > 6);
+  const kept = reply
+    .split("\n")
+    .map((line) => {
+      if (!others.some((street) => line.toLowerCase().includes(street))) return line;
+      const parts = line.split(/(?<=[।.!?])\s+/u).filter((part) => !others.some((street) => part.toLowerCase().includes(street)));
+      return parts.join(" ");
+    })
+    .filter((line) => line.trim().length > 0);
+  return kept.join("\n").trim();
+}
+
 /**
  * An address question has to include the street address.
  * A phone-only reply is replaced. A longer reply that missed the street gets the address appended.
+ * When the visitor named one clinic, the other clinics' streets are removed.
  */
 export function ensureAddressReply(
   reply: string,
@@ -123,18 +146,19 @@ export function ensureAddressReply(
   focus: ClinicFocus,
 ): string {
   if (!isAddressQuestion(question)) return reply;
+  const scoped = focus.kind === "one" ? dropOtherClinicStreets(reply, index, focus.clinic) : reply;
   const ids = addressClinicIds(focus);
   const missing = ids.filter((id) => {
     const address = index.contacts[id]?.address;
-    return !address || !hasStreet(reply, address);
+    return !address || !hasStreet(scoped, address);
   });
   if (!missing.length) {
-    if (!needsNativeAddress(reply, code)) return reply;
+    if (!needsNativeAddress(scoped, code)) return scoped;
     const spoken = addressBlock(index, code, ids);
-    return spoken || reply;
+    return spoken || scoped;
   }
-  const block = addressBlock(index, code, missing.length === ids.length || needsNativeAddress(reply, code) ? ids : missing);
-  if (!block) return reply;
-  if (!reply.trim() || phoneOnly(reply) || needsNativeAddress(reply, code)) return block;
-  return `${reply.trim()}\n${block}`;
+  const block = addressBlock(index, code, missing.length === ids.length || needsNativeAddress(scoped, code) ? ids : missing);
+  if (!block) return scoped;
+  if (!scoped.trim() || phoneOnly(scoped) || needsNativeAddress(scoped, code)) return block;
+  return `${scoped.trim()}\n${block}`;
 }

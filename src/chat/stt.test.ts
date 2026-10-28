@@ -90,6 +90,7 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage({ languages: ["es"] }, "¿A qué hora abre Dapto el sábado?", { final: true })).toBe("es");
     expect(interimMicLanguage({ languages: ["bn"] }, "¿A qué hora abre Dapto el sábado?", { final: false, hint: "bn", previous: "bn" })).toBe("");
     expect(utteranceLanguage("আপনারা কি দাঁত সাদা করার চিকিৎসা করেন", { final: true })).toBe("bn");
+    expect(utteranceLanguage("我牙疼", { final: true })).toBe("zh");
     const stale = { code: "bn", count: 3 };
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "bn" }] }, "क्या आप दांत सफेद करते हैं", { streak: stale, hint: "bn", previous: "bn", final: true })).toBe("hi");
     expect(stale.code).toBe("hi");

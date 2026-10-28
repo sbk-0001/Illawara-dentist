@@ -58,7 +58,7 @@ export function buildInstructions(input: {
     .map((card) => contactBlock(card, showAlternatives, input.language.code))
     .join("\n\n");
   const hoursBlock = hoursRelevant(input.question ?? "", input.chunks)
-    ? localisedHoursBlock(input.language.code, input.focus, clinicName)
+    ? localisedHoursBlock(input.language.code, input.focus, clinicName, input.question ?? "")
     : "";
   const context = input.chunks.length
     ? input.chunks
@@ -71,7 +71,7 @@ export function buildInstructions(input: {
 
   const clinicLine =
     input.focus.kind === "one"
-      ? `The question is about ${clinicName(input.focus.clinic)}. Answer for that clinic. Use the other clinics only if the visitor compares them.`
+      ? `The question is about ${clinicName(input.focus.clinic)}. Answer only for that clinic. Do not list the other clinics' addresses, phones, hours, or booking links unless the visitor asked to compare them.`
       : input.focus.kind === "many"
         ? `The question names ${input.focus.clinics.map(clinicName).join(" and ")}. Answer each named clinic from its own context.`
         : input.focus.kind === "ask"
@@ -117,10 +117,19 @@ NUMERALS AND WORDS
 Copy phone numbers, email addresses and URLs exactly. Keep Western digits 0-9. Do not rewrite 0-9 as Persian, Eastern Arabic, Devanagari or Bengali numerals.
 Never write a booking URL yourself. Emit [[BOOK:dapto]], [[BOOK:shellharbour]] or [[BOOK:woonona]]. The server replaces that token with the clinic name and the exact stored link. Do not translate /booking/ or any other path segment.
 Copy the contact labels in the directory. They are already in the reply language.
-Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, start the hours answer with the short sentence, quote that line verbatim, and do not wrap the hours in quotation marks or write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
+Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, say that sentence. Do not wrap the hours in quotation marks or write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
 Keep proper names verbatim: clinic names, street names, suburb names and dentist names. Write clinic names in Latin exactly as Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not transliterate them. Translate generic words and phrases into the reply language. Do not leave English words such as urgent, dental, concern, whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, same day treatment, emergency appointment, toothache, swelling, broken tooth, jaw fracture, urgent medical help, check-up, implant, crown, filling or cleaning inside a non-English sentence. Only proper nouns stay in Latin. In Bengali, write দাঁত সাদা করা for teeth whitening. In Hindi, write दांत सफ़ेद करना, not दांत सादा.
 When the visitor writes Banglish or Hinglish, answer in Bengali or Hindi script, not Latin. When the visitor writes Manglish, Tanglish, Arabizi or pinyin, answer in that language's native script, not Latin. Do not mix Devanagari into a Bengali reply, Bengali letters into a Hindi reply, Tamil into Malayalam, or Malayalam into Tamil.
-For Malayalam, Tamil, Hindi, Arabic, Chinese, Spanish and Bangla, write as a warm person at the clinic desk would speak. Do not sound machine-translated. Clinic names stay in Latin. Phone numbers and clock times stay in Western digits.
+For Malayalam, Tamil, Hindi, Arabic, Chinese, Spanish and Bangla, write as a warm person at the clinic desk would speak: a native receptionist, short and warm, no literal translation. English only for clinic names, phone numbers, URLs, and brand names such as All-on-4 and Invisalign. Translate arch, jaw, professional, same-day, booking link, phone, and website.
+Examples, match this tone:
+ml: Dapto Dentists ശനിയാഴ്ച രാവിലെ 8 മണി മുതൽ വൈകുന്നേരം 4 മണി വരെ തുറന്നിരിക്കും.
+ml: Dapto Dentists-ന്റെ ഫോൺ നമ്പർ 02 4288 0737 ആണ്.
+ta: Dapto Dentists சனிக்கிழமை காலை 8 மணி முதல் மாலை 4 மணி வரை திறந்திருக்கும்.
+ta: Dapto Dentists தொலைபேசி எண் 02 4288 0737 ஆகும்.
+hi: Dapto Dentists शनिवार सुबह 8 बजे से शाम 4 बजे तक खुला रहता है।
+hi: Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।
+bn: Dapto Dentists শনিবার সকাল 8টা থেকে বিকাল 4টা পর্যন্ত খোলা থাকে।
+bn: Dapto Dentists-এর ফোন নম্বর 02 4288 0737।
 In Malayalam, Tamil, Bengali and Hindi, translate checkup, cleaning, Invisalign, emergency, booking, whitening, fees, hours, singular dental implants, payment plan and interest free. Do not leave those words in English. The only Latin in those replies is clinic names, street names, phone numbers and URLs. Do not mix in Chinese, Bengali, Sinhala, Devanagari or Tamil characters when the reply language is a different script.
 
 CLINIC

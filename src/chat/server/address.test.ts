@@ -56,4 +56,16 @@ describe("address questions", () => {
     expect(already).toBe("ঠিকানা 35 Baan Baan Street, Dapto।");
     expect(ensureAddressReply("02 4288 0737", "শনিবার কখন খোলা?", "bn", index, { kind: "one", clinic: "dapto" })).toBe("02 4288 0737");
   });
+
+  it("keeps only the named clinic when a Hindi address lists all three", () => {
+    const listed = [
+      "Woonona Dentists का पता 379 Princes Highway, Woonona, NSW, 2517 है।",
+      "Dapto Dentists का पता 35 Baan Baan Street, Dapto, NSW, 2530 है।",
+      "Shellharbour Dentists का पता Suite 7, 9-25 Captain Cook Drive, Barrack Heights, NSW 2528 है।",
+    ].join("\n");
+    const only = ensureAddressReply(listed, "वोनोना क्लिनिक का पता क्या है?", "hi", index, { kind: "one", clinic: "woonona" });
+    expect(only).toContain("379 Princes Highway");
+    expect(only).not.toContain("Baan Baan");
+    expect(only).not.toContain("Captain Cook");
+  });
 });

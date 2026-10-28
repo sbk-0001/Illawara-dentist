@@ -35,7 +35,8 @@ describe("localised opening hours", () => {
 
     const bn = formatClinicHours("woonona", "bn");
     expect(bn).toContain("সোমবার–শুক্রবার");
-    expect(bn).toContain("সকাল 8:00");
+    expect(bn).toContain("সকাল 8টা");
+    expect(bn).not.toContain("8:00");
     expect(bn).toContain("শনিবার");
     expect(bn).not.toMatch(ENGLISH_DAY);
     expect(bn).not.toMatch(AMPM);
@@ -86,16 +87,14 @@ describe("localised opening hours", () => {
     expect(guardBareHoursReply("We are open on Saturday.", "en", { kind: "ask" })).toBe("We are open on Saturday.");
   });
 
-  it("adds a Chinese lead-in to a hours-only line that already names the clinic", () => {
+  it("says Chinese hours as a full sentence with 上午 and 下午", () => {
     const line = "Dapto Dentists：周一至周五 上午8:00–下午6:00, 周六 上午8:00–下午4:00。";
-    expect(mayBeBareHours("Dapto Dentists：周一至周五", "zh")).toBe(true);
-    expect(mayBeBareHours(line, "zh")).toBe(true);
+    expect(mayBeBareHours(`Dapto Dentists: ${formatClinicHours("dapto", "zh").slice(0, 6)}`, "zh")).toBe(true);
     const guarded = guardBareHoursReply(line, "zh", { kind: "one", clinic: "dapto" });
-    expect(guarded.startsWith("Dapto Dentists的营业时间如下：")).toBe(true);
-    expect(guarded.split("周一至周五").length - 1).toBe(1);
-    expect(guarded).toContain("周一至周五");
-    expect(guarded).toContain("上午8:00–下午6:00");
-    expect(guarded).toContain("周六 上午8:00–下午4:00");
+    expect(guarded).toContain("Dapto Dentists周一至周五上午8点到下午6点营业。");
+    expect(guarded).toContain("Dapto Dentists周六上午8点到下午4点营业。");
+    expect(guarded).not.toContain("8:00");
+    expect(guarded).not.toContain("营业时间如下");
     expect(guardBareHoursReply("Dapto Dentists周六也营业。", "zh", { kind: "one", clinic: "dapto" })).toBe("Dapto Dentists周六也营业。");
   });
 
@@ -113,10 +112,10 @@ describe("localised opening hours", () => {
     expect(unnamed).toContain("Shellharbour Dentists is open:");
     expect(unnamed).toContain("Woonona Dentists is open:");
 
-    const chinese = "周一至周五 上午8:00–下午6:00, 周六 上午8:00–下午4:00。Dapto Dentists 的营业时间就是这样。";
+    const chinese = `${formatClinicHours("dapto", "zh")}。Dapto Dentists 的营业时间就是这样。`;
     const zh = guardBareHoursReply(chinese, "zh", { kind: "one", clinic: "dapto" });
-    expect(zh.startsWith("Dapto Dentists的营业时间如下：")).toBe(true);
-    expect(zh.indexOf("的营业时间如下")).toBeLessThan(zh.indexOf("周一至周五"));
+    expect(zh.startsWith("Dapto Dentists周一至周五上午8点到下午6点营业。")).toBe(true);
+    expect(zh).toContain("Dapto Dentists 的营业时间就是这样。");
     expect(zh.split("周一至周五").length - 1).toBe(1);
 
     const quoted = guardBareHoursReply(
@@ -161,6 +160,19 @@ describe("localised opening hours", () => {
     }
     expect(text).toContain("opens at 8:00 AM");
     expect(text).toContain("Dapto Dentists: Saturday 8:00 AM–4:00 PM");
+  });
+
+  it("answers the asked Saturday in a Malayalam receptionist sentence", () => {
+    const question = "ഡാപ്റ്റോ ക്ലിനിക്ക് ശനിയാഴ്ച എപ്പോൾ തുറക്കും?";
+    const robotic = "Dapto Dentists തുറന്നിരിക്കുന്നു: ശനി 8:00–16:00.";
+    const spoken = guardBareHoursReply(robotic, "ml", { kind: "one", clinic: "dapto" }, question);
+    expect(spoken).toBe("Dapto Dentists ശനിയാഴ്ച രാവിലെ 8 മണി മുതൽ വൈകുന്നേരം 4 മണി വരെ തുറന്നിരിക്കും.");
+    expect(spoken).not.toContain("8:00");
+    expect(guardBareHoursReply(robotic, "ta", { kind: "one", clinic: "dapto" }, "சனிக்கிழமை எப்போது?")).toContain("காலை 8 மணி முதல் மாலை 4 மணி வரை");
+    expect(guardBareHoursReply(robotic, "hi", { kind: "one", clinic: "dapto" }, "शनिवार को कब खुलता है?")).toContain("सुबह 8 बजे से शाम 4 बजे तक");
+    expect(guardBareHoursReply(robotic, "bn", { kind: "one", clinic: "dapto" }, "শনিবার কখন খোলা?")).toContain("সকাল 8টা থেকে বিকাল 4টা পর্যন্ত");
+    expect(guardBareHoursReply(robotic, "es", { kind: "one", clinic: "dapto" }, "¿El sábado?")).toContain("de 8 de la mañana a 4 de la tarde");
+    expect(guardBareHoursReply(robotic, "ar", { kind: "one", clinic: "dapto" }, "السبت")).toContain("صباحًا");
   });
 
   it("treats an hours question or an hours chunk as relevant", () => {

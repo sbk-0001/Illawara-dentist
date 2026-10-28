@@ -269,7 +269,88 @@ export function formatClock(hhmm: string, code: string): string {
   }
 }
 
+const SPOKEN_HOURS = new Set(["ml", "ta", "hi", "bn", "zh", "ar", "es"]);
+
+function spokenClock(hhmm: string, code: string): string {
+  const { hour, minute } = parts(hhmm);
+  const h = hour12(hour);
+  const extra = minute === "00" ? "" : `:${minute}`;
+  const evening = hour >= 16;
+  const afternoon = hour >= 12 && hour < 16;
+  if (code === "ml") {
+    const part = hour < 12 ? "രാവിലെ" : evening ? "വൈകുന്നേരം" : "ഉച്ചയ്ക്ക്";
+    return `${part} ${h}${extra} മണി`;
+  }
+  if (code === "ta") {
+    const part = hour < 12 ? "காலை" : evening ? "மாலை" : "மதியம்";
+    return `${part} ${h}${extra} மணி`;
+  }
+  if (code === "hi") {
+    const part = hour < 12 ? "सुबह" : afternoon ? "दोपहर" : "शाम";
+    return `${part} ${h}${extra} बजे`;
+  }
+  if (code === "bn") {
+    const part = hour < 12 ? "সকাল" : "বিকাল";
+    return `${part} ${h}${extra}টা`;
+  }
+  if (code === "zh") return `${hour < 12 ? "上午" : "下午"}${h}${extra}点`;
+  if (code === "ar") return `${h}${extra} ${hour < 12 ? "صباحًا" : "مساءً"}`;
+  if (code === "es") return `${h}${extra} de la ${hour < 12 ? "mañana" : "tarde"}`;
+  return formatClock(hhmm, code);
+}
+
+function spokenSpan(open: string, close: string, code: string): string {
+  const start = spokenClock(open, code);
+  const end = spokenClock(close, code);
+  if (code === "ml") return `${start} മുതൽ ${end} വരെ`;
+  if (code === "ta") return `${start} முதல் ${end} வரை`;
+  if (code === "hi") return `${start} से ${end} तक`;
+  if (code === "bn") return `${start} থেকে ${end} পর্যন্ত`;
+  if (code === "zh") return `${start}到${end}`;
+  if (code === "ar") return `من ${start} إلى ${end}`;
+  if (code === "es") return `de ${start} a ${end}`;
+  return `${start}–${end}`;
+}
+
+const FULL_DAY: Record<string, Partial<Record<Day, string>>> = {
+  ml: { sat: "ശനിയാഴ്ച", sun: "ഞായറാഴ്ച", mon: "തിങ്കളാഴ്ച", fri: "വെള്ളിയാഴ്ച" },
+  ta: { sat: "சனிக்கிழமை", sun: "ஞாயிற்றுக்கிழமை", mon: "திங்கட்கிழமை", fri: "வெள்ளிக்கிழமை" },
+  hi: { sat: "शनिवार", sun: "रविवार", mon: "सोमवार", fri: "शुक्रवार" },
+  bn: { sat: "শনিবার", sun: "রবিবার", mon: "সোমবার", fri: "শুক্রবার" },
+  zh: { sat: "周六", sun: "周日", mon: "周一", fri: "周五" },
+  ar: { sat: "السبت", sun: "الأحد", mon: "الاثنين", fri: "الجمعة" },
+  es: { sat: "sábado", sun: "domingo", mon: "lunes", fri: "viernes" },
+};
+
+const DAY_ASK: { day: Day; re: RegExp }[] = [
+  { day: "sat", re: /saturday|ശനി|சனி|शनि|শনি|周六|星期六|sábado|السبت/i },
+  { day: "sun", re: /sunday|ഞായ|ஞாயி|रवि|রবি|周日|星期日|domingo|الأحد/i },
+  { day: "mon", re: /monday|തിങ്ക|திங்|सोम|সোম|周一|星期一|lunes|الاثنين/i },
+  { day: "fri", re: /friday|വെള്ളി|வெள்ளி|शुक्र|শুক্র|周五|星期五|viernes|الجمعة/i },
+];
+
+function askedDay(question: string): Day | null {
+  const hits = DAY_ASK.filter((item) => item.re.test(question));
+  return hits.length === 1 ? hits[0].day : null;
+}
+
+function weekdayLabel(code: string): string {
+  if (code === "ml") return "തിങ്കളാഴ്ച മുതൽ വെള്ളിയാഴ്ച വരെ";
+  if (code === "ta") return "திங்கள் முதல் வெள்ளி வரை";
+  if (code === "hi") return "सोमवार से शुक्रवार तक";
+  if (code === "bn") return "সোমবার থেকে শুক্রবার";
+  if (code === "zh") return "周一至周五";
+  if (code === "ar") return "من الاثنين إلى الجمعة";
+  if (code === "es") return "de lunes a viernes";
+  return formatDays(["mon", "tue", "wed", "thu", "fri"], code);
+}
+
+function dayLabel(code: string, day: Day): string {
+  return FULL_DAY[code]?.[day] || formatDays([day], code);
+}
+
 function formatSpan(open: string, close: string, code: string): string {
+  if (SPOKEN_HOURS.has(code)) return spokenSpan(open, close, code);
   if (code === "fa") return `${formatClock(open, "fa")} تا ${formatClock(close, "fa")}`;
   if (code === "de") return `${formatClock(open, code)}–${formatClock(close, code)} Uhr`;
   return `${formatClock(open, code)}–${formatClock(close, code)}`;
@@ -385,14 +466,45 @@ export function mayBeBareHours(text: string, code: string): boolean {
   return hoursShapes(code).some((shape) => shape.text === probe || shape.text.startsWith(probe));
 }
 
-function hoursSentence(code: string, id: ClinicId): string {
+function spokenHoursSentence(code: string, id: ClinicId, day: Day | null): string {
+  const name = clinicName(id);
+  const schedule = CLINIC_HOURS[id];
+  const spans = day ? schedule.spans.filter((span) => span.days.includes(day)) : schedule.spans;
+  const appointment = schedule.notes.find((note) => note.kind === "appointment" && (!day || note.days.includes(day)));
+  const sentences: string[] = [];
+  for (const span of spans) {
+    const label = span.days.length > 1 && !day ? weekdayLabel(code) : dayLabel(code, day && span.days.includes(day) ? day : span.days[0]);
+    const range = spokenSpan(span.open, span.close, code);
+    if (code === "ml") sentences.push(`${name} ${label} ${range} തുറന്നിരിക്കും.`);
+    else if (code === "ta") sentences.push(`${name} ${label} ${range} திறந்திருக்கும்.`);
+    else if (code === "hi") sentences.push(`${name} ${label} ${range} खुला रहता है।`);
+    else if (code === "bn") sentences.push(`${name} ${label} ${range} খোলা থাকে।`);
+    else if (code === "zh") sentences.push(`${name}${label}${range}营业。`);
+    else if (code === "ar") sentences.push(`يفتح ${name} ${label} ${range}.`);
+    else if (code === "es") sentences.push(`${name} abre ${label} ${range}.`);
+  }
+  if (!sentences.length && appointment) {
+    const label = dayLabel(code, day || "sat");
+    if (code === "ml") return `${name} ${label} അപ്പോയിന്റ്മെന്റിൽ മാത്രമേ തുറക്കൂ.`;
+    if (code === "ta") return `${name} ${label} முன்பதிவில் மட்டுமே திறக்கும்.`;
+    if (code === "hi") return `${name} ${label} को अपॉइंटमेंट पर खुलता है।`;
+    if (code === "bn") return `${name} ${label} অ্যাপয়েন্টমেন্টে খোলে।`;
+    if (code === "zh") return `${name}${label}需预约。`;
+    if (code === "ar") return `${name} يوم ${label} بموعد مسبق.`;
+    if (code === "es") return `${name} abre el ${label} con cita.`;
+  }
+  return sentences.join(" ");
+}
+
+function hoursSentence(code: string, id: ClinicId, question = ""): string {
+  if (SPOKEN_HOURS.has(code)) return spokenHoursSentence(code, id, askedDay(question));
   const hours = formatClinicHours(id, code).replace(/[.。]+$/u, "").trim();
   return `${hoursLeadIn(code, clinicName(id))} ${hours}.`;
 }
 
 /** One natural sentence per clinic. Not a `Clinic:` label, and the hours are not quoted. */
-function renderHours(code: string, ids: ClinicId[]): string {
-  const lines = ids.map((id) => hoursSentence(code, id));
+function renderHours(code: string, ids: ClinicId[], question = ""): string {
+  const lines = ids.map((id) => hoursSentence(code, id, question));
   if (ids.length === 1) return lines[0] ?? "";
   return `${hoursLeadIn(code, "")}\n${lines.join("\n")}`;
 }
@@ -445,15 +557,20 @@ export function ensureEnglishHoursStop(text: string): string {
     .join("\n");
 }
 
-export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }): string {
+const ROBOTIC_HOURS = /തുറന്നിരിക്കുന്നു|திறந்துள்ளது|营业时间如下|上午\d+:\d+|8:00\s*[–-]\s*16:00/;
+
+export function guardBareHoursReply(text: string, code: string, focus: ClinicFocus = { kind: "ask" }, question = ""): string {
   const cleaned = stripHoursQuotes(text).trim();
   const only = hoursOnlyClinics(cleaned, code);
   const finish = (value: string) => (code === "en" ? ensureEnglishHoursStop(value) : value);
-  if (only) return finish(renderHours(code, hoursIds(focus)));
+  if (only) return finish(renderHours(code, hoursIds(focus), question));
+  if (SPOKEN_HOURS.has(code) && cleaned.length > 0 && cleaned.length < 220 && ROBOTIC_HOURS.test(cleaned) && !/മണി|மணி|बजे|টা|点|صباح|mañana/.test(cleaned)) {
+    return finish(renderHours(code, hoursIds(focus), question));
+  }
   const { first, rest } = splitFirstSentence(cleaned);
   const matched = bareHoursClinic(first, code) || hoursOnlyClinics(first, code)?.[0] || null;
   if (!matched) return finish(text);
-  const rendered = renderHours(code, hoursIds(focus));
+  const rendered = renderHours(code, hoursIds(focus), question);
   const remainder = dropRepeatedHours(rest, code);
   return finish(remainder ? `${rendered}\n${remainder}` : rendered);
 }
@@ -464,18 +581,20 @@ export function clinicIdsForHours(focus: ClinicFocus): ClinicId[] {
   return ["dapto", "shellharbour", "woonona"];
 }
 
-export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string): string {
+export function localisedHoursBlock(code: string, focus: ClinicFocus, names: (clinic: ClinicId) => string, question = ""): string {
+  const spoken = SPOKEN_HOURS.has(code);
   const lines = clinicIdsForHours(focus).flatMap((clinic) => {
     const stored = CLINIC_HOURS[clinic];
     const schedule = formatClinicHours(clinic, code);
-    const row = `${hoursLeadIn(code, names(clinic))} ${schedule}${code === "en" && !/[.!?]$/.test(schedule) ? "." : ""}`;
+    const row = spoken
+      ? hoursSentence(code, clinic, question)
+      : `${hoursLeadIn(code, names(clinic))} ${schedule}${code === "en" && !/[.!?]$/.test(schedule) ? "." : ""}`;
     return stored.disagreement ? [row, `Do not quote the conflicting page. ${stored.disagreement}`] : [row];
   });
-  return [
-    "LOCALISED OPENING HOURS",
-    "When you state opening hours, start with the clinic name in the short sentence below, then quote the matching line below verbatim, including both the opening and the closing time. Do not wrap the hours in quotation marks. Do not write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.",
-    ...lines,
-  ].join("\n");
+  const instruction = spoken
+    ? "Say the sentence below. It already names the clinic and the day the visitor asked about, with morning and evening in the visitor's language. Do not shorten it to a 24-hour range, a colon label, or a second copy of the hours."
+    : "When you state opening hours, start with the clinic name in the short sentence below, then quote the matching line below verbatim, including both the opening and the closing time. Do not wrap the hours in quotation marks. Do not write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not answer with only the time the clinic opens. Do not translate it again. Do not use English day names or AM/PM.";
+  return ["LOCALISED OPENING HOURS", instruction, ...lines].join("\n");
 }
 
 const SKIP_REWRITE = new Set(["en", "bn-Latn", "hi-Latn"]);

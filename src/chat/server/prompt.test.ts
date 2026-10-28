@@ -265,6 +265,12 @@ describe("prompt rules", () => {
     expect(instructions).toMatch(/Only proper nouns stay in Latin/i);
     expect(instructions).toMatch(/Do not transliterate them/i);
     expect(instructions).toMatch(/Do not leave English words/i);
+    expect(instructions).toContain("Dapto Dentists ശനിയാഴ്ച രാവിലെ 8 മണി മുതൽ വൈകുന്നേരം 4 മണി വരെ തുറന്നിരിക്കും.");
+    expect(instructions).toContain("Dapto Dentists-ന്റെ ഫോൺ നമ്പർ 02 4288 0737 ആണ്.");
+    expect(instructions).toContain("Dapto Dentists சனிக்கிழமை காலை 8 மணி முதல் மாலை 4 மணி வரை திறந்திருக்கும்.");
+    expect(instructions).toContain("Dapto Dentists का फ़ोन नंबर 02 4288 0737 है।");
+    expect(instructions).toContain("Dapto Dentists শনিবার সকাল 8টা থেকে বিকাল 4টা পর্যন্ত খোলা থাকে।");
+    expect(instructions).toContain("Answer only for that clinic");
     expect(scriptRetryInstruction(language)).toMatch(/Bengali/);
     expect(scriptRetryInstruction(language)).toMatch(/Do not write English sentences/);
     expect(scriptRetryInstruction(language)).toMatch(/teeth whitening/);

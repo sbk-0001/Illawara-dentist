@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { needsServerFinalTranscript } from "../stt";
-import { GEMINI_STT_PROMPT, geminiSttPrompt, parseGeminiStt, resolveFinalTranscript, transcriptAnomaly } from "./final-transcript";
+import { GEMINI_STT_PROMPT, geminiSttPrompt, openAiTranscribeProviderOptions, parseGeminiStt, resolveFinalTranscript, STT_CLINIC_PROMPT, transcriptAnomaly } from "./final-transcript";
 
 const SINHALA = "වූනෝනේ ක්ලිනික්හින්දේ විලාසයම් එන්දා.";
 const THAANA = "ޑާބްޓޯކިއުނިކިޝަނިއާލްޗައިޕޯލްތުރަކު.";
@@ -20,6 +20,13 @@ describe("final transcript from the bake-off", () => {
     expect(transcriptAnomaly(TAMIL_MARKERS)).toBe("tamil-markers");
     expect(transcriptAnomaly("")).toBe("empty");
     expect(transcriptAnomaly("Woonona klinikinde vilasem endan")).toBe("manglish");
+    expect(transcriptAnomaly("Dental implant in etre çelevakum")).toBe("manglish");
+    expect(STT_CLINIC_PROMPT).toContain("Dapto");
+    expect(STT_CLINIC_PROMPT).toContain("Woonona");
+    expect(STT_CLINIC_PROMPT).toContain("Shellharbour");
+    expect(openAiTranscribeProviderOptions().openai.prompt).toBe(STT_CLINIC_PROMPT);
+    expect(openAiTranscribeProviderOptions("ml").openai.language).toBe("ml");
+    expect(GEMINI_STT_PROMPT).toContain("not the word for doctor");
     expect(transcriptAnomaly(MALAYALAM)).toBeNull();
     expect(transcriptAnomaly(BENGALI)).toBeNull();
     expect(transcriptAnomaly(TAMIL)).toBeNull();
@@ -38,6 +45,21 @@ describe("final transcript from the bake-off", () => {
       expect(result.sttEngine).toBe("gemini");
       expect(result.sttFallback).toBe(true);
     }
+  });
+
+  it("sends Latin Manglish to Gemini and answers in Malayalam", async () => {
+    const manglish = "Dental implant in etre çelevakum";
+    const malayalam = "ഡെന്റൽ ഇംപ്ലാന്റിന് എത്ര ചെലവാകും?";
+    const result = await resolveFinalTranscript({
+      audio: new Uint8Array(),
+      deepgram: manglish,
+      gpt: async () => manglish,
+      gemini: async () => ({ lang: "ml", transcript: malayalam }),
+    });
+    expect(result.transcript).toBe(malayalam);
+    expect(result.language).toBe("ml");
+    expect(result.sttEngine).toBe("gemini");
+    expect(result.sttFallback).toBe(true);
   });
 
   it("keeps a clean gpt-transcribe result and does not wait for Gemini", async () => {

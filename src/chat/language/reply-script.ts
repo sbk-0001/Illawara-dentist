@@ -188,7 +188,7 @@ export function sanitizeForeignScript(text: string, code: string): string {
     }
     if (!/\p{L}|\p{M}/u.test(ch) || allowedLetter(ch, code)) out += ch;
   }
-  return out;
+  return out.replace(/([A-Za-z])-\s+(?=\p{L})/gu, "$1 ");
 }
 
 /** Latin words that are not clinic names, street names, phone numbers or URLs. */

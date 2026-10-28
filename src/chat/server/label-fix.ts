@@ -201,10 +201,10 @@ function phoneSentence(code: string, clinic: string, phone: string): string {
     bn: [`${clinic}-এর ফোন নম্বর ${phone}।`, `ফোন নম্বর ${phone}।`],
     "bn-Latn": [`${clinic} er phone number ${phone}.`, `Phone number ${phone}.`],
     ar: [`رقم هاتف ${clinic} هو ${phone}.`, `رقم الهاتف هو ${phone}.`],
-    hi: [`${clinic} का फ़ोन नंबर ${phone} है।`, `फ़ोन नंबर ${phone} है।`],
+    hi: [`${clinic} का फ़ोन नंबर ${phone} है।`, `${phone} फ़ोन नंबर है।`],
     "hi-Latn": [`${clinic} ka phone number ${phone} hai.`, `Phone number ${phone} hai.`],
-    zh: [`${clinic}的电话号码是 ${phone}。`, `电话号码是 ${phone}。`],
-    es: [`El teléfono de ${clinic} es ${phone}.`, `El teléfono es ${phone}.`],
+    zh: [`${clinic}的电话是${phone}。`, `电话是${phone}。`],
+    es: [`El teléfono de ${clinic} es el ${phone}.`, `El teléfono es el ${phone}.`],
     vi: [`Số điện thoại của ${clinic} là ${phone}.`, `Số điện thoại là ${phone}.`],
     ne: [`${clinic} को फोन नम्बर ${phone} हो।`, `फोन नम्बर ${phone} हो।`],
     ko: [`${clinic}의 전화번호는 ${phone}입니다.`, `전화번호는 ${phone}입니다.`],
@@ -220,8 +220,8 @@ function phoneSentence(code: string, clinic: string, phone: string): string {
     id: [`Nomor telepon ${clinic} adalah ${phone}.`, `Nomor teleponnya adalah ${phone}.`],
     ms: [`Nombor telefon ${clinic} ialah ${phone}.`, `Nombor telefon ialah ${phone}.`],
     pa: [`${clinic} ਦਾ ਫ਼ੋਨ ਨੰਬਰ ${phone} ਹੈ।`, `ਫ਼ੋਨ ਨੰਬਰ ${phone} ਹੈ।`],
-    ta: [`${clinic} தொலைபேசி எண் ${phone}.`, `தொலைபேசி எண் ${phone}.`],
-    ml: [`${clinic} ഫോൺ നമ്പർ ${phone}.`, `ഫോൺ നമ്പർ ${phone}.`],
+    ta: [`${clinic} தொலைபேசி எண் ${phone} ஆகும்.`, `தொலைபேசி எண் ${phone} ஆகும்.`],
+    ml: [`${clinic}-ന്റെ ഫോൺ നമ്പർ ${phone} ആണ്.`, `ഫോൺ നമ്പർ ${phone} ആണ്.`],
     te: [`${clinic} ఫోన్ నంబర్ ${phone}.`, `ఫోన్ నంబర్ ${phone}.`],
     ru: [`Телефон ${clinic}: ${phone}.`, `Телефон: ${phone}.`],
     th: [`เบอร์โทรของ ${clinic} คือ ${phone}`, `เบอร์โทรคือ ${phone}`],
@@ -262,10 +262,25 @@ export function attachContactLabels<T extends LabelChunk>(
   let sealed = false;
   let particleHold = "";
   let stopHold = "";
+  let emitted = "";
   const seenPhones = new Set<string>();
+  const COPULA_ONLY = /^\s*(?:ആണ്|ஆகும்|है|हैं)[।.]?\s*$/u;
+  const remember = (delta: string): string => {
+    if (!delta) return "";
+    const trimmed = delta.trim().replace(/[।.]+$/u, "");
+    const ended = emitted.trimEnd().replace(/[।.]+$/u, "");
+    if (COPULA_ONLY.test(delta) && trimmed && ended.endsWith(trimmed)) return "";
+    emitted = `${emitted}${delta}`.slice(-160);
+    return delta;
+  };
 
   const settleParticles = (delta: string, final = false): string => {
-    const cleaned = dedupeSentenceFinal(stopHold + particleHold + delta);
+    let incoming = delta;
+    if (stopHold === "." && /^\s*[^\sA-Za-z0-9]/.test(incoming)) {
+      stopHold = "";
+      if (!/^\s/.test(incoming)) incoming = ` ${incoming}`;
+    }
+    const cleaned = dedupeSentenceFinal(stopHold + particleHold + incoming);
     particleHold = "";
     stopHold = "";
     if (final || !cleaned) return cleaned;
@@ -318,7 +333,7 @@ export function attachContactLabels<T extends LabelChunk>(
     held = "";
     if (!raw) return "";
     const body = restoreClinicNames(rewriteContactLabels(raw, input.code));
-    const hours = guardBareHoursReply(body, input.code, input.focus ?? { kind: "ask" });
+    const hours = guardBareHoursReply(body, input.code, input.focus ?? { kind: "ask" }, input.question ?? "");
     const addressed = input.question
       ? ensureAddressReply(hours, input.question, input.code, input.index, input.focus ?? { kind: "ask" })
       : hours;
@@ -328,10 +343,12 @@ export function attachContactLabels<T extends LabelChunk>(
       isShortLabelReply(raw, input.code) ||
       isOnlyContactLine(body) ||
       isOnlyContactLine(raw);
-    if (bare) {
-      const sentence = bareContactPreface(input.code, body, input.index, true) || bareContactPreface(input.code, raw, input.index, true);
-      if (sentence) return input.code === "en" ? scrubForeignEnglish(sentence) : sentence;
-    }
+    const sentence = bareContactPreface(input.code, body, input.index, true) || bareContactPreface(input.code, raw, input.index, true);
+    // The Malayalam phone template used to end at `${phone}.`. The next token ആണ്
+    // was then glued on, which is the live "0737.ആണ്" line. A short phone line is
+    // the sentence from phoneSentence, with the copula before the full stop.
+    const gluedStop = /\d\.(?=\s*[^\sA-Za-z0-9])/u.test(body) || /\d\.(?=\s*[^\sA-Za-z0-9])/u.test(raw);
+    if (sentence && (bare || gluedStop)) return input.code === "en" ? scrubForeignEnglish(sentence) : sentence;
     const deduped = dedupePhoneLines(body);
     return input.code === "en" ? scrubForeignEnglish(deduped) : deduped;
   };
@@ -362,7 +379,7 @@ export function attachContactLabels<T extends LabelChunk>(
           if (chunk.type === "text-end" || chunk.type === "finish") {
             if (!sealed) {
               sealed = true;
-              const tail = settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true);
+              const tail = remember(settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true));
               lineHold = "";
               enqueueTail(controller, tail);
             }
@@ -383,17 +400,17 @@ export function attachContactLabels<T extends LabelChunk>(
           if (pending && held.length < (hoursPending || addressPending ? 500 : 80)) return;
           passed = true;
           const visible = releaseHeld();
-          const once = settleParticles(withoutRepeat(visible));
+          const once = remember(settleParticles(withoutRepeat(visible)));
           if (once) enqueueLabeled(controller, chunk, once);
           return;
         }
-        const visible = settleParticles(withoutRepeat(rewritePass(chunk.delta)));
+        const visible = remember(settleParticles(withoutRepeat(rewritePass(chunk.delta))));
         if (visible) enqueueLabeled(controller, chunk, visible);
       },
       flush(controller) {
         if (sealed) return;
         sealed = true;
-        const tail = settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true);
+        const tail = remember(settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true));
         lineHold = "";
         enqueueTail(controller, tail);
       },

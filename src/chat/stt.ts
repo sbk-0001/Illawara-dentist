@@ -609,6 +609,8 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
   const fromScript = scriptNoteLanguage(text);
   if (fromScript === "ta" && malayalamMarkersWin(text)) return "ml";
   if (fromScript) return fromScript;
+  const han = text.match(/[\u4E00-\u9FFF]/g)?.length ?? 0;
+  if (han >= 2 && languageFromNativeScript(text) === "zh") return "zh";
   if (/[\u0980-\u09FF\u0900-\u097F]/.test(text)) return "";
   if (!text) return "";
   const detected = detectLanguage(text);

@@ -67,12 +67,20 @@ const BOOK_TOKEN = /\[\[BOOK:(dapto|shellharbour|woonona)\]\]/gi;
 const LOCATION_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /** The model writes [[BOOK:dapto]] and the server inserts the stored link. */
+function collapseRepeatedClinicName(text: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(`(${escaped})(?:\\s*[:：]\\s*\\1)+`, "g"), "$1");
+}
+
 export function expandBookTokens(text: string, index: KnowledgeIndex): string {
-  return text.replace(BOOK_TOKEN, (_all, slug: string) => {
+  const expanded = text.replace(BOOK_TOKEN, (_all, slug: string, offset: number) => {
     const card = index.contacts[slug.toLowerCase() as ClinicId];
     if (!card?.bookingUrl) return "";
+    const before = text.slice(Math.max(0, offset - card.name.length - 12), offset);
+    if (before.includes(card.name)) return card.bookingUrl;
     return `${card.name}: ${card.bookingUrl}`;
   });
+  return Object.values(index.contacts).reduce((out, card) => collapseRepeatedClinicName(out, card.name), expanded);
 }
 
 function bookingByLocation(index: KnowledgeIndex): Map<string, string> {
@@ -96,11 +104,14 @@ export function canonicalKnownUrls(text: string, index: KnowledgeIndex): string 
   return expandBookTokens(text, index).replace(/https?:\/\/[^\s<>)\]]+/gi, (raw) => {
     const trimmed = raw.replace(/[.,;:!?。]+$/g, "");
     const tail = raw.slice(trimmed.length);
-    const exact = known.get(compactUrl(trimmed));
-    if (exact) return exact + tail;
-    const location = trimmed.match(LOCATION_ID)?.[0]?.toLowerCase();
+    const glued = trimmed.match(/(patient-type|reasons)(Dapto|Shellharbour|Woonona)$/i);
+    const body = glued ? trimmed.slice(0, trimmed.length - (glued[2]?.length ?? 0)) : trimmed;
+    const suffix = glued?.[2] ? ` ${glued[2]}` : "";
+    const exact = known.get(compactUrl(body));
+    if (exact) return exact + suffix + tail;
+    const location = body.match(LOCATION_ID)?.[0]?.toLowerCase();
     const stored = location ? byLocation.get(location) : undefined;
-    if (stored && isClinicHost(trimmed)) return stored + tail;
+    if (stored && isClinicHost(body)) return stored + suffix + tail;
     if (isClinicHost(trimmed)) return "";
     return raw;
   });
@@ -618,7 +629,7 @@ function coversClinicContact(reply: string, card: ContactCard): boolean {
  */
 /** A booking URL or phone with no clinic name is not a usable booking line. */
 export function nameClinicInReply(text: string, index: KnowledgeIndex): string {
-  let out = text;
+  let out = Object.values(index.contacts).reduce((value, card) => collapseRepeatedClinicName(value, card.name), text);
   for (const id of CLINIC_ORDER) {
     const card = index.contacts[id];
     if (!card || out.includes(card.name)) continue;
@@ -628,7 +639,9 @@ export function nameClinicInReply(text: string, index: KnowledgeIndex): string {
     const hasUrl = Boolean(card.bookingUrl) && (out.includes(card.bookingUrl) || (uuid.length > 0 && out.includes(uuid)));
     if (!hasPhone && !hasUrl) continue;
     if (card.bookingUrl && out.includes(card.bookingUrl)) {
-      out = out.replace(card.bookingUrl, `${card.name}: ${card.bookingUrl}`);
+      const at = out.indexOf(card.bookingUrl);
+      const before = out.slice(Math.max(0, at - card.name.length - 12), at);
+      if (!before.includes(card.name)) out = out.replace(card.bookingUrl, `${card.name}: ${card.bookingUrl}`);
     } else if (uuid && out.includes(uuid)) {
       out = out.replace(new RegExp(`https?:\\/\\/\\S*${uuid}\\S*`), (url) => `${card.name}: ${url}`);
       if (!out.includes(card.name)) out = out.replace(uuid, `${card.name}: ${uuid}`);

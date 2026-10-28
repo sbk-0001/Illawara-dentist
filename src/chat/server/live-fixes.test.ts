@@ -54,6 +54,10 @@ describe("live reply and voice fixes", () => {
       expect(canonicalKnownUrls(translated, index)).not.toContain(segment);
     }
     expect(expandBookTokens("[[BOOK:dapto]]", index)).toBe(`Dapto Dentists: ${stored}`);
+    expect(expandBookTokens(`Dapto Dentists: [[BOOK:dapto]]`, index)).toBe(`Dapto Dentists: ${stored}`);
+    expect(expandBookTokens(`Dapto Dentists: [[BOOK:dapto]]`, index)).not.toContain("Dapto Dentists: Dapto Dentists");
+    const glued = `${stored}Woonona Dentists`;
+    expect(canonicalKnownUrls(glued, index)).toBe(`${stored} Woonona Dentists`);
     expect(canonicalKnownUrls("see [[BOOK:woonona]]", index)).toContain(index.contacts.woonona.bookingUrl);
     expect(canonicalKnownUrls("see https://bookings.zavy360.com/booking/not-a-clinic", index)).not.toContain("zavy360");
   });

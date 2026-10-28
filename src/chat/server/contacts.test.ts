@@ -103,6 +103,18 @@ describe("contact footer", () => {
     expect(mentionedClinics("셸하버 치과")).toEqual(["shellharbour"]);
     expect(mentionedClinics("伍诺纳诊所")).toEqual(["woonona"]);
     expect(mentionedClinics("شيلهاربر")).toEqual(["shellharbour"]);
+    expect(mentionedClinics("ഡാർട്ടോ ക്ലിനിക്ക്")).toEqual(["dapto"]);
+    expect(mentionedClinics("ഡാറ്റോ")).toEqual(["dapto"]);
+    expect(mentionedClinics("நாட்டோ")).toEqual(["dapto"]);
+    expect(mentionedClinics("தாப்போ")).toEqual(["dapto"]);
+    expect(mentionedClinics("டாப்லோ")).toEqual(["dapto"]);
+    expect(mentionedClinics("വൂനോന ക്ലിനിക്ക്")).toEqual(["woonona"]);
+    expect(mentionedClinics("वोनोना क्लिनिक का पता क्या है?")).toEqual(["woonona"]);
+    expect(mentionedClinics("डॉक्टर का पता")).toEqual([]);
+    expect(mentionedClinics("ডাক্তার ক্লিনিক")).toEqual([]);
+    expect(mentionedClinics("ഡോക്ടർ")).toEqual([]);
+    expect(mentionedClinics("டாக்டர்")).toEqual([]);
+    expect(mentionedClinics("doctor")).toEqual([]);
     if (follow.sources.length) {
       expect(
         shouldAppendContactFooter({ question: follow.text, sourceCount: follow.sources.length, topScore: follow.chunks[0]?.score ?? 1 }),

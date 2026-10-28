@@ -183,9 +183,9 @@ describe("contact label rewrite", () => {
       }),
     );
     const zh = chinese.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
-    expect(zh.startsWith("Dapto Dentists的营业时间如下：")).toBe(true);
-    expect(zh).toContain("上午8:00–下午6:00");
-    expect(zh).toContain("下午4:00");
+    expect(zh).toContain("Dapto Dentists周一至周五上午8点到下午6点营业。");
+    expect(zh).toContain("Dapto Dentists周六上午8点到下午4点营业。");
+    expect(zh).not.toContain("8:00");
   });
 
   it("answers an address question with the focused clinic street, not a phone alone", async () => {
@@ -245,5 +245,27 @@ describe("contact label rewrite", () => {
     const ko = await readChunks(attachContactLabels(source([korean]), { code: "ko", index, replyStatus: { missing: false } }));
     const koText = ko.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
     expect(koText.match(/02 4288 0737/g)).toHaveLength(1);
+  });
+
+  it("rewrites the live Malayalam phone line through the handler, including a split copula", async () => {
+    const live = "Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737.ആണ്.";
+    const whole = await readChunks(
+      attachContactLabels(source([live]), { code: "ml", index, replyStatus: { missing: false } }),
+    );
+    const wholeText = whole.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(wholeText).toBe("Dapto Dentists-ന്റെ ഫോൺ നമ്പർ 02 4288 0737 ആണ്.");
+    expect(wholeText).not.toContain("0737.ആണ്");
+
+    const split = await readChunks(
+      attachContactLabels(source(["Dapto Dentists ഫോൺ നമ്പർ 02 4288 0737.", "ആണ്."]), {
+        code: "ml",
+        index,
+        replyStatus: { missing: false },
+      }),
+    );
+    const splitText = split.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join("");
+    expect(splitText).not.toContain("0737.ആണ്");
+    expect(splitText).toContain("02 4288 0737 ആണ്");
+    expect(splitText.match(/ആണ്/g)).toHaveLength(1);
   });
 });
