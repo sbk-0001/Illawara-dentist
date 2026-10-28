@@ -48,10 +48,16 @@ export function dedupePhoneLines(text: string): string {
     for (const key of keys) seen.add(key);
     kept.push(line);
   }
-  return kept
-    .join("\n")
+  return dedupeSentenceFinal(kept.join("\n"));
+}
+
+/** Repeated sentence-final particles and dandas, including है।है। glued across chunks. */
+export function dedupeSentenceFinal(text: string): string {
+  return text
     .replace(/(?:है।\s*){2,}/g, "है।")
-    .replace(/(?:हैं।\s*){2,}/g, "हैं।");
+    .replace(/(?:हैं।\s*){2,}/g, "हैं।")
+    .replace(/।{2,}/g, "।")
+    .replace(/(?<!\d)\.{2,}(?!\d)/g, ".");
 }
 
 /** An English reply that still contains another script becomes the English phone sentence. */
@@ -241,7 +247,18 @@ export function attachContactLabels<T extends LabelChunk>(
   let passed = false;
   let lineHold = "";
   let sealed = false;
+  let particleHold = "";
   const seenPhones = new Set<string>();
+
+  const settleParticles = (delta: string, final = false): string => {
+    const cleaned = dedupeSentenceFinal(particleHold + delta);
+    particleHold = "";
+    if (final || !cleaned) return cleaned;
+    const match = cleaned.match(/(?:है।|हैं।|।)$/);
+    if (!match) return cleaned;
+    particleHold = match[0];
+    return cleaned.slice(0, -match[0].length);
+  };
 
   const withoutRepeat = (delta: string): string => {
     if (!delta) return "";
@@ -325,7 +342,7 @@ export function attachContactLabels<T extends LabelChunk>(
           if (chunk.type === "text-end" || chunk.type === "finish") {
             if (!sealed) {
               sealed = true;
-              const tail = withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`);
+              const tail = settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true);
               lineHold = "";
               enqueueTail(controller, tail);
             }
@@ -346,17 +363,17 @@ export function attachContactLabels<T extends LabelChunk>(
           if (pending && held.length < (hoursPending || addressPending ? 500 : 80)) return;
           passed = true;
           const visible = releaseHeld();
-          const once = withoutRepeat(visible);
+          const once = settleParticles(withoutRepeat(visible));
           if (once) enqueueLabeled(controller, chunk, once);
           return;
         }
-        const visible = withoutRepeat(rewritePass(chunk.delta));
+        const visible = settleParticles(withoutRepeat(rewritePass(chunk.delta)));
         if (visible) enqueueLabeled(controller, chunk, visible);
       },
       flush(controller) {
         if (sealed) return;
         sealed = true;
-        const tail = withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`);
+        const tail = settleParticles(withoutRepeat(`${releaseHeld()}${lineHold ? rewriteContactLabels(lineHold, input.code) : ""}`), true);
         lineHold = "";
         enqueueTail(controller, tail);
       },

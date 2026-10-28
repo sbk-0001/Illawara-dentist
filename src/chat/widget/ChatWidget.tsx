@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, finishedMicLanguage, formatLiveDrop, majoritySpokenLanguage, malayalamMishear, micListeningNote, needsOpenTranscribe, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, finishedMicLanguage, formatLiveDrop, majoritySpokenLanguage, malayalamMishear, micListeningNote, needsOpenTranscribe, noteAfterRecheck, secondPassLanguage, shouldHoldLiveTranscript, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -231,9 +231,10 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       }
       const transcript = correctTranscript(payload.transcript);
       const spoken = utteranceLanguage(transcript, { final: true, picker: pickerLanguage() });
-      voiceRequest.current = { transcript, spokenLanguage: spoken, liveDrop };
+      const confirmed = payload.language || spoken;
+      voiceRequest.current = { transcript, spokenLanguage: confirmed, liveDrop };
       setInput(transcript);
-      finishNote(noteFor(spoken));
+      finishNote(noteAfterRecheck(confirmed));
       return true;
     } catch {
       if (abandoned()) {
@@ -270,16 +271,17 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         setMicNote("");
         return;
       }
-      if (finals && !garbled) {
+      const open = needsOpenTranscribe(finals, pickerLanguage());
+      const hold = shouldHoldLiveTranscript(finals, pickerLanguage());
+      const direct = open || speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
+      if (finals && !garbled && !hold) {
         voiceRequest.current = { transcript: finals, spokenLanguage, liveDrop };
         setInput(finals);
-      } else if (garbled) {
+        setMicNote(noteFor(finishedMicLanguage(finals, pickerLanguage())));
+      } else if (garbled || hold) {
         voiceRequest.current = null;
         setInput("");
       }
-      const open = needsOpenTranscribe(finals, pickerLanguage());
-      const direct = open || speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
-      if (finals && !open) setMicNote(noteFor(finishedMicLanguage(finals, pickerLanguage())));
       const needsRepair = garbled || direct || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
       if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled || direct ? "" : finals, socketOpened: hadSocket, needsRepair })) {
         const uploaded = await uploadFallback(blob, liveDrop, {

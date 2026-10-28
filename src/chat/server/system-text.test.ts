@@ -34,7 +34,7 @@ describe("localized system text", () => {
         "Dapto Dentists में urgent dental समस्या है। दाँत में तेज़ दर्द हो रहा है, तो क्लिनिक को फ़ोन करें।",
         "hi",
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("localizes a fee sentence split across deltas and gives a Bengali try-again line", () => {

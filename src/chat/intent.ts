@@ -11,7 +11,7 @@ const CLINIC_TERMS: { clinic: ClinicId; re: RegExp }[] = [
   },
   {
     clinic: "woonona",
-    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|伍诺纳|沃诺纳|烏諾納|우노나|워노나|울로나/i,
+    re: /\bwoonona\b|bulli|thirroul|corrimal|balgownie|fairy meadow|helensburgh|fernhill|mount pleasant|وونونا|وُونونا|वूनोना|वूनोणा|উনোনা|উনুনা|উনা(?=\s*ক্লিনিক)|伍诺纳|沃诺纳|烏諾納|우노나|워노나|울로나/i,
   },
 ];
 

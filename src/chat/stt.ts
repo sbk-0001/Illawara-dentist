@@ -1,6 +1,7 @@
 import { mentionedClinics } from "./intent";
 import { languageOption } from "./language/catalog";
 import { confidentIndonesian, confidentLatinLanguage, detectLanguage, isDictionaryEnglish } from "./language/detect";
+import { malayalamMarkersWin } from "./language/indic";
 
 /**
  * Deepgram Nova-3 keyterm prompting.
@@ -340,8 +341,10 @@ export function spokenLanguageForTranscript(
   const picked = normalizeSpokenLanguage(picker);
   if (picked) return picked;
   const fromScript = languageFromNativeScript(text);
-  if (fromScript === "ml" || fromScript === "bn" || fromScript === "hi" || fromScript === "ta" || fromScript === "ar" || fromScript === "zh") return fromScript;
+  if (fromScript === "ta") return malayalamMarkersWin(text) ? "ml" : "ta";
+  if (fromScript === "ml" || fromScript === "bn" || fromScript === "hi" || fromScript === "ar" || fromScript === "zh") return fromScript;
   if (fromScript) return fromScript;
+  if (malayalamMarkersWin(text)) return "ml";
   const heardCode = normalizeSpokenLanguage(heard);
   if (heardCode === "id" && !confidentIndonesian(text)) {
     const latin = confidentLatinLanguage(text);
@@ -392,7 +395,24 @@ export function chooseCheckedTranscript(deepgram: string, open: string | null): 
 export function finishedMicLanguage(text: string, picker?: string | null): string {
   const picked = normalizeSpokenLanguage(picker);
   if (picked && picked !== "en" && picked !== "te") return picked;
+  if (malayalamMarkersWin(text)) return "ml";
   return scriptNoteLanguage(text) || languageFromNativeScript(text) || "";
+}
+
+/**
+ * Auto Tamil, Telugu, Kannada, Manglish, or a picker whose transcript is in
+ * the wrong script. The box stays empty until the recheck returns, so the
+ * note is not stuck on "Transcribing…" after the language is known.
+ */
+export function shouldHoldLiveTranscript(text: string, picker?: string | null): boolean {
+  if (needsOpenTranscribe(text, picker)) return true;
+  const picked = normalizeSpokenLanguage(picker);
+  return Boolean(picked && requiresNativeScript(picked) && text.trim() && !hasNativeScript(picked, text));
+}
+
+/** Mic line after the Malayalam/Tamil recheck. Never the in-progress "Transcribing…" line. */
+export function noteAfterRecheck(code: string | null | undefined): string {
+  return micListeningNote(code);
 }
 
 /** Language for the gpt-4o-mini-transcribe pass. A Bengali hint wins over a Hindi tag. */
@@ -570,6 +590,7 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
   if (picked) return picked;
   const text = transcript.replace(/\s+/g, " ").trim();
   const fromScript = scriptNoteLanguage(text);
+  if (fromScript === "ta" && malayalamMarkersWin(text)) return "ml";
   if (fromScript) return fromScript;
   if (/[\u0980-\u09FF\u0900-\u097F]/.test(text)) return "";
   if (!text) return "";
@@ -584,6 +605,8 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
   }
   if (detected.code === "bn-Latn") return "bn";
   if (detected.code === "hi-Latn") return "hi";
+  if (detected.code === "ml-Latn" || malayalamMarkersWin(text)) return "ml";
+  if (detected.code === "ta-Latn") return "ta";
   if (detected.code === "und" || detected.fallback) return isDictionaryEnglish(text) ? "en" : "";
   if (detectedCode === "te") return "";
   return detected.code;

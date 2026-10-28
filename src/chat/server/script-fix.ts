@@ -1,3 +1,5 @@
+import { sanitizeForeignScript } from "../language/reply-script";
+
 /**
  * Deterministic script cleanup for replies that must stay in one writing system.
  * Banglish/Hinglish: transliterate any Bengali or Devanagari that slips in.
@@ -311,10 +313,10 @@ export function devanagariToBengali(text: string): string {
 export function fixReplyScript(text: string, code: string, visitorText = ""): string {
   if (code === "bn-Latn") return transliterateBengali(text);
   if (code === "hi-Latn") return transliterateDevanagari(text);
-  if (code === "hi") return bengaliToDevanagari(text);
-  if (code === "bn") return devanagariToBengali(text);
-  if (code === "zh" && !visitorUsesTraditional(visitorText)) return toSimplified(text);
-  return text;
+  if (code === "hi") return sanitizeForeignScript(bengaliToDevanagari(text), code);
+  if (code === "bn") return sanitizeForeignScript(devanagariToBengali(text), code);
+  if (code === "zh" && !visitorUsesTraditional(visitorText)) return sanitizeForeignScript(toSimplified(text), code);
+  return sanitizeForeignScript(text, code);
 }
 
 function holdsCluster(ch: string, code: string): boolean {
@@ -329,7 +331,7 @@ export function createScriptBuffer(code: string, visitorText = "") {
   const active = code === "bn-Latn" || code === "hi-Latn" || code === "bn" || code === "hi" || (code === "zh" && !visitorUsesTraditional(visitorText));
   return {
     push(delta: string): string {
-      if (!active) return delta;
+      if (!active) return sanitizeForeignScript(delta, code);
       const chars = [...(hold + delta)];
       hold = "";
       if (code === "bn-Latn" || code === "hi-Latn") {

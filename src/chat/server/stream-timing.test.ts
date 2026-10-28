@@ -277,7 +277,7 @@ describe("first-token timeout", () => {
 
     const hindi =
       "Dapto Dentists में urgent dental समस्या है। दाँत में तेज़ दर्द हो रहा है, तो क्लिनिक को फ़ोन करें। Invisalign और appointment के लिए भी कॉल कर सकते हैं।";
-    expect(replyScriptConflicts(hindi, "hi")).toBe(false);
+    expect(replyScriptConflicts(hindi, "hi")).toBe(true);
     expect(replyScriptRatio(hindi, "hi")).toBeGreaterThanOrEqual(0.4);
     const events: ChatTimingEvent[] = [];
     let hindiCalls = 0;
@@ -298,7 +298,7 @@ describe("first-token timeout", () => {
     expect(events[0]?.stalled).toBeNull();
     expect(events[0]?.scriptRatio).toBeGreaterThanOrEqual(0.4);
 
-    const weaker = "Please call the clinic today about urgent dental care and an appointment.";
+    const weaker = "Please call the clinic today and ask the front desk for help.";
     const readable = "Please visit the clinic for urgent dental care today and ask the front desk for help. दाँत";
     let savedCalls = 0;
     const saved = createRetryingTextStream({

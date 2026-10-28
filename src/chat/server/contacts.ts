@@ -63,17 +63,44 @@ function isClinicHost(url: string): boolean {
   }
 }
 
+const BOOK_TOKEN = /\[\[BOOK:(dapto|shellharbour|woonona)\]\]/gi;
+const LOCATION_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** The model writes [[BOOK:dapto]] and the server inserts the stored link. */
+export function expandBookTokens(text: string, index: KnowledgeIndex): string {
+  return text.replace(BOOK_TOKEN, (_all, slug: string) => {
+    const card = index.contacts[slug.toLowerCase() as ClinicId];
+    if (!card?.bookingUrl) return "";
+    return `${card.name}: ${card.bookingUrl}`;
+  });
+}
+
+function bookingByLocation(index: KnowledgeIndex): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const card of Object.values(index.contacts)) {
+    const id = card.bookingUrl.match(LOCATION_ID)?.[0]?.toLowerCase();
+    if (id && !found.has(id)) found.set(id, card.bookingUrl);
+  }
+  return found;
+}
+
 /**
  * A model URL that matches a stored URL once hyphens are removed is rewritten
- * to that exact URL. Any other clinic or booking URL is removed.
+ * to that exact URL. A bookings.zavy360.com URL is rewritten from its location
+ * id even when the path segment was translated (/reserva/, /बुकिंग/, /ബുക്കിംഗ്/).
+ * Any other clinic or booking URL is removed. [[BOOK:clinic]] expands first.
  */
 export function canonicalKnownUrls(text: string, index: KnowledgeIndex): string {
   const known = knownUrls(index);
-  return text.replace(/https?:\/\/[^\s<>)\]]+/gi, (raw) => {
+  const byLocation = bookingByLocation(index);
+  return expandBookTokens(text, index).replace(/https?:\/\/[^\s<>)\]]+/gi, (raw) => {
     const trimmed = raw.replace(/[.,;:!?。]+$/g, "");
     const tail = raw.slice(trimmed.length);
     const exact = known.get(compactUrl(trimmed));
     if (exact) return exact + tail;
+    const location = trimmed.match(LOCATION_ID)?.[0]?.toLowerCase();
+    const stored = location ? byLocation.get(location) : undefined;
+    if (stored && isClinicHost(trimmed)) return stored + tail;
     if (isClinicHost(trimmed)) return "";
     return raw;
   });
@@ -83,6 +110,16 @@ function splitTrailingUrl(text: string): { visible: string; hold: string } {
   const match = text.match(/https?:\/\/\S*$/i);
   if (!match || match.index === undefined) return { visible: text, hold: "" };
   return { visible: text.slice(0, match.index), hold: match[0] };
+}
+
+/** Hold an unfinished https:// URL or [[BOOK: token so a translated path never flushes. */
+function splitPendingLink(text: string): { visible: string; hold: string } {
+  const url = splitTrailingUrl(text);
+  const open = url.visible.lastIndexOf("[[");
+  if (open >= 0 && !url.visible.slice(open).includes("]]") && url.visible.length - open <= 24) {
+    return { visible: url.visible.slice(0, open), hold: url.visible.slice(open) + url.hold };
+  }
+  return url;
 }
 
 const LEAD: Record<string, string> = {
@@ -460,6 +497,29 @@ function replyClearlyHasNoInfo(text: string): boolean {
   return Boolean(matchedNoInfoPhrase(text)) && wordCount(text) <= 48;
 }
 
+const BOOKING_QUESTION =
+  /\breserv|\bbook(?:ing)?\b|\bcita\b|prenot|rendez|ബുക്ക്|ബുക്കിംഗ്|முன்பதிவு|बुकिंग|\bबुक\b|حجز|预约|예약|বুকিং|বুক কর/i;
+
+/**
+ * A booking answer names the clinic and includes that clinic's stored URL.
+ * A question that names no clinic gets each clinic's name and link.
+ */
+export function ensureBookingReply(reply: string, question: string, index: KnowledgeIndex, focus: ClinicFocus): string {
+  if (!BOOKING_QUESTION.test(question)) return reply;
+  const ids = focus.kind === "one" ? [focus.clinic] : focus.kind === "many" ? focus.clinics : CLINIC_ORDER;
+  const missing = ids.filter((id) => {
+    const card = index.contacts[id];
+    if (!card?.bookingUrl) return false;
+    return !reply.includes(card.name) || !reply.includes(card.bookingUrl);
+  });
+  if (!missing.length) return reply;
+  const lines = missing.map((id) => {
+    const card = index.contacts[id];
+    return `${card.name}: ${card.bookingUrl}`;
+  });
+  return `${reply.trim()}\n${lines.join("\n")}`.trim();
+}
+
 const CONTACT_QUESTION =
   /phone|e-?mail|\bnumber\b|\bcall\b|address|booking|\bbook\b|appointment|\bcontact\b|zavy|ফোন|নম্বর|বুকিং|ঠিকানা|फ़ोन|फोन|नंबर|पता|बुकिंग|هاتف|رقم|حجز|عنوان|电话|預約|预约|地址|전화|예약|주소|điện thoại|đặt lịch|địa chỉ|τηλέφων|ραντεβού|διεύθυνσ|telefono|prenot|indirizzo|teléfono|reserv|dirección|فون|نمبر|بکنگ|پتہ|تلفن|آدرس|نوبت|טלפון|כתובת|לקבוע|téléphon|rendez-vous|adresse|anrufen|buchen|telefone|endereço/i;
 
@@ -750,7 +810,7 @@ export function attachContactFooter<T extends FooterChunk>(
     pending = "";
     if (drained.sawSentinel) sawSentinel = true;
     if (!final) {
-      const split = splitTrailingUrl(drained.visible);
+      const split = splitPendingLink(drained.visible);
       urlHold = split.hold + drained.hold;
       return prepareVisible(split.visible);
     }
@@ -763,6 +823,20 @@ export function attachContactFooter<T extends FooterChunk>(
     sealed = true;
     const visible = drain(true);
     if (visible && textId) controller.enqueue({ type: "text-delta", id: textId, delta: visible } as T);
+    if (input.index) {
+      const booked = ensureBookingReply(shown, input.question, input.index, input.focus ?? { kind: "any" });
+      if (booked.startsWith(shown) && booked.length > shown.length) {
+        const extra = booked.slice(shown.length);
+        shown = booked;
+        if (extra.trim()) {
+          if (!textId) {
+            textId = "contact-footer";
+            controller.enqueue({ type: "text-start", id: textId } as T);
+          }
+          controller.enqueue({ type: "text-delta", id: textId, delta: extra } as T);
+        }
+      }
+    }
     const kind = chooseContactFooter({
       question: input.question,
       sourceCount: input.sourceCount ?? (input.sourcesFound ? 1 : 0),

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { addressFocus } from "./address";
 import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
+import { malayalamMarkersWin } from "../language/indic";
 import { languageFromNativeScript, normalizeSpokenLanguage, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
@@ -171,6 +172,7 @@ export function prepareTurn(
     else if (textDetection.code !== "und" && !textDetection.fallback) {
       spokenLanguage = romanToNative[textDetection.code] || textDetection.code;
     }
+    if (malayalamMarkersWin(text)) spokenLanguage = "ml";
     if (spokenLanguage === "id" && !confidentIndonesian(text)) spokenLanguage = null;
   }
   // A picker locks the reply. Auto voice uses this utterance's script or its own
@@ -201,7 +203,7 @@ export function prepareTurn(
     else if (englishReply && !languageFromNativeScript(text)) reply = replyFromOption(englishReply, "detected", false);
   }
   if (inputMode === "voice" && !pickerLocked) {
-    const scriptCode = languageFromNativeScript(text);
+    const scriptCode = malayalamMarkersWin(text) ? "ml" : languageFromNativeScript(text);
     const voiced = scriptCode || (spokenLanguage && spokenLanguage !== "en" && spokenLanguage !== "id" && softText ? spokenLanguage : null);
     const option = voiced ? languageOption(voiced) : undefined;
     if (option) {
@@ -213,7 +215,15 @@ export function prepareTurn(
   const priorTexts = messages
     .slice(0, Math.max(0, messages.map((message) => message.role).lastIndexOf("user")))
     .map((message) => messageText(message));
-  const focus = addressFocus(text, priorTexts, clinicFocus(clinicContextText(turns)));
+  const namedNow = mentionedClinics(text);
+  const inherited = clinicFocus(clinicContextText(turns));
+  const preferred =
+    namedNow.length === 1
+      ? { kind: "one" as const, clinic: namedNow[0] }
+      : namedNow.length > 1
+        ? { kind: "many" as const, clinics: namedNow }
+        : inherited;
+  const focus = addressFocus(text, priorTexts, preferred);
   const severe = isSevereEmergency(text);
   const letterless = !hasLetters(text);
   const chunks = !letterless && query ? searchIndex(index, query, 8).slice(0, 6) : [];

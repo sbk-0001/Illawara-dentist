@@ -16,7 +16,10 @@ export function isAddressQuestion(text: string): boolean {
  * recently in the conversation. With no prior clinic, list all three.
  */
 export function addressFocus(question: string, priorTexts: readonly string[], current: ClinicFocus): ClinicFocus {
-  if (!isAddressQuestion(question) || mentionedClinics(question).length > 0) return current;
+  const named = mentionedClinics(question);
+  if (named.length === 1) return { kind: "one", clinic: named[0] };
+  if (named.length > 1) return { kind: "many", clinics: named };
+  if (!isAddressQuestion(question)) return current;
   const recent = lastMentionedClinic(priorTexts);
   if (recent) return { kind: "one", clinic: recent };
   return { kind: "many", clinics: [...ALL_CLINICS] };

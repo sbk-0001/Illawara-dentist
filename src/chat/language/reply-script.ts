@@ -55,7 +55,7 @@ const NATIVE_REPLY: Record<string, RegExp> = {
  * words may not. URLs and email addresses are not service words either.
  */
 const PROPER_LATIN =
-  /\b(?:illawarra dentists|dapto dentists|shellharbour dentists|woonona dentists|barrack heights|shell cove|oak flats|albion park|lake heights|fairy meadow|mount pleasant|baan baan|captain cook|princes highway|zavy ?360|invisalign|shellharbour|shell harbor|woonona|illawarra|dapto|warilla|kiama|windang|blackbutt|tullimbar|warrawong|calderwood|bulli|thirroul|corrimal|balgownie|helensburgh|fernhill|nsw|suite|street|drive|highway)\b/gi;
+  /\b(?:illawarra dentists|dapto dentists|shellharbour dentists|woonona dentists|barrack heights|shell cove|oak flats|albion park|lake heights|fairy meadow|mount pleasant|baan baan|captain cook|princes highway|zavy ?360|shellharbour|shell harbor|woonona|illawarra|dapto|warilla|kiama|windang|blackbutt|tullimbar|warrawong|calderwood|bulli|thirroul|corrimal|balgownie|helensburgh|fernhill|nsw|suite|street|drive|highway)\b/gi;
 
 const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/;
 
@@ -126,6 +126,71 @@ export function latinWordRun(text: string): number {
   return latinRuns(text).longest;
 }
 
+const STRICT_NATIVE = new Set(["ml", "ta", "bn", "hi"]);
+
+const FOREIGN_BLOCKS: { id: string; re: RegExp }[] = [
+  { id: "bn", re: /[\u0980-\u09FF]/g },
+  { id: "deva", re: /[\u0900-\u097F]/g },
+  { id: "ta", re: /[\u0B80-\u0BFF]/g },
+  { id: "ml", re: /[\u0D00-\u0D7F]/g },
+  { id: "si", re: /[\u0D80-\u0DFF]/g },
+  { id: "zh", re: /[\u4E00-\u9FFF]/g },
+  { id: "kana", re: /[\u3040-\u30FF]/g },
+  { id: "ko", re: /[\uAC00-\uD7AF]/g },
+  { id: "ar", re: /[\u0600-\u06FF]/g },
+  { id: "ru", re: /[\u0400-\u04FF]/g },
+  { id: "th", re: /[\u0E00-\u0E7F]/g },
+  { id: "el", re: /[\u0370-\u03FF]/g },
+  { id: "he", re: /[\u0590-\u05FF]/g },
+];
+
+function allowedScripts(code: string): Set<string> {
+  if (code === "ml") return new Set(["ml"]);
+  if (code === "ta") return new Set(["ta"]);
+  if (code === "bn") return new Set(["bn"]);
+  if (code === "hi" || code === "ne") return new Set(["deva"]);
+  if (code === "ar" || code === "ur" || code === "fa") return new Set(["ar"]);
+  if (code === "zh") return new Set(["zh"]);
+  if (code === "ja") return new Set(["zh", "kana"]);
+  if (code === "ko") return new Set(["ko"]);
+  if (code === "th") return new Set(["th"]);
+  if (code === "el") return new Set(["el"]);
+  if (code === "ru") return new Set(["ru"]);
+  if (code === "he") return new Set(["he"]);
+  if (code === "pa") return new Set(["pa"]);
+  return new Set();
+}
+
+/** Letters from a script this reply is not allowed to use. Latin is allowed. */
+export function foreignScriptCount(text: string, code: string): number {
+  const allow = allowedScripts(code);
+  let total = 0;
+  for (const block of FOREIGN_BLOCKS) {
+    if (allow.has(block.id)) continue;
+    total += text.match(new RegExp(block.re.source, "g"))?.length ?? 0;
+  }
+  return total;
+}
+
+/** Drop characters from a non-target, non-Latin script. Clinic names and URLs stay. */
+export function sanitizeForeignScript(text: string, code: string): string {
+  const allow = allowedScripts(code);
+  let out = text;
+  for (const block of FOREIGN_BLOCKS) {
+    if (allow.has(block.id)) continue;
+    out = out.replace(new RegExp(block.re.source, "g"), "");
+  }
+  return out;
+}
+
+/** Latin words that are not clinic names, street names, phone numbers or URLs. */
+export function unexpectedLatinWords(text: string): string[] {
+  const body = withoutProperNouns(text)
+    .replace(/\$\s?\d[\d,]*/g, " ")
+    .replace(/\b(?:am|pm)\b/gi, " ");
+  return body.match(/[A-Za-z\u00C0-\u024F]{2,}/g) ?? [];
+}
+
 export type ScriptMeasure = { ratio: number | null; conflicts: boolean };
 
 /**
@@ -148,6 +213,8 @@ export function measureReplyScript(text: string, code: string): ScriptMeasure {
 
 /** The finished text is in the wrong script when the target script is under 40%. */
 export function replyScriptConflicts(text: string, code: string): boolean {
+  if (STRICT_NATIVE.has(code) && unexpectedLatinWords(text).length > 0) return true;
+  if (foreignScriptCount(text, code) >= 4) return true;
   return measureReplyScript(text, code).conflicts;
 }
 
@@ -199,6 +266,8 @@ export function detectedReplyScript(text: string): string {
 }
 
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
+  if (foreignScriptCount(text, code) >= 4) return final ? "conflict" : "wait";
+  if (STRICT_NATIVE.has(code) && unexpectedLatinWords(text).length > 0) return final ? "conflict" : "wait";
   if (!NATIVE_REPLY[code]) {
     const indic = code === "en" && /[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\u0B80-\u0BFF\u0D00-\u0D7F]/.test(text);
     if (indic && text.trim().length < SHORT_REPLY) return final ? "conflict" : "wait";
