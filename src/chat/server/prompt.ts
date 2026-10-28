@@ -4,8 +4,9 @@ import type { ContactCard, KnowledgeIndex, ReplyLanguage } from "../types";
 import type { ScoredChunk } from "../retrieval/search";
 import { clinicName } from "../retrieval/search";
 import { isAddressQuestion } from "./address";
+import { needsClarification } from "./utterance";
 import { directoryLabels } from "./contacts";
-import { formatClinicHours, hoursRelevant, localisedHoursBlock } from "./hours";
+import { formatClinicHours, hoursRelevant, localisedHoursBlock, questionAsksHours } from "./hours";
 import { glossaryBlock } from "./glossary";
 import { stripFeeCaveat } from "./system-text";
 
@@ -16,7 +17,7 @@ export function scriptRetryInstruction(language: ReplyLanguage): string {
   return `The previous answer used the wrong writing system or left English words in the reply. Rewrite the entire answer in ${language.label}, using ${language.script}. Do not write English sentences. Translate generic words and phrases such as urgent, dental, concern, whitening, teeth whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, check-up, implant, crown and filling. Only proper nouns stay in Latin: clinic names, street names, suburb names, dentist names, phone numbers and URLs. Do not transliterate clinic names. Do not copy English disclaimers from the source pages. Start with the status tag, then at least one full sentence.`;
 }
 export const CHAT_MODEL_REASON =
-  "openai/gpt-5.4-mini is tagged fast on the AI Gateway and is built for high-volume chat, which keeps time-to-first-token down for a public widget while still following multilingual script instructions.";
+  "openai/gpt-5.4-mini stays the chat model. The gateway list includes newer OpenAI ids such as openai/gpt-5.6-sol, but this environment has no AI_GATEWAY_API_KEY, so first-token p95 against the 2.5s budget was not measured. The prompt is tightened instead of switching models.";
 
 function wantsAlternatePhones(question: string | undefined): boolean {
   return /other (?:phone|number)s?|alternative (?:phone|number)s?|another (?:phone|number)|second (?:phone|number)|all (?:the )?(?:phone )?numbers|\balternatives\b/i.test(question || "");
@@ -76,7 +77,7 @@ export function buildInstructions(input: {
         ? `The question names ${input.focus.clinics.map(clinicName).join(" and ")}. Answer each named clinic from its own context.`
         : input.focus.kind === "ask"
           ? "The question is location-specific (hours, address, parking, dentists or phone) but does not say which clinic. Ask which of Dapto, Shellharbour or Woonona they mean. Do not guess one clinic's hours or address as if it applied to all three. You may list the three clinic names."
-          : "If the question is not tied to one clinic, speak for the group and name a clinic when a fact belongs to only one of them.";
+          : "The visitor did not name a clinic. Give one combined answer for the group. Mention Dapto Dentists, Shellharbour Dentists, and Woonona Dentists at most once each. Do not repeat a clinic name in a later sentence, and do not say both names and then list them again.";
 
   const catalogued = languageOption(input.language.code);
   const instruction = catalogued
@@ -88,7 +89,14 @@ export function buildInstructions(input: {
     ? "The visitor's language could not be detected. Reply in English and say, in that reply, that you could not tell which language they wrote in."
     : `${instruction} The reply language code is ${input.language.code}. Match this language and script even if earlier messages were in another language. A language the visitor picked overrides the language they typed in.`;
 
-  const addressLine = isAddressQuestion(input.question ?? "")
+  const question = input.question ?? "";
+  const hoursIntent = questionAsksHours(question)
+    ? "The visitor asked when the clinic opens. Answer with the opening hours only. Do not treat a similar-sounding word as a product such as arch or an implant."
+    : "";
+  const clarifyLine = needsClarification(question)
+    ? "The visitor's words are unclear. Ask one short clarifying question in the reply language. Do not guess a treatment, a product, a price, or a clinic fact."
+    : "";
+  const addressLine = isAddressQuestion(question)
     ? input.focus.kind === "one"
       ? `The visitor asked for an address. Give the street address of ${clinicName(input.focus.clinic)}. Do not answer with only a phone number.`
       : "The visitor asked for an address and did not name a clinic. List the street address of Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not answer with only a phone number. Do not ask which clinic they mean."
@@ -120,7 +128,7 @@ Copy the contact labels in the directory. They are already in the reply language
 Translate day names, AM and PM, and every other sentence. Do not paste English day names or AM/PM into a non-English reply. When LOCALISED OPENING HOURS is present, say that sentence. Do not wrap the hours in quotation marks or write a Clinic: label. Do not repeat the hours. Do not put the clinic name after the hours. Do not copy English boilerplate from the pages. If you mention that fees or payment arrangements vary, write that sentence in the reply language.
 Keep proper names verbatim: clinic names, street names, suburb names and dentist names. Write clinic names in Latin exactly as Dapto Dentists, Shellharbour Dentists and Woonona Dentists. Do not transliterate them. Translate generic words and phrases into the reply language. Do not leave English words such as urgent, dental, concern, whitening, options, assessment, booking, cosmetic dentistry, same-day appointment, urgent care, same day treatment, emergency appointment, toothache, swelling, broken tooth, jaw fracture, urgent medical help, check-up, implant, crown, filling or cleaning inside a non-English sentence. Only proper nouns stay in Latin. In Bengali, write দাঁত সাদা করা for teeth whitening. In Hindi, write दांत सफ़ेद करना, not दांत सादा.
 When the visitor writes Banglish or Hinglish, answer in Bengali or Hindi script, not Latin. When the visitor writes Manglish, Tanglish, Arabizi or pinyin, answer in that language's native script, not Latin. Do not mix Devanagari into a Bengali reply, Bengali letters into a Hindi reply, Tamil into Malayalam, or Malayalam into Tamil.
-For Malayalam, Tamil, Hindi, Arabic, Chinese, Spanish and Bangla, write as a warm person at the clinic desk would speak: a native receptionist, short and warm, no literal translation. English only for clinic names, phone numbers, URLs, and brand names such as All-on-4 and Invisalign. Translate arch, jaw, professional, same-day, booking link, phone, and website.
+For Malayalam, Tamil, Hindi, Arabic, Chinese, Spanish and Bangla, write as a warm person at the clinic desk would speak: a native receptionist, short and warm, no literal translation. Say a service name once, then continue without repeating it. English only for clinic names, phone numbers, URLs, and brand names such as All-on-4 and Invisalign. Translate arch, jaw, professional, same-day, booking link, phone, and website.
 Examples, match this tone:
 ml: Dapto Dentists ശനിയാഴ്ച രാവിലെ 8 മണി മുതൽ വൈകുന്നേരം 4 മണി വരെ തുറന്നിരിക്കും.
 ml: Dapto Dentists-ന്റെ ഫോൺ നമ്പർ 02 4288 0737 ആണ്.
@@ -134,6 +142,8 @@ In Malayalam, Tamil, Bengali and Hindi, translate checkup, cleaning, Invisalign,
 
 CLINIC
 ${clinicLine}
+${hoursIntent}
+${clarifyLine}
 ${addressLine}
 
 SAFETY
@@ -141,7 +151,7 @@ ${severeLine}
 Do not diagnose. Do not tell the visitor what procedure they need.
 
 PRICES
-If the context does not price the asked item, say the website does not list that exact item. Quote only a written figure and name its product. Singular implants and a crown from $5000, or about $30 a week on a payment plan, is not the price of zirconia implants. A gallery caption is not a price. Then give the clinic phone and booking link.
+If the context does not price the asked item, say the website does not list that exact item. If the context does contain a price, quote that same figure in every language and name its product and clinic. Do not say the fee is unlisted when a figure is in the context. Singular implants and a crown from $5000, or about $30 a week on a payment plan, is not the price of zirconia implants. A gallery caption is not a price. Then give the clinic phone and booking link.
 
 OFF TOPIC
 If the question is not about these clinics, their services, fees, visits, payments or oral health on their sites, refuse it in the reply language. Start that refusal with [[N]] and do not type phone numbers yourself.

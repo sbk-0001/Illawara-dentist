@@ -1,7 +1,7 @@
 import { experimental_transcribe } from "ai";
-import { detectLanguage } from "../language/detect";
-import { judgeIndicPair, malayalamMarkersWin } from "../language/indic";
-import { normalizeSpokenLanguage } from "../stt";
+import { confidentLatinLanguage, detectLanguage } from "../language/detect";
+import { judgeIndicPair, latinManglish, malayalamMarkersWin } from "../language/indic";
+import { needsServerFinalTranscript, normalizeSpokenLanguage } from "../stt";
 
 /**
  * Bake-off winner for Bengali, Hindi, and Tamil, and the first pass on Auto.
@@ -199,6 +199,43 @@ function malayalamRescue(value: GeminiStt | null): string {
  * Picker ml: Gemini is primary and gpt-transcribe language=ml is the timeout fallback.
  * Picker ta/hi/bn: gpt-transcribe with that language.
  */
+/**
+ * The transcribe route's fused decision for one Deepgram final.
+ * A confident English final still enters the fuse when the words are Manglish.
+ * Returns `fused: false` only when Deepgram's text is kept as-is.
+ */
+export async function resolveFusedLiveFinal(input: {
+  liveTranscript: string;
+  picker?: string | null;
+  audio?: Uint8Array;
+  mediaType?: string;
+  signal?: AbortSignal;
+  gpt?: GptCall;
+  gemini?: GeminiCall;
+}): Promise<{ fused: boolean } & FinalTranscript> {
+  const picker = input.picker ?? null;
+  if (!needsServerFinalTranscript(input.liveTranscript, picker)) {
+    const latin = confidentLatinLanguage(input.liveTranscript);
+    return {
+      fused: false,
+      transcript: input.liveTranscript,
+      language: latin === "es" ? "es" : "en",
+      sttEngine: "deepgram",
+      sttFallback: false,
+    };
+  }
+  const result = await resolveFinalTranscript({
+    audio: input.audio ?? new Uint8Array(),
+    mediaType: input.mediaType,
+    picker,
+    deepgram: input.liveTranscript,
+    signal: input.signal,
+    gpt: input.gpt,
+    gemini: input.gemini,
+  });
+  return { fused: true, ...result };
+}
+
 export async function resolveFinalTranscript(input: {
   audio: Uint8Array;
   mediaType?: string;
@@ -260,7 +297,8 @@ async function resolveAuto(deepgram: string, gpt: GptCall, gemini: GeminiCall): 
     rescue.abort();
     return { transcript: gptText, language: clean, sttEngine: "gpt-transcribe", sttFallback: false };
   }
-  if (gptText && !transcriptAnomaly(gptText)) {
+  const deepgramManglish = latinManglish(deepgram) || transcriptAnomaly(deepgram) === "manglish";
+  if (gptText && !transcriptAnomaly(gptText) && !deepgramManglish) {
     rescue.abort();
     const latin = detectLanguage(gptText);
     const language = latin.code === "es" ? "es" : latin.code === "zh" ? "zh" : latin.code === "ar" ? "ar" : "en";

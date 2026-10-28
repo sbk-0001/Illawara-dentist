@@ -1,7 +1,7 @@
 import { mentionedClinics } from "./intent";
 import { languageOption } from "./language/catalog";
 import { confidentIndonesian, confidentLatinLanguage, detectLanguage, isDictionaryEnglish } from "./language/detect";
-import { malayalamMarkersWin } from "./language/indic";
+import { latinManglish, malayalamMarkersWin } from "./language/indic";
 
 /**
  * Deepgram Nova-3 keyterm prompting.
@@ -344,7 +344,7 @@ export function spokenLanguageForTranscript(
   if (fromScript === "ta") return malayalamMarkersWin(text) ? "ml" : "ta";
   if (fromScript === "ml" || fromScript === "bn" || fromScript === "hi" || fromScript === "ar" || fromScript === "zh") return fromScript;
   if (fromScript) return fromScript;
-  if (malayalamMarkersWin(text)) return "ml";
+  if (latinManglish(text) || malayalamMarkersWin(text)) return "ml";
   const heardCode = normalizeSpokenLanguage(heard);
   if (heardCode === "id" && !confidentIndonesian(text)) {
     const latin = confidentLatinLanguage(text);
@@ -392,6 +392,7 @@ export function needsServerFinalTranscript(text: string, picker?: string | null)
   if (!value) return true;
   const script = languageFromNativeScript(value);
   if (script === "zh" || script === "ar") return false;
+  if (latinManglish(value)) return true;
   const latin = confidentLatinLanguage(value);
   return latin !== "en" && latin !== "es";
 }
@@ -609,6 +610,7 @@ export function utteranceLanguage(transcript: string, options?: { final?: boolea
   const fromScript = scriptNoteLanguage(text);
   if (fromScript === "ta" && malayalamMarkersWin(text)) return "ml";
   if (fromScript) return fromScript;
+  if (latinManglish(text)) return "ml";
   const han = text.match(/[\u4E00-\u9FFF]/g)?.length ?? 0;
   if (han >= 2 && languageFromNativeScript(text) === "zh") return "zh";
   if (/[\u0980-\u09FF\u0900-\u097F]/.test(text)) return "";

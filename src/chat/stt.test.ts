@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, normalizeSpokenLanguage, secondPassLanguage, spokenLanguageAfterSecondPass, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative } from "./stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramLanguageHints, deepgramListenUrl, formatLiveDrop, interimMicLanguage, keytermsForHints, languageAfterRepair, majoritySpokenLanguage, micListeningNote, micWaitingNote, needsServerFinalTranscript, normalizeSpokenLanguage, secondPassLanguage, spokenLanguageAfterSecondPass, spokenLanguageAtSubmit, spokenLanguageForTranscript, STT_KEYTERMS, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative } from "./stt";
 
 describe("Deepgram Nova-3 keyterms", () => {
   it("keeps language=multi and repeats keyterm for each clinic phrase", () => {
@@ -91,6 +91,8 @@ describe("Deepgram Nova-3 keyterms", () => {
     expect(interimMicLanguage({ languages: ["bn"] }, "¿A qué hora abre Dapto el sábado?", { final: false, hint: "bn", previous: "bn" })).toBe("");
     expect(utteranceLanguage("আপনারা কি দাঁত সাদা করার চিকিৎসা করেন", { final: true })).toBe("bn");
     expect(utteranceLanguage("我牙疼", { final: true })).toBe("zh");
+    expect(utteranceLanguage("Dental implant in etre çelevakum", { final: true })).toBe("ml");
+    expect(needsServerFinalTranscript("Dental implant in etre çelevakum", null)).toBe(true);
     const stale = { code: "bn", count: 3 };
     expect(interimMicLanguage({ languages: ["bn"], words: [{ language: "bn" }] }, "क्या आप दांत सफेद करते हैं", { streak: stale, hint: "bn", previous: "bn", final: true })).toBe("hi");
     expect(stale.code).toBe("hi");

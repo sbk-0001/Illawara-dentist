@@ -6,6 +6,9 @@
 
 const ML_LATIN =
   /\b(?:klinikinde|vilasem|vilasam|endan|endal|ethra|entha|entaan|entān|entāṇ|kittumo|pattumo|inde)\b/gi;
+
+/** Latin Deepgram writes for Malayalam, including the live "çelevakum" miss. */
+const MANGLISH_MISHEAR = /çelevakum|chelavakum|chelevakum|\bethra\b|endaan|(?:^|[^A-Za-z])inde\b/i;
 const TA_LATIN = /\b(?:venum|enna|evvalavu|eppo|oda)\b/gi;
 
 /**
@@ -26,6 +29,17 @@ export function markerScore(text: string, language: "ml" | "ta"): number {
   if (!text) return 0;
   if (language === "ml") return hits(text, ML_LATIN) + hits(text, ML_SCRIPT) + hits(text, ML_INNA);
   return hits(text, TA_LATIN) + hits(text, TA_SCRIPT);
+}
+
+/**
+ * Latin text that is Malayalam written in English letters.
+ * A confident English score must not hide these; the fused transcript still runs.
+ */
+export function latinManglish(text: string): boolean {
+  if (MANGLISH_MISHEAR.test(text)) return true;
+  if (!/[A-Za-z]/.test(text)) return false;
+  if (/[\u0980-\u09FF\u0900-\u097F\u0B80-\u0BFF\u0D00-\u0D7F\u4E00-\u9FFF\u0600-\u06FF]/.test(text)) return false;
+  return malayalamMarkersWin(text);
 }
 
 /** Malayalam markers outnumber Tamil markers. One clear marker is enough. */

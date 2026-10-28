@@ -182,7 +182,7 @@ const DAY_INDEX: Record<string, number> = {
 };
 
 const HOURS_QUESTION =
-  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|സമയം|തുറ|நேரம்|திற|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
+  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|സമയം|തുറക്കും|തുറക്കു|തുറന്ന|തുറ|நேரம்|திறக்கும்|திறக்கு|திற|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|thurakkum|thirakkum|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
 
 const HOURS_CHUNK = /clinic hours|operating hours|opening hours|monday to friday|mon\s*[–—-]\s*fri|8:00\s*am|8\.00\s*am|8am/i;
 

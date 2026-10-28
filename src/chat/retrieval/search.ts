@@ -65,8 +65,8 @@ const EXPANSIONS: { re: RegExp; terms: string }[] = [
   { re: /hour|hours|saturday|sunday|open|opening|ഖോല|സമയം|തുറ|நேரம்|திற|khula|khola|baje|evide|irukku|yuyue|营业|几点|开门|খোলা|শনি|बजे|खुल|घंट|giờ|mở|ώρα|orari|sabato|horario|sábado|shonibar/i, terms: "hours opening Saturday" },
   { re: /ঠিকানা|কোথায়|\bthikana\b|\bkothay\b|\bkothai\b/i, terms: "address location located" },
   { re: /emergency|pain|broken|tooth|swelling|പല്ലുവേദന|വേദന|பல்வலி|வலி|vedana|vali|yasui|ألم|ألم الأسنان|ব্যথা|দাঁত|दर्द|दांत|牙疼|牙齿|đau|răng|δόντι|πονά|dente|diente|daat|daant|byatha|dard/i, terms: "emergency toothache appointment" },
-  { re: /implant|ഇംപ്ലാന്റ്|ইমপ্লান্ট|زراعة|زرعات|इम्प्लांट|प्रत्यारोपण|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants" },
-  { re: /இம்ப்ளாண்ட்|ഇംപ്ലാന്റ്/, terms: "dental implants" },
+  { re: /implant|ഇംപ്ലാന്റ|ഇംപ്ലാൻറ|ইমপ্ল্যান্ট|ইমপ্লান্ট|இம்ப்ள|इम्प्लांट|इम्प्लान्ट|زراعة|زرعات|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants singular implant crown" },
+  { re: /എത്ര|ചെലവ|எவ்வளவு|செலவு|விலை|कितना|कितने|कीमत|কত|খরচ|多少钱|费用|价格|تكلفة|كم سعر|precio|cuesta/i, terms: "fees cost price" },
   { re: /invisalign|aligner|ইনভিজালাইন|অ্যালাইনার|إنفزلاين|تقويم شفاف|इनविज़लाइन|एलाइनर|隐适美|隐形矫正|隐形牙套|alineador|انویزلائن|اینویزالاین|niềng trong suốt|인비절라인|투명교정|ευθυγραμμ|allineator/i, terms: "invisalign aligners" },
   { re: /child|children|kids|paediatric|pediatric|শিশু|বাচ্চা|أطفال|الأطفال|बच्चों|बच्चे|儿童|小孩|niños|infantil|بچوں|کودکان|اطفال|trẻ em|어린이|소아|παιδοδοντ|παιδικ|παιδιά|bambini|pedodonzia/i, terms: "children kids dentistry" },
   { re: /whiten|വെളുപ്പ്|வெண்மை|meibai|tabyeed|সাদা|सफेद|सफ़ेद|सफ़ेद|व्हाइटनिंग|दांत\s*स|تبييض|تبيض|美白|洁白|牙齿变白|blanque|سفید|بلیچینگ|tẩy trắng|trắng răng|미백|λεύκανση|sbiancamento|blanchiment|clareamento|pemutih/i, terms: "teeth whitening" },
@@ -111,8 +111,10 @@ export function searchIndex(index: KnowledgeIndex, query: string, limit = 6): Sc
   const queryTokens = tokens(expanded);
   if (!queryTokens.length) return [];
   const focus = clinicFocus(query);
+  const implantPrice = /dental implants/.test(expanded) && /\b(?:fees|cost|price)\b/.test(expanded);
   const scored = built.chunks.map((chunk, i) => {
     let score = bm25(queryTokens, built.docTokens[i] || [], built.df, built.avg, built.chunks.length);
+    if (implantPrice && /implant/i.test(`${chunk.heading} ${chunk.text}`) && /\$\s?\d/.test(chunk.text)) score += 12;
     if (focus.kind === "one") score *= chunk.clinic === focus.clinic ? 1.45 : 0.72;
     if (focus.kind === "many") score *= focus.clinics.includes(chunk.clinic) ? 1.3 : 0.8;
     const titleTokens = new Set(tokens(`${chunk.title} ${chunk.heading}`));

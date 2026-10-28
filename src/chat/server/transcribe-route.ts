@@ -1,5 +1,5 @@
-import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, hasNativeScript, languageAfterRepair, majoritySpokenLanguage, needsServerFinalTranscript, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
-import { resolveFinalTranscript } from "./final-transcript";
+import { alternativeFromLiveResult, chooseCheckedTranscript, correctTranscript, deepgramLanguageHints, deepgramListenUrl, hasNativeScript, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, transcriptTooShort, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { resolveFusedLiveFinal } from "./final-transcript";
 import { guardRequest, withCors } from "./guard";
 import { SCRIPT_CONVERT_TIMEOUT_MS, TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, longestNonEmptyTranscript, repairNativeTranscript, rewriteTranscriptScript, shouldRetryShortTranscript } from "./transcript-repair";
 
@@ -68,15 +68,13 @@ export async function POST(request: Request): Promise<Response> {
     }
     const model = direct ? TRANSCRIPT_FULL_MODEL : repairModelFor(requestedRepair, liveTranscript);
     const started = Date.now();
-    const indicPicker = requestedRepair === "ml" || requestedRepair === "ta" || requestedRepair === "hi" || requestedRepair === "bn";
-    const autoFuse = !requestedRepair && needsServerFinalTranscript(liveTranscript, null);
-    if (indicPicker || autoFuse) {
-      const choice = await resolveFinalTranscript({
-        audio: new Uint8Array(bytes),
-        mediaType: audio.type || "audio/webm",
-        picker: requestedRepair || null,
-        deepgram: liveTranscript,
-      });
+    const choice = await resolveFusedLiveFinal({
+      liveTranscript,
+      picker: requestedRepair || null,
+      audio: new Uint8Array(bytes),
+      mediaType: audio.type || "audio/webm",
+    });
+    if (choice.fused) {
       const sttMs = Date.now() - started;
       let checked = choice.transcript.trim();
       if (!checked) checked = longestNonEmptyTranscript(liveTranscript, choice.transcript);
@@ -173,27 +171,29 @@ export async function POST(request: Request): Promise<Response> {
   let transcript = correctTranscript(alternative.transcript?.trim() || "");
   const heard = majoritySpokenLanguage(votesFromAlternative(alternative)) || "";
   const picked = normalizeSpokenLanguage(hint);
-  if (process.env.AI_GATEWAY_API_KEY && needsServerFinalTranscript(transcript, picked)) {
+  if (process.env.AI_GATEWAY_API_KEY) {
     const started = Date.now();
-    const choice = await resolveFinalTranscript({
+    const choice = await resolveFusedLiveFinal({
+      liveTranscript: transcript,
+      picker: picked === "ml" || picked === "ta" || picked === "hi" || picked === "bn" ? picked : null,
       audio: new Uint8Array(bytes),
       mediaType: audio.type || "audio/webm",
-      picker: picked === "ml" || picked === "ta" || picked === "hi" || picked === "bn" ? picked : null,
-      deepgram: transcript,
     });
-    const sttMs = Date.now() - started;
-    let checked = choice.transcript.trim() || longestNonEmptyTranscript(transcript, choice.transcript);
-    let repairMs = 0;
-    if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
-      const repairStarted = Date.now();
-      checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
-      repairMs = Date.now() - repairStarted;
-    }
-    if (checked) {
-      const finalText = correctTranscript(checked);
-      const detected = choice.language || spokenLanguageAfterSecondPass(finalText, hint);
-      logTranscribe({ outcome: "ok", language: detected, repaired: repairMs > 0, hints, repairMs, sttEngine: choice.sttEngine, sttFallback: choice.sttFallback, sttMs, ...(liveDrop ? { liveDrop } : {}) });
-      return withCors(request, Response.json({ transcript: finalText, language: detected, repairMs }));
+    if (choice.fused) {
+      const sttMs = Date.now() - started;
+      let checked = choice.transcript.trim() || longestNonEmptyTranscript(transcript, choice.transcript);
+      let repairMs = 0;
+      if (choice.language && checked && !hasNativeScript(choice.language, checked)) {
+        const repairStarted = Date.now();
+        checked = await rewriteTranscriptScript({ text: checked, language: choice.language, timeoutMs: SCRIPT_CONVERT_TIMEOUT_MS });
+        repairMs = Date.now() - repairStarted;
+      }
+      if (checked) {
+        const finalText = correctTranscript(checked);
+        const detected = choice.language || spokenLanguageAfterSecondPass(finalText, hint);
+        logTranscribe({ outcome: "ok", language: detected, repaired: repairMs > 0, hints, repairMs, sttEngine: choice.sttEngine, sttFallback: choice.sttFallback, sttMs, ...(liveDrop ? { liveDrop } : {}) });
+        return withCors(request, Response.json({ transcript: finalText, language: detected, repairMs }));
+      }
     }
   }
   let detected = repairLanguageForTranscript(heard, transcript, hint) || spokenLanguageForTranscript(heard, transcript, hint) || heard;

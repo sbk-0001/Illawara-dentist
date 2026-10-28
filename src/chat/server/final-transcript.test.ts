@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { needsServerFinalTranscript } from "../stt";
-import { GEMINI_STT_PROMPT, geminiSttPrompt, openAiTranscribeProviderOptions, parseGeminiStt, resolveFinalTranscript, STT_CLINIC_PROMPT, transcriptAnomaly } from "./final-transcript";
+import { confidentLatinLanguage } from "../language/detect";
+import { GEMINI_STT_PROMPT, geminiSttPrompt, openAiTranscribeProviderOptions, parseGeminiStt, resolveFinalTranscript, resolveFusedLiveFinal, STT_CLINIC_PROMPT, transcriptAnomaly } from "./final-transcript";
 
 const SINHALA = "වූනෝනේ ක්ලිනික්හින්දේ විලාසයම් එන්දා.";
 const THAANA = "ޑާބްޓޯކިއުނިކިޝަނިއާލްޗައިޕޯލްތުރަކު.";
@@ -141,6 +142,24 @@ describe("final transcript from the bake-off", () => {
       expect(result.sttFallback).toBe(false);
       expect(result.language).toBe(language);
     }
+  });
+
+  it("sends a confident-English Deepgram Manglish final through the fused route", async () => {
+    const live = "Dental implant in etre çelevakum";
+    const malayalam = "ഡെന്റൽ ഇംപ്ലാന്റിന് എത്ര ചെലവാകും?";
+    const english = confidentLatinLanguage("Dental implant cost at Dapto");
+    expect(english).toBe("en");
+    expect(needsServerFinalTranscript(live, null)).toBe(true);
+    const result = await resolveFusedLiveFinal({
+      liveTranscript: live,
+      gpt: async () => "How much does a dental implant cost at Dapto?",
+      gemini: async () => ({ lang: "ml", transcript: malayalam }),
+    });
+    expect(result.fused).toBe(true);
+    expect(result.language).toBe("ml");
+    expect(result.sttEngine).toBe("gemini");
+    expect(result.transcript).toBe(malayalam);
+    expect(result.sttFallback).toBe(true);
   });
 
   it("keeps confident English, Spanish, Chinese, and Arabic on Deepgram", () => {

@@ -287,4 +287,28 @@ describe("prompt rules", () => {
     expect(instructions).toMatch(/could not be detected/i);
     expect(instructions).toContain("NO RELEVANT PAGES");
   });
+
+  it("treats a garbled open-verb as hours, and other mixed garbage as a clarification", () => {
+    const language = { code: "ml" as const, label: "മലയാളം", script: "Malayalam", dir: "ltr" as const, fallback: false, source: "detected" as const };
+    const hours = buildInstructions({
+      index,
+      language,
+      focus: { kind: "one", clinic: "dapto" },
+      severe: false,
+      chunks: [],
+      question: "Dapto cliniceനി ആർച്ചൈ പോൾതുറക്കും",
+    });
+    expect(hours).toContain("Answer with the opening hours only");
+    expect(hours).not.toContain("words are unclear");
+    const garbage = buildInstructions({
+      index,
+      language,
+      focus: { kind: "any" },
+      severe: false,
+      chunks: [],
+      question: "Dapto cliniceനി ആർച്ചൈ",
+    });
+    expect(garbage).toContain("Ask one short clarifying question");
+    expect(garbage).toContain("at most once each");
+  });
 });

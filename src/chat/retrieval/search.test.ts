@@ -110,6 +110,16 @@ describe("retrieval", () => {
     expect(fused.some((hit) => /whiten/i.test(`${hit.title} ${hit.heading} ${hit.text}`))).toBe(true);
   });
 
+  it("retrieves the same implant price for Malayalam and Tamil", () => {
+    const ml = searchIndex(index, "ഡെന്റൽ ഇംപ്ലാന്റിന് എത്ര ചെലവാകും?", 6);
+    const ta = searchIndex(index, "டென்டல் இம்ப்ளான்ட்டுக்கு எவ்வளவு செலவாகும்?", 6);
+    expect(ml.some((hit) => hit.text.includes("$5000"))).toBe(true);
+    expect(ta.some((hit) => hit.text.includes("$5000"))).toBe(true);
+    const mlIds = ml.filter((hit) => hit.text.includes("$5000")).map((hit) => hit.id);
+    const taIds = ta.filter((hit) => hit.text.includes("$5000")).map((hit) => hit.id);
+    expect(taIds.some((id) => mlIds.includes(id))).toBe(true);
+  });
+
   it("retrieves implants, Invisalign and children's dentistry for non-Latin questions", () => {
     const implants = searchIndex(index, "هل تقدمون زراعة الأسنان؟", 6);
     expect(implants.some((hit) => /implant/i.test(`${hit.title} ${hit.heading}`))).toBe(true);

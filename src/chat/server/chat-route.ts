@@ -10,7 +10,7 @@ import { z } from "zod";
 import { clinicContextText, clinicFocus, isSevereEmergency, mentionedClinics } from "../intent";
 import { addressFocus } from "./address";
 import { confidentIndonesian, detectLanguage, hasLetters, isDictionaryEnglish, resolveReplyLanguage, romanisedIndic } from "../language/detect";
-import { malayalamMarkersWin } from "../language/indic";
+import { latinManglish, malayalamMarkersWin } from "../language/indic";
 import { languageFromNativeScript, normalizeSpokenLanguage, requiresNativeScript, spokenLanguageForTranscript } from "../stt";
 import { languageOption, replyFromOption } from "../language/catalog";
 import { hybridRetrieveDetailed } from "../retrieval/embeddings";
@@ -186,7 +186,7 @@ export function prepareTurn(
     else if (textDetection.code !== "und" && !textDetection.fallback) {
       spokenLanguage = romanToNative[textDetection.code] || textDetection.code;
     }
-    if (malayalamMarkersWin(text)) spokenLanguage = "ml";
+    if (malayalamMarkersWin(text) || latinManglish(text)) spokenLanguage = "ml";
     if (spokenLanguage === "id" && !confidentIndonesian(text)) spokenLanguage = null;
   }
   // A picker locks the reply. Auto voice uses this utterance's script or its own
@@ -217,7 +217,7 @@ export function prepareTurn(
     else if (englishReply && !languageFromNativeScript(text)) reply = replyFromOption(englishReply, "detected", false);
   }
   if (inputMode === "voice" && !pickerLocked) {
-    const scriptCode = malayalamMarkersWin(text) ? "ml" : languageFromNativeScript(text);
+    const scriptCode = malayalamMarkersWin(text) || latinManglish(text) ? "ml" : languageFromNativeScript(text);
     const voiced = scriptCode || (spokenLanguage && spokenLanguage !== "en" && spokenLanguage !== "id" && softText ? spokenLanguage : null);
     const option = voiced ? languageOption(voiced) : undefined;
     if (option) {

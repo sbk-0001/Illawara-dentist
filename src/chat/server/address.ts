@@ -6,7 +6,7 @@ const ALL_CLINICS: ClinicId[] = ["dapto", "shellharbour", "woonona"];
 
 /** Address or where, including Bengali ঠিকানা / কোথায়. Not a general hours question. */
 export function isAddressQuestion(text: string): boolean {
-  return /ঠিকানা|কোথায়|\bthikana\b|\bkothay\b|\bkothai\b|\bwhere\b|\baddress\b|地址|哪里|哪儿|पता|कहाँ|कहां|عنوان|أين|주소|어디|địa chỉ|ở đâu|διεύθυνση|indirizzo|dirección|endereço|\badresse\b|\balamat\b|آدرس|پتہ|כתובת/i.test(
+  return /ঠিকানা|কোথায়|\bthikana\b|\bkothay\b|\bkothai\b|\bwhere\b|\baddress\b|地址|哪里|哪儿|पता|कहाँ|कहां|عنوان|أين|주소|어디|địa chỉ|ở đâu|διεύθυνση|indirizzo|dirección|endereço|\badresse\b|\balamat\b|آدرس|پتہ|כתובת|വിലാസം|എവിടെ|முகவரி|எங்கே|எங்கு/i.test(
     text,
   );
 }
@@ -47,6 +47,7 @@ function phoneOnly(text: string): boolean {
 }
 
 const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string> = {
+  en: (name, address) => `The address of ${name} is ${address}.`,
   bn: (name, address) => `${name}-এর ঠিকানা হলো ${address}।`,
   "bn-Latn": (name, address) => `${name} er thikana holo ${address}.`,
   hi: (name, address) => `${name} का पता ${address} है।`,
@@ -68,7 +69,7 @@ const ADDRESS_SENTENCE: Record<string, (name: string, address: string) => string
   th: (name, address) => `ที่อยู่ของ ${name} คือ ${address}`,
   ne: (name, address) => `${name} को ठेगाना ${address} हो।`,
   ml: (name, address) => `${name}-ന്റെ വിലാസം ${address} ആണ്.`,
-  ta: (name, address) => `${name} இன் முகவரி ${address}.`,
+  ta: (name, address) => `${name}-இன் முகவரி ${address} ஆகும்.`,
 };
 
 const NATIVE_ADDRESS: Record<string, RegExp> = {
@@ -133,6 +134,13 @@ function dropOtherClinicStreets(reply: string, index: KnowledgeIndex, keep: Clin
   return kept.join("\n").trim();
 }
 
+/** One short line that already names the street, without a full sentence around it. */
+function isTerseAddress(reply: string, address: string): boolean {
+  if (!address || !hasStreet(reply, address)) return false;
+  if (reply.length > 220 || /https?:|zavy360/i.test(reply)) return false;
+  return reply.trim().split(/\n/).filter(Boolean).length === 1;
+}
+
 /**
  * An address question has to include the street address.
  * A phone-only reply is replaced. A longer reply that missed the street gets the address appended.
@@ -152,9 +160,10 @@ export function ensureAddressReply(
     const address = index.contacts[id]?.address;
     return !address || !hasStreet(scoped, address);
   });
+  const spoken = addressBlock(index, code, ids);
+  if (ids.length === 1 && spoken && isTerseAddress(scoped, index.contacts[ids[0]]?.address ?? "")) return spoken;
   if (!missing.length) {
     if (!needsNativeAddress(scoped, code)) return scoped;
-    const spoken = addressBlock(index, code, ids);
     return spoken || scoped;
   }
   const block = addressBlock(index, code, missing.length === ids.length || needsNativeAddress(scoped, code) ? ids : missing);
