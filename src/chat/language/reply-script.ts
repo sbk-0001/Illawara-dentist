@@ -46,6 +46,7 @@ const NATIVE_REPLY: Record<string, RegExp> = {
   th: /[\u0E00-\u0E7F]/g,
   pa: /[\u0A00-\u0A7F]/g,
   ta: /[\u0B80-\u0BFF]/g,
+  ml: /[\u0D00-\u0D7F]/g,
   te: /[\u0C00-\u0C7F]/g,
 };
 
@@ -182,7 +183,7 @@ export function replyUsesNativeScript(code: string): boolean {
 }
 
 function foreignScript(text: string): boolean {
-  return (text.match(/[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0590-\u05FF\u0370-\u03FF]/g) || []).length >= 4;
+  return (text.match(/[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0590-\u05FF\u0370-\u03FF\u0B80-\u0BFF\u0D00-\u0D7F]/g) || []).length >= 4;
 }
 
 /** Script of the model text, for the timing log. Latin replies are `latn`. */
@@ -199,7 +200,7 @@ export function detectedReplyScript(text: string): string {
 
 export function replyScriptGate(text: string, code: string, final: boolean): "release" | "wait" | "conflict" {
   if (!NATIVE_REPLY[code]) {
-    const indic = code === "en" && /[\u0980-\u09FF\u0900-\u097F]/.test(text);
+    const indic = code === "en" && /[\u0980-\u09FF\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\u0B80-\u0BFF\u0D00-\u0D7F]/.test(text);
     if (indic && text.trim().length < SHORT_REPLY) return final ? "conflict" : "wait";
     if (!foreignScript(text) || text.trim().length >= SHORT_REPLY) return "release";
     return final ? "conflict" : "wait";

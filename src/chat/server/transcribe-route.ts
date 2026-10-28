@@ -1,6 +1,6 @@
-import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
+import { alternativeFromLiveResult, correctTranscript, deepgramLanguageHints, deepgramListenUrl, languageAfterRepair, majoritySpokenLanguage, normalizeSpokenLanguage, repairLanguageForTranscript, repairModelFor, spokenLanguageAfterSecondPass, spokenLanguageForTranscript, transcriptNeedsRepair, votesFromAlternative, type DeepgramAlternative } from "../stt";
 import { guardRequest, withCors } from "./guard";
-import { repairNativeTranscript } from "./transcript-repair";
+import { TRANSCRIPT_FULL_MODEL, TRANSCRIPT_FULL_TIMEOUT_MS, repairNativeTranscript } from "./transcript-repair";
 
 export const runtime = "nodejs";
 
@@ -56,16 +56,19 @@ export async function POST(request: Request): Promise<Response> {
   const hint = typeof form.get("languageHint") === "string" ? String(form.get("languageHint")) : "";
   const hints = deepgramLanguageHints(hint);
   const requestedRepair = normalizeSpokenLanguage(typeof form.get("repairLanguage") === "string" ? String(form.get("repairLanguage")) : "");
-  const garbled = form.get("garbled") === "1";
+  const garbled = form.get("garbled") === "1" || form.get("direct") === "1";
   const bytes = await audio.arrayBuffer();
   if (garbled) {
     if (!process.env.AI_GATEWAY_API_KEY) {
       logTranscribe({ outcome: "error", error: "repair_unconfigured", ...(liveDrop ? { liveDrop } : {}) });
       return withCors(request, Response.json({ error: "Could not transcribe that." }, { status: 503 }));
     }
+    const model = repairModelFor(requestedRepair, "");
     const next = await repairNativeTranscript({
       audio: new Uint8Array(bytes),
       ...(requestedRepair ? { language: requestedRepair } : {}),
+      model,
+      timeoutMs: model === TRANSCRIPT_FULL_MODEL ? TRANSCRIPT_FULL_TIMEOUT_MS : undefined,
     });
     if (!next) {
       logTranscribe({ outcome: "error", error: "repair_empty", repairLanguage: requestedRepair, ...(liveDrop ? { liveDrop } : {}) });
@@ -110,9 +113,12 @@ export async function POST(request: Request): Promise<Response> {
   let detected = repairLanguageForTranscript(heard, transcript, hint) || spokenLanguageForTranscript(heard, transcript, hint) || heard;
   let repaired = false;
   if (transcript && transcriptNeedsRepair(detected, transcript, hint) && process.env.AI_GATEWAY_API_KEY) {
+    const model = repairModelFor(detected, transcript);
     const next = await repairNativeTranscript({
       audio: new Uint8Array(bytes),
       language: detected,
+      model,
+      timeoutMs: model === TRANSCRIPT_FULL_MODEL ? TRANSCRIPT_FULL_TIMEOUT_MS : undefined,
     });
     if (next) {
       transcript = correctTranscript(next);

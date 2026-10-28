@@ -105,6 +105,8 @@ const LEAD: Record<string, string> = {
   fr: "Le site ne donne pas cette réponse. Appelez ou réservez via le lien :",
   de: "Die Website enthält dazu keine Antwort. Rufen Sie an oder buchen Sie über den Link:",
   pt: "O site não tem essa resposta. Ligue ou reserve pelo link:",
+  ml: "വെബ്‌സൈറ്റിൽ ഈ ഉത്തരം ഇല്ല. ഫോൺ ചെയ്യുക അല്ലെങ്കിൽ ബുക്കിംഗ് ലിങ്ക് ഉപയോഗിക്കുക:",
+  ta: "வலைத்தளத்தில் இந்த பதில் இல்லை. தொலைபேசி செய்யுங்கள் அல்லது முன்பதிவு இணைப்பைப் பயன்படுத்துங்கள்:",
 };
 
 const GREETING =
@@ -131,6 +133,8 @@ const CONTACT_ROUTE: Record<string, string> = {
   fr: "Appelez ou réservez :",
   de: "Rufen Sie an oder buchen Sie:",
   pt: "Ligue ou reserve:",
+  ml: "ഫോൺ ചെയ്യുക അല്ലെങ്കിൽ ബുക്ക് ചെയ്യുക:",
+  ta: "அழைக்கவும் அல்லது முன்பதிவு செய்யவும்:",
 };
 
 export type DirectoryLabels = { phone: string; booking: string; email: string; address: string; hours: string; website: string };
@@ -160,6 +164,7 @@ const DIRECTORY_LABELS: Record<string, DirectoryLabels> = {
   ms: { phone: "Telefon:", booking: "Tempahan:", email: "E-mel:", address: "Alamat:", hours: "Waktu:", website: "Laman:" },
   pa: { phone: "ਫ਼ੋਨ:", booking: "ਬੁਕਿੰਗ:", email: "ਈਮੇਲ:", address: "ਪਤਾ:", hours: "ਸਮਾਂ:", website: "ਵੈੱਬਸਾਈਟ:" },
   ta: { phone: "தொலைபேசி:", booking: "முன்பதிவு:", email: "மின்னஞ்சல்:", address: "முகவரி:", hours: "நேரம்:", website: "இணையதளம்:" },
+  ml: { phone: "ഫോൺ:", booking: "ബുക്കിംഗ്:", email: "ഇമെയിൽ:", address: "വിലാസം:", hours: "സമയം:", website: "വെബ്‌സൈറ്റ്:" },
   te: { phone: "ఫోన్:", booking: "బుకింగ్:", email: "ఇమెయిల్:", address: "చిరునామా:", hours: "సమయం:", website: "వెబ్‌సైట్:" },
   ru: { phone: "Телефон:", booking: "Запись:", email: "Почта:", address: "Адрес:", hours: "Часы:", website: "Сайт:" },
   th: { phone: "โทรศัพท์:", booking: "จอง:", email: "อีเมล:", address: "ที่อยู่:", hours: "เวลา:", website: "เว็บไซต์:" },

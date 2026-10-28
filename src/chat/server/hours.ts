@@ -95,6 +95,8 @@ const DAY_NAMES: Record<string, string[]> = {
   ja: ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"],
   ru: ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"],
   tr: ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"],
+  ml: ["തിങ്കൾ", "ചൊവ്വ", "ബുധൻ", "വ്യാഴം", "വെള്ളി", "ശനി", "ഞായർ"],
+  ta: ["திங்கள்", "செவ்வாய்", "புதன்", "வியாழன்", "வெள்ளி", "சனி", "ஞாயிறு"],
 };
 
 const APPOINTMENT: Record<string, string> = {
@@ -121,6 +123,8 @@ const APPOINTMENT: Record<string, string> = {
   ja: "要予約",
   ru: "по записи",
   tr: "randevu ile",
+  ml: "അപ്പോയിന്റ്മെന്റിൽ",
+  ta: "முன்பதிவில்",
 };
 
 /** Same fact as the Woonona homepage ("every day with prior appointment") and contact page. */
@@ -148,6 +152,8 @@ const AFTER_HOURS: Record<string, string> = {
   ja: "上記以外の時間も、事前予約で毎日受診できます",
   ru: "Вне этих часов приём возможен каждый день по предварительной записи",
   tr: "Bu saatler dışında her gün önceden randevu ile tedavi mümkündür",
+  ml: "ഈ സമയത്തിന് പുറത്തും എല്ലാ ദിവസവും മുൻകൂർ അപ്പോയിന്റ്മെന്റിൽ ചികിത്സ ലഭിക്കും",
+  ta: "இந்த நேரத்துக்கு வெளியேயும் ஒவ்வொரு நாளும் முன்பதிவில் சிகிச்சை கிடைக்கும்",
 };
 
 const ENGLISH_DAYS =
@@ -176,7 +182,7 @@ const DAY_INDEX: Record<string, number> = {
 };
 
 const HOURS_QUESTION =
-  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
+  /opening hours|opening time|business hours|clinic hours|\bhours\b|\bopen\b|\bopens\b|\bopening\b|\bclose[sd]?\b|\bclosing\b|\bsaturday\b|\bsunday\b|\bmonday\b|\bfriday\b|സമയം|തുറ|நேரம்|திற|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở cửa|ώρα|orari|sabato|horario|horário|sábado|shonibar|khula|khola|baje|ساعات|اوقات|jam buka|horaires|öffnungs|saatleri|영업|진료|営業|営業時間|часы|суббот|pazartesi|saat kaç/i;
 
 const HOURS_CHUNK = /clinic hours|operating hours|opening hours|monday to friday|mon\s*[–—-]\s*fri|8:00\s*am|8\.00\s*am|8am/i;
 
@@ -327,6 +333,7 @@ const HOURS_LEAD: Record<string, (name: string) => string> = {
   pa: (name) => (name ? `${name} ਖੁੱਲ੍ਹਾ ਹੈ:` : "ਖੁੱਲ੍ਹਣ ਦੇ ਸਮੇਂ ਇਹ ਹਨ।"),
   ta: (name) => (name ? `${name} திறந்துள்ளது:` : "திறந்திருக்கும் நேரம் இது."),
   te: (name) => (name ? `${name} తెరిచి ఉంది:` : "తెరిచే సమయం ఇది."),
+  ml: (name) => (name ? `${name} തുറന്നിരിക്കുന്നു:` : "പ്രവർത്തന സമയം ഇതാണ്."),
 };
 
 function hoursLeadIn(code: string, name: string): string {

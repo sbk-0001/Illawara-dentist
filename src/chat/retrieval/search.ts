@@ -62,13 +62,14 @@ function bm25(query: string[], doc: string[], df: Map<string, number>, avg: numb
 
 const EXPANSIONS: { re: RegExp; terms: string }[] = [
   { re: /fee|fees|cost|price|payment|fund|hicaps|afterpay|খরচ|ফি|फीस|शुल्क|费用|phí|비용|κόστ|costa|cuesta|cuánto|cuanto|dam|kitna|kitni|معائنہ|معاینه|فحص|تنظيف|जांच|सफाई|检查|洗牙|洁牙|revisión|limpieza|khám|스케일링|검진|έλεγχος|καθαρισμ|controllo|pulizia|চেকআপ|পরিষ্কার/i, terms: "fees payment cost price check-up clean" },
-  { re: /hour|hours|saturday|sunday|open|opening|খোলা|শনি|बजे|खुल|घंट|营业|几点|开门|giờ|mở|ώρα|orari|sabato|horario|sábado|shonibar|khula|khola|baje/i, terms: "hours opening Saturday" },
+  { re: /hour|hours|saturday|sunday|open|opening|ഖോല|സമയം|തുറ|நேரம்|திற|khula|khola|baje|evide|irukku|yuyue|营业|几点|开门|খোলা|শনি|बजे|खुल|घंट|giờ|mở|ώρα|orari|sabato|horario|sábado|shonibar/i, terms: "hours opening Saturday" },
   { re: /ঠিকানা|কোথায়|\bthikana\b|\bkothay\b|\bkothai\b/i, terms: "address location located" },
-  { re: /emergency|pain|broken|tooth|swelling|ব্যথা|দাঁত|दर्द|दांत|牙疼|牙齿|đau|răng|δόντι|πονά|dente|diente|daat|daant|byatha|dard/i, terms: "emergency toothache appointment" },
-  { re: /implant|ইমপ্লান্ট|زراعة|زرعات|इम्प्लांट|प्रत्यारोपण|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants" },
+  { re: /emergency|pain|broken|tooth|swelling|പല്ലുവേദന|വേദന|பல்வலி|வலி|vedana|vali|yasui|ألم|ألم الأسنان|ব্যথা|দাঁত|दर्द|दांत|牙疼|牙齿|đau|răng|δόντι|πονά|dente|diente|daat|daant|byatha|dard/i, terms: "emergency toothache appointment" },
+  { re: /implant|ഇംപ്ലാന്റ്|ইমপ্লান্ট|زراعة|زرعات|इम्प्लांट|प्रत्यारोपण|种植牙|植牙|implante|امپلانٹ|ایمپلنت|کاشت|cấy ghép|임플란트|εμφυτευ|impiant/i, terms: "dental implants" },
+  { re: /இம்ப்ளாண்ட்|ഇംപ്ലാന്റ്/, terms: "dental implants" },
   { re: /invisalign|aligner|ইনভিজালাইন|অ্যালাইনার|إنفزلاين|تقويم شفاف|इनविज़लाइन|एलाइनर|隐适美|隐形矫正|隐形牙套|alineador|انویزلائن|اینویزالاین|niềng trong suốt|인비절라인|투명교정|ευθυγραμμ|allineator/i, terms: "invisalign aligners" },
   { re: /child|children|kids|paediatric|pediatric|শিশু|বাচ্চা|أطفال|الأطفال|बच्चों|बच्चे|儿童|小孩|niños|infantil|بچوں|کودکان|اطفال|trẻ em|어린이|소아|παιδοδοντ|παιδικ|παιδιά|bambini|pedodonzia/i, terms: "children kids dentistry" },
-  { re: /whiten|সাদা|सफेद|सफ़ेद|सफ़ेद|व्हाइटनिंग|दांत\s*स|تبييض|تبيض|美白|洁白|牙齿变白|blanque|سفید|بلیچینگ|tẩy trắng|trắng răng|미백|λεύκανση|sbiancamento|blanchiment|clareamento|pemutih/i, terms: "teeth whitening" },
+  { re: /whiten|വെളുപ്പ്|வெண்மை|meibai|tabyeed|সাদা|सफेद|सफ़ेद|सफ़ेद|व्हाइटनिंग|दांत\s*स|تبييض|تبيض|美白|洁白|牙齿变白|blanque|سفید|بلیچینگ|tẩy trắng|trắng răng|미백|λεύκανση|sbiancamento|blanchiment|clareamento|pemutih/i, terms: "teeth whitening" },
   { re: /crown|veneer|ক্রাউন|ভিনিয়ার|تيجان|قشور|فينير|क्राउन|विनियर|牙冠|贴面|carilla|کراؤن|وینیر|روکش|ونیر|mão răng|mặt dán|크라운|베니어|στεφάνη|faccetta/i, terms: "crowns veneers" },
   { re: /root canal|endodont|রুট ক্যানাল|علاج العصب|قناة الجذر|रूट कैनाल|根管|endodoncia|روٹ کینال|عصب‌کشی|درمان ریشه|điều trị tủy|신경치료|απονεύρωση|devitalizz|canale radicolare/i, terms: "root canal" },
   { re: /sedation|sleep dentistry|সেডেশন|تخدير|تنويم|बेहोशी|镇静|sedación|بے ہوشی|بیهوشی|آرام‌بخش|gây mê|an thần|진정|καταστολή|sedazione/i, terms: "sedation sleep dentistry" },

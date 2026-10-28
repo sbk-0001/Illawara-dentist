@@ -153,6 +153,14 @@ export function prepareTurn(
   let reply: ReplyLanguage = resolveReplyLanguage(text, language);
   const inputMode: "voice" | "text" = voice?.inputMode === "voice" ? "voice" : "text";
   const pickerLocked = Boolean(language && language !== "auto" && languageOption(language));
+  const romanToNative: Record<string, string> = {
+    "bn-Latn": "bn",
+    "hi-Latn": "hi",
+    "ml-Latn": "ml",
+    "ta-Latn": "ta",
+    "ar-Latn": "ar",
+    "zh-Latn": "zh",
+  };
   let spokenLanguage = inputMode === "voice"
     ? spokenLanguageForTranscript(voice?.spokenLanguage, text, null, pickerLocked ? language : null)
     : null;
@@ -160,7 +168,7 @@ export function prepareTurn(
     const scriptCode = languageFromNativeScript(text);
     if (scriptCode) spokenLanguage = scriptCode;
     else if (textDetection.code !== "und" && !textDetection.fallback) {
-      spokenLanguage = textDetection.code === "bn-Latn" ? "bn" : textDetection.code === "hi-Latn" ? "hi" : textDetection.code;
+      spokenLanguage = romanToNative[textDetection.code] || textDetection.code;
     }
   }
   // A picker locks the reply. Auto voice uses this utterance's script or its own
@@ -172,15 +180,15 @@ export function prepareTurn(
     const romanised = romanisedIndic(text);
     const prior = priorReplyLanguage(messages);
     const priorNative = prior === "bn" || prior === "bn-Latn" ? "bn" : prior === "hi" || prior === "hi-Latn" ? "hi" : null;
-    const romanNative = romanised === "bn-Latn" ? "bn" : romanised === "hi-Latn" ? "hi" : null;
-    const follow = romanNative && priorNative === romanNative ? languageOption(romanNative) : null;
+    const romanFollow = romanised === "bn-Latn" ? "bn" : romanised === "hi-Latn" ? "hi" : null;
+    const follow = romanFollow && priorNative === romanFollow ? languageOption(romanFollow) : null;
     if (follow) reply = replyFromOption(follow, "detected", false);
     else if (shortUnidentifiedLatin(text) && !spokenLanguage && !priorNonEnglishTurn(messages) && english) {
       reply = replyFromOption(english, "detected", false);
     }
   }
-  if (!pickerLocked && (reply.code === "bn-Latn" || reply.code === "hi-Latn")) {
-    const native = languageOption(reply.code === "bn-Latn" ? "bn" : "hi");
+  if (!pickerLocked && romanToNative[reply.code]) {
+    const native = languageOption(romanToNative[reply.code] || "");
     if (native) reply = replyFromOption(native, "detected", false);
   }
   const softText = textDetection.code === "en" || textDetection.code === "und" || textDetection.fallback || textDetection.script === "Latin";

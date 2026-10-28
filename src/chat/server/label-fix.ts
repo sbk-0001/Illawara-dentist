@@ -193,6 +193,7 @@ function phoneSentence(code: string, clinic: string, phone: string): string {
     ms: [`Nombor telefon ${clinic} ialah ${phone}.`, `Nombor telefon ialah ${phone}.`],
     pa: [`${clinic} ਦਾ ਫ਼ੋਨ ਨੰਬਰ ${phone} ਹੈ।`, `ਫ਼ੋਨ ਨੰਬਰ ${phone} ਹੈ।`],
     ta: [`${clinic} தொலைபேசி எண் ${phone}.`, `தொலைபேசி எண் ${phone}.`],
+    ml: [`${clinic} ഫോൺ നമ്പർ ${phone}.`, `ഫോൺ നമ്പർ ${phone}.`],
     te: [`${clinic} ఫోన్ నంబర్ ${phone}.`, `ఫోన్ నంబర్ ${phone}.`],
     ru: [`Телефон ${clinic}: ${phone}.`, `Телефон: ${phone}.`],
     th: [`เบอร์โทรของ ${clinic} คือ ${phone}`, `เบอร์โทรคือ ${phone}`],

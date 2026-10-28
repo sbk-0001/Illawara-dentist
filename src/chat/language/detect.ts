@@ -45,6 +45,10 @@ const INDONESIAN = ["apakah", "dokter", "bisa", "saya", "buka", "berapa", "gigi"
 const INDONESIAN_FUNCTION = ["ada", "di", "yang", "untuk", "ini", "jam"];
 const MALAY = ["adakah", "doktor", "boleh", "awak", "pukul", "buka", "berapa", "gigi", "anak", "klinik", "rawatan", "sakit"];
 const MALAY_FUNCTION = ["ada", "di", "yang", "untuk", "ini"];
+const MANGLISH_STRONG = ["evide", "enthu", "ethra", "aanu", "undo", "enth", "engane", "venam", "vedana"];
+const TANGLISH_STRONG = ["irukku", "iruka", "eppo", "evvalavu", "enge", "eppadi", "evlo", "venum", "vali"];
+const ARABIZI = /\b(?:3iyada|maw3ed|tabyeed|alam)\b/gi;
+const PINYIN = /\b(?:zhensuo|yuyue|dianhua|yasui|meibai)\b/gi;
 
 const ARABIC_WORDS = ["ما", "هي", "ساعات", "العمل", "عيادة", "السبت", "ألم", "سن", "رسوم", "موعد", "كم"];
 const URDU_WORDS = ["کیا", "ہے", "ہیں", "کلینک", "بجے", "کھلتا", "ہفتہ", "درد", "دانت", "کتنے", "میں"];
@@ -159,10 +163,18 @@ function latinFamily(text: string, tokens: string[]): Detection {
   const vietnamese = scoreWords(tokens, VIETNAMESE, 2) + scoreWords(tokens, VIETNAMESE_FUNCTION, 1) + vietnameseDiacritics;
   const indonesian = scoreWords(tokens, INDONESIAN, 2) + scoreWords(tokens, INDONESIAN_FUNCTION, 1);
   const malay = scoreWords(tokens, MALAY, 2) + scoreWords(tokens, MALAY_FUNCTION, 1);
+  const manglish = scoreWords(tokens, MANGLISH_STRONG, 2);
+  const tanglish = scoreWords(tokens, TANGLISH_STRONG, 2);
+  const arabizi = (text.match(ARABIZI) || []).length * 2;
+  const pinyin = (text.match(PINYIN) || []).length * 2;
 
   const ranked: { code: string; score: number }[] = [
     { code: "bn-Latn", score: banglish },
     { code: "hi-Latn", score: hinglish },
+    { code: "ml-Latn", score: manglish },
+    { code: "ta-Latn", score: tanglish },
+    { code: "ar-Latn", score: arabizi },
+    { code: "zh-Latn", score: pinyin },
     { code: "en", score: english },
     { code: "es", score: spanish },
     { code: "it", score: italian },
@@ -181,8 +193,12 @@ function latinFamily(text: string, tokens: string[]): Detection {
     return mirrorReply("low");
   }
   if (best.code === "en") return englishReply(false, best.score >= 2 ? "high" : "low");
-  if (best.code === "bn-Latn" && banglish >= english && banglish >= hinglish) return fromCode("bn-Latn", "high");
-  if (best.code === "hi-Latn" && hinglish >= english && hinglish > banglish) return fromCode("hi-Latn", "high");
+  if (best.code === "bn-Latn" && banglish >= english && banglish >= hinglish && banglish >= manglish && banglish >= tanglish) return fromCode("bn-Latn", "high");
+  if (best.code === "hi-Latn" && hinglish >= english && hinglish > banglish && hinglish >= manglish && hinglish >= tanglish) return fromCode("hi-Latn", "high");
+  if (best.code === "ml-Latn" && manglish >= english && manglish >= tanglish) return fromCode("ml-Latn", "high");
+  if (best.code === "ta-Latn" && tanglish >= english && tanglish > manglish) return fromCode("ta-Latn", "high");
+  if (best.code === "ar-Latn" && arabizi >= english) return fromCode("ar-Latn", "high");
+  if (best.code === "zh-Latn" && pinyin >= english) return fromCode("zh-Latn", "high");
   if (best.score >= 2 && (!second || best.score >= second.score)) {
     if ((best.code === "bn-Latn" || best.code === "hi-Latn") && english > best.score) return englishReply(false, "high");
     return fromCode(best.code, "high");

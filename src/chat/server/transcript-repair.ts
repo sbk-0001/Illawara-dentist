@@ -8,7 +8,9 @@ import { hasNativeScript, languageFromNativeScript, normalizeSpokenLanguage, req
  * (`providerOptions.openai.language` on `transcribe`).
  */
 export const TRANSCRIPT_REPAIR_MODEL = "openai/gpt-4o-mini-transcribe";
+export const TRANSCRIPT_FULL_MODEL = "openai/gpt-4o-transcribe";
 export const TRANSCRIPT_REPAIR_TIMEOUT_MS = 2_000;
+export const TRANSCRIPT_FULL_TIMEOUT_MS = 2_500;
 
 type RepairCall = (input: {
   model: string;
@@ -26,15 +28,17 @@ type RepairCall = (input: {
 export async function repairNativeTranscript(input: {
   audio: Uint8Array;
   language?: string;
+  model?: string;
   timeoutMs?: number;
   transcribe?: RepairCall;
 }): Promise<string | null> {
   const language = normalizeSpokenLanguage(input.language);
   if (input.language?.trim() && (!language || !requiresNativeScript(language))) return null;
   const run = input.transcribe ?? ((args) => transcribe(args));
+  const model = input.model || TRANSCRIPT_REPAIR_MODEL;
   try {
     const result = await run({
-      model: TRANSCRIPT_REPAIR_MODEL,
+      model,
       audio: input.audio,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(input.timeoutMs ?? TRANSCRIPT_REPAIR_TIMEOUT_MS),

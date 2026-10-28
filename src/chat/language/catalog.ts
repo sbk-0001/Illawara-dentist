@@ -11,7 +11,12 @@ export type LanguageOption = {
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "en", label: "English", script: "Latin", dir: "ltr", instruction: "Write in English." },
+  { code: "zh", label: "中文", script: "Han", dir: "ltr", instruction: "Write in Chinese, using the same simplified or traditional characters as the visitor." },
+  { code: "ml", label: "മലയാളം", script: "Malayalam", dir: "ltr", instruction: "Write in Malayalam, using Malayalam script." },
+  { code: "ta", label: "தமிழ்", script: "Tamil", dir: "ltr", instruction: "Write in Tamil script." },
+  { code: "hi", label: "हिन्दी", script: "Devanagari", dir: "ltr", instruction: "Write in Hindi, using Devanagari script." },
   { code: "ar", label: "العربية", script: "Arabic", dir: "rtl", instruction: "Write in Arabic, using Arabic script, right to left." },
+  { code: "es", label: "Español", script: "Latin", dir: "ltr", instruction: "Write in Spanish." },
   { code: "bn", label: "বাংলা", script: "Bengali", dir: "ltr", instruction: "Write in Bengali, using Bengali script." },
   {
     code: "bn-Latn",
@@ -20,7 +25,6 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
     dir: "ltr",
     instruction: "Write in romanised Bengali (Banglish), using Latin letters only. Do not use Bengali script at all, not even one character. Match the visitor's Latin-script register.",
   },
-  { code: "hi", label: "हिन्दी", script: "Devanagari", dir: "ltr", instruction: "Write in Hindi, using Devanagari script." },
   {
     code: "hi-Latn",
     label: "Hinglish",
@@ -29,10 +33,8 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
     instruction: "Write in romanised Hindi (Hinglish), using Latin letters only. Do not use Devanagari at all, not even one character. Match the visitor's Latin-script register.",
   },
   { code: "ne", label: "नेपाली", script: "Devanagari", dir: "ltr", instruction: "Write in Nepali, using Devanagari script." },
-  { code: "zh", label: "中文", script: "Han", dir: "ltr", instruction: "Write in Chinese, using the same simplified or traditional characters as the visitor." },
   { code: "ja", label: "日本語", script: "Japanese", dir: "ltr", instruction: "Write in Japanese." },
   { code: "ko", label: "한국어", script: "Hangul", dir: "ltr", instruction: "Write in Korean, using Hangul." },
-  { code: "es", label: "Español", script: "Latin", dir: "ltr", instruction: "Write in Spanish." },
   { code: "vi", label: "Tiếng Việt", script: "Latin", dir: "ltr", instruction: "Write in Vietnamese, with Vietnamese diacritics." },
   { code: "el", label: "Ελληνικά", script: "Greek", dir: "ltr", instruction: "Write in Greek, using the Greek alphabet." },
   { code: "it", label: "Italiano", script: "Latin", dir: "ltr", instruction: "Write in Italian." },
@@ -45,7 +47,6 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "id", label: "Bahasa Indonesia", script: "Latin", dir: "ltr", instruction: "Write in Indonesian (Bahasa Indonesia)." },
   { code: "ms", label: "Bahasa Melayu", script: "Latin", dir: "ltr", instruction: "Write in Malay (Bahasa Melayu)." },
   { code: "pa", label: "ਪੰਜਾਬੀ", script: "Gurmukhi", dir: "ltr", instruction: "Write in Punjabi, using Gurmukhi script." },
-  { code: "ta", label: "தமிழ்", script: "Tamil", dir: "ltr", instruction: "Write in Tamil script." },
   { code: "te", label: "తెలుగు", script: "Telugu", dir: "ltr", instruction: "Write in Telugu script." },
   { code: "ru", label: "Русский", script: "Cyrillic", dir: "ltr", instruction: "Write in Russian, using Cyrillic." },
   { code: "th", label: "ไทย", script: "Thai", dir: "ltr", instruction: "Write in Thai script." },

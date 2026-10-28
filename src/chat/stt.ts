@@ -82,6 +82,7 @@ const NATIVE_SCRIPT: Record<string, RegExp> = {
   pa: /[\u0A00-\u0A7F]/,
   ru: /[\u0400-\u04FF]/,
   ta: /[\u0B80-\u0BFF]/,
+  ml: /[\u0D00-\u0D7F]/,
   te: /[\u0C00-\u0C7F]/,
   th: /[\u0E00-\u0E7F]/,
   ur: /[\u0600-\u06FF]/,
@@ -108,7 +109,8 @@ const LISTENING_VERB: Record<string, string> = {
   pa: "ਸੁਣ ਰਹੇ ਹਾਂ",
   pt: "Ouvindo",
   ru: "Слушаю",
-  ta: "கேட்கிறோம்",
+  ta: "கேட்கிறேன்",
+  ml: "കേൾക്കുന്നു",
   te: "వింటున్నాం",
   th: "กำลังฟัง",
   ur: "سن رہے ہیں",
@@ -271,6 +273,7 @@ const SCRIPT_COUNTS: { code: string; family: string; re: RegExp }[] = [
   { code: "he", family: "he", re: /[\u0590-\u05FF]/g },
   { code: "pa", family: "pa", re: /[\u0A00-\u0A7F]/g },
   { code: "ta", family: "ta", re: /[\u0B80-\u0BFF]/g },
+  { code: "ml", family: "ml", re: /[\u0D00-\u0D7F]/g },
   { code: "te", family: "te", re: /[\u0C00-\u0C7F]/g },
   { code: "gu", family: "gu", re: /[\u0A80-\u0AFF]/g },
 ];
@@ -384,6 +387,31 @@ export function utteranceSpeechLanguage(picker?: string | null): string | null {
   return normalizeSpokenLanguage(picker);
 }
 
+/**
+ * Nova-3 multilingual lists Tamil and not Malayalam (models overview, current docs).
+ * Malayalam audio goes to gpt-4o-transcribe. Tamil stays on Nova-3 unless that
+ * pass returns the wrong script, which the repair route handles.
+ */
+export type SpeechEngine = "deepgram" | "gpt-4o-transcribe";
+
+export function speechEngineFor(input: { picker?: string | null; transcript?: string }): SpeechEngine {
+  const picked = normalizeSpokenLanguage(input.picker);
+  if (picked === "ml") return "gpt-4o-transcribe";
+  const text = input.transcript || "";
+  if (!text) return "deepgram";
+  if (languageFromNativeScript(text) === "ml") return "gpt-4o-transcribe";
+  const detected = detectLanguage(text).code;
+  if (detected === "ml" || detected === "ml-Latn") return "gpt-4o-transcribe";
+  return "deepgram";
+}
+
+export function repairModelFor(language: string | null | undefined, transcript: string): "openai/gpt-4o-transcribe" | "openai/gpt-4o-mini-transcribe" {
+  if (speechEngineFor({ picker: language, transcript }) === "gpt-4o-transcribe") return "openai/gpt-4o-transcribe";
+  const requested = normalizeSpokenLanguage(language);
+  if (requested === "ta" && transcript && !hasNativeScript("ta", transcript)) return "openai/gpt-4o-transcribe";
+  return "openai/gpt-4o-mini-transcribe";
+}
+
 function numericConfidence(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -426,6 +454,7 @@ const NOTE_BLOCKS: { code: string; re: RegExp }[] = [
   { code: "th", re: /[\u0E00-\u0E7F]/g },
   { code: "pa", re: /[\u0A00-\u0A7F]/g },
   { code: "ta", re: /[\u0B80-\u0BFF]/g },
+  { code: "ml", re: /[\u0D00-\u0D7F]/g },
 ];
 
 /**

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "../language/catalog";
 import { detectLanguage } from "../language/detect";
 import type { ChatMetadata } from "../types";
-import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, secondPassLanguage, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
+import { alternativeFromLiveResult, bengaliTranscriptGarbled, correctTranscript, deepgramListenUrl, formatLiveDrop, majoritySpokenLanguage, micListeningNote, secondPassLanguage, speechEngineFor, transcriptNeedsRepair, utteranceLanguage, utteranceSpeechLanguage, votesFromAlternative, type DeepgramAlternative, type MicLanguageStreak } from "../stt";
 import { splitIsolatedEmbeds } from "./bidi";
 import { createMicAudioQueue, enqueueMicAudio, flushMicAudio, longerTranscript, shouldUploadRecording, SPEECH_END_WAIT_MS } from "./mic-audio";
 import { dedupeSourceChips } from "./sources";
@@ -192,7 +192,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
 
   useEffect(() => () => releaseMic(), []);
 
-  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { repairLanguage?: string; garbled?: boolean }): Promise<boolean> {
+  async function uploadFallback(blob: Blob, liveDrop: string, repair?: { repairLanguage?: string; garbled?: boolean; direct?: boolean }): Promise<boolean> {
     const generation = draftGeneration.current;
     setMic("transcribing");
     setMicNote("Transcribing…");
@@ -213,6 +213,7 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       if (hint) body.set("languageHint", hint);
       if (repair?.repairLanguage) body.set("repairLanguage", repair.repairLanguage);
       if (repair?.garbled) body.set("garbled", "1");
+      if (repair?.direct) body.set("direct", "1");
       if (liveDrop) body.set("liveDrop", liveDrop);
       const response = await fetch("/api/chat/transcribe", { method: "POST", body });
       const payload = (await response.json()) as { transcript?: string; language?: string; error?: string };
@@ -273,9 +274,10 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
         voiceRequest.current = null;
         setInput("");
       }
-      const needsRepair = garbled || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
-      if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled ? "" : finals, socketOpened: hadSocket, needsRepair })) {
-        const uploaded = await uploadFallback(blob, liveDrop, { repairLanguage, garbled });
+      const direct = speechEngineFor({ picker: pickerLanguage(), transcript: finals }) === "gpt-4o-transcribe";
+      const needsRepair = garbled || direct || Boolean(finals && transcriptNeedsRepair(spokenLanguage, finals, preferredSpeechLanguage()));
+      if (shouldUploadRecording({ byteLength: blob.size, transcript: garbled || direct ? "" : finals, socketOpened: hadSocket, needsRepair })) {
+        const uploaded = await uploadFallback(blob, liveDrop, { repairLanguage: direct ? repairLanguage || "ml" : repairLanguage, garbled, direct });
         if (uploaded || !finals || garbled) return;
       }
       if (draftGeneration.current !== generation) {
@@ -320,6 +322,12 @@ export function ChatWidget({ api = "/api/chat", initialMessages, defaultOpen = f
       });
     });
     recorder.start(250);
+
+    if (speechEngineFor({ picker: pickerLanguage() }) === "gpt-4o-transcribe") {
+      setMic("listening");
+      setMicNote(noteFor(pickerLanguage() || ""));
+      return;
+    }
 
     try {
       const tokenResponse = await fetch("/api/chat/stt-token", { method: "POST" });
